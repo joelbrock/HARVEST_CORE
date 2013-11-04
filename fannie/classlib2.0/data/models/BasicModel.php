@@ -585,6 +585,7 @@ class BasicModel {
 		else if (count($unknown) > 0)
 			return -1*count($unknown);
 		return 0;
+
 	// normalize()
 	}
 
