@@ -70,10 +70,12 @@ function parserHandler(data,status_str,xml_ro){
 				if (data.sync){
 					ajaxTransactionSync(CORE_JS_PREFIX);
 				}
-				if (typeof screenLockVar != 'undefined'){
-					clearTimeout(screenLockVar);
-					screenLockVar = setTimeout('location.reload()', 15000);
-				}
+// DHermann 17feb14: disable 4 lines that flush screen too soon -- see
+//     https://github.com/CORE-POS/IS4C/commit/1beafc69d30bf4ee941456fa943c2111c5a71eba
+//				if (typeof screenLockVar != 'undefined'){
+//					clearTimeout(screenLockVar);
+//					screenLockVar = setTimeout('location.reload()', 15000);
+//				}
 			}
 		});
 	}

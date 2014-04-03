@@ -45,8 +45,8 @@ if (!isset($CORE_LOCAL)){
 
 if (!class_exists("AutoLoader")) include_once(realpath(dirname(__FILE__).'/../../lib/AutoLoader.php'));
 
-define('MERCURY_TERMINAL_ID',"");
-define('MERCURY_PASSWORD',"");
+define('MERCURY_TERMINAL_ID',"88430096090002=harves");
+define('MERCURY_PASSWORD',"02139CAM");
 define('MERCURY_USE_TOKENS',True);
 
 class MercuryE2E extends BasicCCModule {
@@ -87,13 +87,11 @@ class MercuryE2E extends BasicCCModule {
 			$cashier = $CORE_LOCAL->get("CashierNo");
 			$lane = $CORE_LOCAL->get("laneno");
 			$trans = $CORE_LOCAL->get("transno");
-			$sql = "SELECT transID FROM efsnetRequest WHERE [date]='".$today."' AND (PAN LIKE '%".$pan4."') " .
+			$sql = "SELECT transID FROM efsnetRequest WHERE ".$dbTrans->identifier_escape('date').
+				"='".$today."' AND (PAN LIKE '%".$pan4."') " .
 				"AND cashierNo=".$cashier." AND laneNo=".$lane." AND transNo=".$trans;
-			$sql = "SELECT transID,cashierNo,laneNo,transNo FROM efsnetRequest WHERE [date]='".$today."' AND (PAN LIKE '%".$pan4."')"; 
-			if ($CORE_LOCAL->get("DBMS") == "mysql"){
-				$sql = str_replace("[","",$sql);
-				$sql = str_replace("]","",$sql);
-			}
+			$sql = "SELECT transID,cashierNo,laneNo,transNo FROM efsnetRequest WHERE "
+				.$dbTrans->identifier_escape('date')."='".$today."' AND (PAN LIKE '%".$pan4."')";
 			$search = PaycardLib::paycard_db_query($sql, $dbTrans);
 			$num = PaycardLib::paycard_db_num_rows($search);
 			if( $num < 1) {
@@ -114,6 +112,14 @@ class MercuryE2E extends BasicCCModule {
 		case PaycardLib::PAYCARD_MODE_AUTH:
 			// set initial variables
 			//Database::getsubtotals();
+			$e2e = $this->parseEncBlock($CORE_LOCAL->get('paycard_PAN'));
+			if (empty($e2e['Block']) || empty($e2e['Key'])){
+				PaycardLib::paycard_reset();
+				$json['output'] = PaycardLib::paycard_msgBox(PaycardLib::PAYCARD_TYPE_CREDIT,"Swipe Error",
+					"Error reading card. Swipe again.","[clear] to cancel");
+				UdpComm::udpSend('termReset');
+				return $json;
+			}
 			if ($CORE_LOCAL->get("paycard_amount") == 0)
 				$CORE_LOCAL->set("paycard_amount",$CORE_LOCAL->get("amtdue"));
 			$CORE_LOCAL->set("paycard_id",$CORE_LOCAL->get("LastID")+1); // kind of a hack to anticipate it this way..
@@ -123,7 +129,7 @@ class MercuryE2E extends BasicCCModule {
 			return $json;
 			break;
 		} // switch mode
-	
+
 		// if we're still here, it's an error
 		PaycardLib::paycard_reset();
 		$json['output'] = PaycardLib::paycard_errBox(PaycardLib::PAYCARD_TYPE_CREDIT,"Invalid Mode",
@@ -148,7 +154,7 @@ class MercuryE2E extends BasicCCModule {
 				"[clear] to cancel");
 			return $json;
 		}
-	
+
 		// initialize
 		$dbTrans = PaycardLib::paycard_db();
 		$today = date('Ymd');
@@ -157,15 +163,11 @@ class MercuryE2E extends BasicCCModule {
 		$trans = $CORE_LOCAL->get("transno");
 		if ($laneNo != -1) $lane = $laneNo;
 		if ($transNo != -1) $trans = $transNo;
-	
+
 		// look up the request using transID (within this transaction)
-		$sql = "SELECT live,PAN,mode,amount,name FROM efsnetRequest 
-			WHERE [date]='".$today."' AND cashierNo=".$cashier." AND 
+		$sql = "SELECT live,PAN,mode,amount,name FROM efsnetRequest
+			WHERE ".$dbTrans->identifier_escape('date')."='".$today."' AND cashierNo=".$cashier." AND
 			laneNo=".$lane." AND transNo=".$trans." AND transID=".$transID;
-		if ($CORE_LOCAL->get("DBMS") == "mysql"){
-			$sql = str_replace("[","",$sql);
-			$sql = str_replace("]","",$sql);
-		}
 		$search = PaycardLib::paycard_db_query($sql, $dbTrans);
 		$num = PaycardLib::paycard_db_num_rows($search);
 		if( $num < 1) {
@@ -183,12 +185,8 @@ class MercuryE2E extends BasicCCModule {
 
 		// look up the response
 		$sql = "SELECT commErr,httpCode,validResponse,xResponseCode,
-			xTransactionID FROM efsnetResponse WHERE [date]='".$today."' 
+			xTransactionID FROM efsnetResponse WHERE ".$dbTrans->identifier_escape('date')."='".$today."'
 			AND cashierNo=".$cashier." AND laneNo=".$lane." AND transNo=".$trans." AND transID=".$transID;
-		if ($CORE_LOCAL->get("DBMS") == "mysql"){
-			$sql = str_replace("[","",$sql);
-			$sql = str_replace("]","",$sql);
-		}
 		$search = PaycardLib::paycard_db_query($sql, $dbTrans);
 		$num = PaycardLib::paycard_db_num_rows($search);
 		if( $num < 1) {
@@ -205,12 +203,11 @@ class MercuryE2E extends BasicCCModule {
 		$response = PaycardLib::paycard_db_fetch_row($search);
 
 		// look up any previous successful voids
-		$sql = "SELECT transID FROM efsnetRequestMod WHERE [date]=".$today." AND cashierNo=".$cashier." AND laneNo=".$lane." AND transNo=".$trans." AND transID=".$transID
+		$sql = "SELECT transID FROM efsnetRequestMod WHERE "
+				.$dbTrans->identifier_escape('date')."=".$today
+				." AND cashierNo=".$cashier." AND laneNo=".$lane
+				." AND transNo=".$trans." AND transID=".$transID
 				." AND mode='void' AND xResponseCode=0";
-		if ($CORE_LOCAL->get("DBMS") == "mysql"){
-			$sql = str_replace("[","",$sql);
-			$sql = str_replace("]","",$sql);
-		}
 		$search = PaycardLib::paycard_db_query($sql, $dbTrans);
 		$voided = PaycardLib::paycard_db_num_rows($search);
 		if( $voided > 0) {
@@ -281,7 +278,7 @@ class MercuryE2E extends BasicCCModule {
 				"Void records do not match","[clear] to cancel");
 			return $json;
 		}
-	
+
 		// save the details
 		$CORE_LOCAL->set("paycard_amount",(($request['mode']=='retail_alone_credit') ? -1 : 1) * $request['amount']);
 		$CORE_LOCAL->set("paycard_id",$transID);
@@ -289,7 +286,7 @@ class MercuryE2E extends BasicCCModule {
 		$CORE_LOCAL->set("paycard_type",PaycardLib::PAYCARD_TYPE_ENCRYPTED);
 		$CORE_LOCAL->set("paycard_mode",PaycardLib::PAYCARD_MODE_VOID);
 		$CORE_LOCAL->set("paycard_name",$request['name']);
-	
+
 		// display FEC code box
 		$CORE_LOCAL->set("inputMasked",1);
 		$plugin_info = new Paycards();
@@ -316,6 +313,8 @@ class MercuryE2E extends BasicCCModule {
 			$authResult["response"]);
 		$xml = new xmlData($resp);
 
+		$dbTrans = PaycardLib::paycard_db();
+
 		/*
 		$fp = fopen("C:/is4c-nf/log.xml","a");
 		fwrite($fp,"RECEIVED: ".$resp."\n\n");
@@ -334,8 +333,8 @@ class MercuryE2E extends BasicCCModule {
 		$refNum = $this->refnum($transID);
 
 		$sqlColumns =
-			"[date],cashierNo,laneNo,transNo,transID," .
-			"[datetime],refNum," .
+			$dbTrans->identifier_escape('date').",cashierNo,laneNo,transNo,transID," .
+			$dbTrans->identifier_escape('datetime').",refNum," .
 			"seconds,commErr,httpCode";
 		$sqlValues =
 			sprintf("%d,%d,%d,%d,%d,",  $today, $cashierNo, $laneNo, $transNo, $transID) .
@@ -365,6 +364,9 @@ class MercuryE2E extends BasicCCModule {
 			if (strlen($rMsg) > 100){
 				$rMsg = substr($rMsg,0,100);
 			}
+			$aNum = $xml->get("AUTHCODE");
+			if ($aNum)
+				$rMsg .= ' '.$aNum;
 			$sqlValues .= sprintf(",'%s'",$rMsg);
 		}
 		$xTransID = $xml->get("REFNO");
@@ -381,48 +383,60 @@ class MercuryE2E extends BasicCCModule {
 		$sqlColumns .= ",validResponse";
 		$sqlValues .= sprintf(",%d",$validResponse);
 
-		$dbTrans = PaycardLib::paycard_db();
 		$sql = "INSERT INTO efsnetResponse (" . $sqlColumns . ") VALUES (" . $sqlValues . ")";
-		if ($CORE_LOCAL->get("DBMS") == "mysql"){
-			$sql = str_replace("[","",$sql);
-			$sql = str_replace("]","",$sql);
-		}
 		PaycardLib::paycard_db_query($sql, $dbTrans);
 
 		if ($responseCode == 1){
 			$amt = $xml->get_first("AUTHORIZE");
 			if ($amt != abs($CORE_LOCAL->get("paycard_amount"))){
-				$sql = sprintf("UPDATE efsnetRequest SET amount=%f WHERE
-					[date]=%d AND cashierNo=%d AND laneNo=%d AND transNo=%d
+				$sql = sprintf("UPDATE efsnetRequest SET amount=%f WHERE "
+					.$dbTrans->identifier_escape('date')."=%d
+					AND cashierNo=%d AND laneNo=%d AND transNo=%d
 					AND transID=%d",
 					$amt,$today, $cashierNo, $laneNo, $transNo, $transID);
-				if ($CORE_LOCAL->get("DBMS") == "mysql"){
-					$sql = str_replace("[","",$sql);
-					$sql = str_replace("]","",$sql);
-				}
 				PaycardLib::paycard_db_query($sql, $dbTrans);
 				$CORE_LOCAL->set("paycard_amount",$amt);
 			}
 		}
 
-		if (MERCURY_USE_TOKENS){
-			$tokenSql = sprintf("INSERT INTO efsnetTokens (expireDay, refNum, token, processData, acqRefData) 
-					VALUES (%s,'%s','%s','%s','%s')",
-				($CORE_LOCAL->get("DBMS")=="mysql"?'NOW()':'GETDATE()'),
-				$refNum, $xml->get_first("RECORDNO"),
-				$xml->get_first("PROCESSDATA"),
-				$xml->get_first("ACQREFDATA")
-			);
-			PaycardLib::paycard_db_query($tokenSql, $dbTrans);
-		}
+/**
+                if (MERCURY_USE_TOKENS){
+                        $tokenSql = sprintf("INSERT INTO efsnetTokens (expireDay, refNum, token, processData, acqRefData)
+                                        VALUES (%s,'%s','%s','%s','%s')",
+                                $dbTrans->now(),
+                                $refNum, $xml->get_first("RECORDNO"),
+                                $xml->get_first("PROCESSDATA"),
+                                $xml->get_first("ACQREFDATA")
+                        );
+                        PaycardLib::paycard_db_query($tokenSql, $dbTrans);
+                }
+**/
+
+                if (MERCURY_USE_TOKENS){
+                        $tokenSql = sprintf("INSERT INTO efsnetTokens (expireDay, refNum, token, processData, acqRefData)
+                                        VALUES (%s,'%s','%s','%s','%s')",
+                                $dbTrans->now(),
+                                $refNum, $xml->get_first("RECORDNO"),
+                                $xml->get_first("PROCESSDATA"),
+                                $xml->get_first("ACQREFDATA")
+                        );
+                        $token = $xml->get_first("RECORDNO");
+                        if (!empty($token))
+                                PaycardLib::paycard_db_query($tokenSql, $dbTrans);
+                }
 
 		if( $authResult['curlErr'] != CURLE_OK || $authResult['curlHTTP'] != 200){
-			if ($authResult['curlHTTP'] == '0'){
+			if (!$this->second_try){
+				$this->second_try = True;
+				return $this->send_auth("w2.backuppay.com");
+			}
+			else if ($authResult['curlHTTP'] == '0'){
 				$CORE_LOCAL->set("boxMsg","No response from processor<br />
 							The transaction did not go through");
 				return PaycardLib::PAYCARD_ERR_PROC;
-			}	
-			return $this->setErrorMsg(PaycardLib::PAYCARD_ERR_COMM);
+			}
+			else
+				return $this->setErrorMsg(PaycardLib::PAYCARD_ERR_COMM);
 		}
 
 		switch (strtoupper($xml->get_first("CMDSTATUS"))){
@@ -433,9 +447,11 @@ class MercuryE2E extends BasicCCModule {
 				$CORE_LOCAL->set("boxMsg","");
 				$texts = $xml->get_first("TEXTRESPONSE");
 				$CORE_LOCAL->set("boxMsg","Error: $texts");
+				TransRecord::addcomment("");
 				break;
 			default:
 				$CORE_LOCAL->set("boxMsg","An unknown error occurred<br />at the gateway");
+				TransRecord::addcomment("");
 		}
 		return PaycardLib::PAYCARD_ERR_PROC;
 	}
@@ -448,6 +464,7 @@ class MercuryE2E extends BasicCCModule {
 		$resp = $this->desoapify("CreditTransactionResult",
 			$authResult["response"]);
 		$xml = new xmlData($resp);
+		$dbTrans = PaycardLib::paycard_db();
 
 		/*
 		$fp = fopen("C:/is4c-nf/log.xml","a");
@@ -468,8 +485,9 @@ class MercuryE2E extends BasicCCModule {
 
 		// prepare some fields to store the request and the parsed response; we'll add more as we verify it
 		$sqlColumns =
-			"[date],cashierNo,laneNo,transNo,transID,[datetime]," .
-			"origAmount,mode,altRoute," .
+			$dbTrans->identifier_escape('date').",cashierNo,laneNo,transNo,transID,".
+			$dbTrans->identifier_escape('datetime').
+			",origAmount,mode,altRoute," .
 			"seconds,commErr,httpCode";
 		$sqlValues =
 			sprintf("%d,%d,%d,%d,%d,'%s',",  $today, $cashierNo, $laneNo, $transNo, $transID, $now) .
@@ -511,12 +529,7 @@ class MercuryE2E extends BasicCCModule {
 		$sqlColumns .= ",validResponse";
 		$sqlValues .= sprintf(",%d",$validResponse);
 
-		$dbTrans = PaycardLib::paycard_db();
 		$sql = "INSERT INTO efsnetRequestMod (" . $sqlColumns . ") VALUES (" . $sqlValues . ")";
-		if ($CORE_LOCAL->get("DBMS") == "mysql"){
-			$sql = str_replace("[","",$sql);
-			$sql = str_replace("]","",$sql);
-		}
 		PaycardLib::paycard_db_query($sql, $dbTrans);
 
 		$tokenRef = $xml->get_first("INVOICENO");
@@ -528,7 +541,7 @@ class MercuryE2E extends BasicCCModule {
 				$CORE_LOCAL->set("boxMsg","No response from processor<br />
 							The transaction did not go through");
 				return PaycardLib::PAYCARD_ERR_PROC;
-			}	
+			}
 			return $this->setErrorMsg(PaycardLib::PAYCARD_ERR_COMM);
 		}
 
@@ -558,7 +571,7 @@ class MercuryE2E extends BasicCCModule {
 		global $CORE_LOCAL;
 		switch($CORE_LOCAL->get("paycard_mode")){
 		case PaycardLib::PAYCARD_MODE_AUTH:
-			$CORE_LOCAL->set("ccTender",1); 
+			$CORE_LOCAL->set("ccTender",1);
 			// cast to string. tender function expects string input
 			// numeric input screws up parsing on negative values > $0.99
 			$amt = "".(-1*($CORE_LOCAL->get("paycard_amount")));
@@ -567,38 +580,43 @@ class MercuryE2E extends BasicCCModule {
 				TransRecord::addtender("EBT Cash", "EC", $amt);
 			elseif (substr($type,0,3) == 'EBT')
 				TransRecord::addtender("EBT Food", "EF", $amt);
+			elseif ($type == "DEBIT")
+				TransRecord::addtender("Debit Card", "DC", $amt);
 			else
 				TransRecord::addtender("Credit Card", "CC", $amt);
-			$CORE_LOCAL->set("boxMsg","<b>Approved</b><font size=-1><p>Please verify cardholder signature<p>[enter] to continue<br>\"rp\" to reprint slip<br>[void] to cancel and void</font>");
+			$CORE_LOCAL->set("boxMsg","<b>Approved</b><font size=-1><p>Please verify cardholder signature<p>[enter] to continue<br>\"rp\" to reprint slip</font>");
 			if (($CORE_LOCAL->get("paycard_amount") <= $CORE_LOCAL->get("CCSigLimit") && $CORE_LOCAL->get("paycard_amount") >= 0)
 			     || $type == "DEBIT" || substr($type,0,3)=="EBT"){
-				$CORE_LOCAL->set("boxMsg","<b>Approved</b><font size=-1><p>No signature required<p>[enter] to continue<br>[void] to cancel and void</font>");
+				$CORE_LOCAL->set("boxMsg","<b>Approved</b><font size=-1><p>No signature required<p>[enter] to continue</font>");
 			}
 			break;
 		case PaycardLib::PAYCARD_MODE_VOID:
 			$v = new Void();
 			$v->voidid($CORE_LOCAL->get("paycard_id"));
 			$CORE_LOCAL->set("boxMsg","<b>Voided</b><p><font size=-1>[enter] to continue<br>\"rp\" to reprint slip</font>");
-			break;	
+			break;
 		}
 		$CORE_LOCAL->set("ccCustCopy",0);
-		if ($CORE_LOCAL->get("SigCapture") == "" && $CORE_LOCAL->get("paycard_amount") > $CORE_LOCAL->get("CCSigLimit"))
+		if (($CORE_LOCAL->get("paycard_amount") > $CORE_LOCAL->get("CCSigLimit") || $CORE_LOCAL->get("paycard_amount") < 0)
+			&& ($CORE_LOCAL->get('CacheCardType')=='CREDIT' || $CORE_LOCAL->get('CacheCardType')=='')){
 			$json['receipt'] = "ccSlip";
+		}
 		return $json;
 	}
 
 	function doSend($type){
 		global $CORE_LOCAL;
+		$this->second_try=False;
 		switch($type){
-		case PaycardLib::PAYCARD_MODE_AUTH: 
+		case PaycardLib::PAYCARD_MODE_AUTH:
 			return $this->send_auth();
-		case PaycardLib::PAYCARD_MODE_VOID: 
-			return $this->send_void(); 
+		case PaycardLib::PAYCARD_MODE_VOID:
+			return $this->send_void();
 		default:
 			PaycardLib::paycard_reset();
 			return $this->setErrorMsg(0);
 		}
-	}	
+	}
 
 	/**
 	  Updated for E2E
@@ -610,7 +628,6 @@ class MercuryE2E extends BasicCCModule {
 		$dbTrans = PaycardLib::paycard_db();
 		if( !$dbTrans){
 			PaycardLib::paycard_reset();
-			return $this->setErrorMsg(73);
 			return $this->setErrorMsg(PaycardLib::PAYCARD_ERR_NOSEND); // database error, nothing sent (ok to retry)
 		}
 
@@ -648,11 +665,12 @@ class MercuryE2E extends BasicCCModule {
 		$e2e = $this->parseEncBlock($CORE_LOCAL->get("paycard_PAN"));
 		$pin = $this->parsePinBlock($CORE_LOCAL->get("CachePinEncBlock"));
 		$cardIssuer = $e2e['Issuer'];
+		$CORE_LOCAL->set('paycard_issuer',$e2e['Issuer']);
 		$cardName = $e2e['Name'];
 		$cardPANmasked = "XXXX";
-		if (strlen($e2e['Last4'] == 4))
-			$cardPANmasked = $e2e['Last4'];
-		
+		if (strlen($e2e['Last4']) == 4)
+			$cardPANmasked = '************'.$e2e['Last4'];
+
 		$sendPAN = 0;
 		$sendExp = 0;
 		$sendTr1 = 0;
@@ -662,24 +680,19 @@ class MercuryE2E extends BasicCCModule {
 
 		// store request in the database before sending it
 		$sqlCols .= "," . // already defined some sent* columns
-			"[date],cashierNo,laneNo,transNo,transID," .
-			"[datetime],refNum,live,mode,amount," .
+			$dbTrans->identifier_escape('date').",cashierNo,laneNo,transNo,transID," .
+			$dbTrans->identifier_escape('datetime').",refNum,live,mode,amount," .
 			"PAN,issuer,manual,name";
 		$fixedName = PaycardLib::paycard_db_escape($cardName, $dbTrans);
+		if (strlen($fixedName) > 50) $fixedName = 'Cardholder';
 		$sqlVals .= "," . // already defined some sent* values
 			sprintf("%d,%d,%d,%d,%d,",        $today, $cashierNo, $laneNo, $transNo, $transID) .
 			sprintf("'%s','%s',%d,'%s',%s,",  $now, $refNum, $live, $logged_mode, ($amountText+$cashbackText)) .
 			sprintf("'%s','%s',%d,'%s'",           $cardPANmasked, $cardIssuer, $manual,$fixedName);
 		$sql = "INSERT INTO efsnetRequest (" . $sqlCols . ") VALUES (" . $sqlVals . ")";
-		if ($CORE_LOCAL->get("DBMS") == "mysql"){
-			$sql = str_replace("[","",$sql);
-			$sql = str_replace("]","",$sql);
-		}
 
 		if( !PaycardLib::paycard_db_query($sql, $dbTrans) ) {
 			PaycardLib::paycard_reset();
-			echo $sql; exit;
-			return $this->setErrorMsg(74);
 			return $this->setErrorMsg(PaycardLib::PAYCARD_ERR_NOSEND); // internal error, nothing sent (ok to retry)
 		}
 
@@ -708,7 +721,7 @@ class MercuryE2E extends BasicCCModule {
 			$msgXml .= "<PartialAuth>Allow</PartialAuth>";
 		if (MERCURY_USE_TOKENS){
 			$msgXml .= '<RecordNo>RecordNumberRequested</RecordNo>';
-			$msgXml .= '<Frequency>OneTime</Frequency>';	
+			$msgXml .= '<Frequency>OneTime</Frequency>';
 		}
 		$msgXml .= '<Account>
 				<EncryptedFormat>'.$e2e['Format'].'</EncryptedFormat>
@@ -756,7 +769,7 @@ class MercuryE2E extends BasicCCModule {
 		fwrite($fp,"SENT: ".$msgXml."\n\n");
 		fclose($fp);
 		*/
-				
+
 		if ($CORE_LOCAL->get("training") == 1)
 			$this->GATEWAY = "https://w1.mercurydev.net/ws/ws.asmx";
 		else
@@ -814,17 +827,13 @@ class MercuryE2E extends BasicCCModule {
 		$sql = "SELECT r.refNum,xTransactionID,q.amount,t.token,t.processData,t.acqRefData,r.xApprovalNumber,q.mode FROM efsnetResponse AS r
 			LEFT JOIN efsnetRequest AS q ON q.refNum=r.refNum LEFT JOIN efsnetTokens AS t
 			ON r.refNum=t.refNum
-			WHERE [r.date]='".$today."' 
-			AND DATEDIFF(curdate(),t.expireDay)=0
+			WHERE r.".$dbTrans->identifier_escape('date')."='".$today."'
+			AND ".$dbTrans->datediff($dbTrans->now(),'t.expireDay')."=0
 			AND r.cashierNo=".$cashierNo." AND r.laneNo=".$laneNo." AND r.transNo=".$transNo." AND r.transID=".$transID;
-		if ($CORE_LOCAL->get("DBMS") == "mysql"){
-			$sql = str_replace("[","",$sql);
-			$sql = str_replace("]","",$sql);
-		}
 		$result = PaycardLib::paycard_db_query($sql, $dbTrans);
 		if( !$result || PaycardLib::paycard_db_num_rows($result) != 1){
 			PaycardLib::paycard_reset();
-			return $this->setErrorMsg(PaycardLib::PAYCARD_ERR_NOSEND); 
+			return $this->setErrorMsg(PaycardLib::PAYCARD_ERR_NOSEND);
 		}
 		$res = PaycardLib::paycard_db_fetch_row($result);
 		if (substr($res['mode'],-7)=="_Return")
@@ -858,7 +867,7 @@ class MercuryE2E extends BasicCCModule {
 		$soaptext = $this->soapify("CreditTransaction",
 			array("tran"=>$msgXml,"pw"=>$password),
 			"http://www.mercurypay.com");
-				
+
 		if ($CORE_LOCAL->get("training") == 1)
 			$this->GATEWAY = "https://w1.mercurydev.net/ws/ws.asmx";
 		else
@@ -879,7 +888,7 @@ class MercuryE2E extends BasicCCModule {
 		global $CORE_LOCAL;
 		$transNo   = (int)$CORE_LOCAL->get("transno");
 		$cashierNo = (int)$CORE_LOCAL->get("CashierNo");
-		$laneNo    = (int)$CORE_LOCAL->get("laneno");	
+		$laneNo    = (int)$CORE_LOCAL->get("laneno");
 
 		// assemble string
 		$ref = "";
@@ -955,10 +964,10 @@ class MercuryE2E extends BasicCCModule {
 				/* numbered format */
 				foreach($parts as $p){
 					if (strlen($p) > 2 && substr($p,0,2)=="3~"){
-						$ret['Block'] = substr($p,2);	
+						$ret['Block'] = substr($p,2);
 					}
 					elseif (strlen($p) > 3 && substr($p,0,3)=="11~"){
-						$ret['Key'] = substr($p,3);	
+						$ret['Key'] = substr($p,3);
 					}
 					elseif (strlen($p) > 2 && substr($p,0,3)=="6~"){
 						$tr1 = substr($p,2);
@@ -1005,8 +1014,10 @@ class MercuryE2E extends BasicCCModule {
 					$pan = substr($str,$pos,$caret-$pos);
 					$pan = substr($pan,4); // remove leading %*
 					$caret2 = strpos($str,"5E",$caret+2);
-					$name = substr($str,$caret+2,$caret2-$caret-2);
-					$ret['Name'] = $this->dehexify($name);	
+					if ($caret2 < ($pos + ($kl*2))){ // still in track 1
+						$name = substr($str,$caret+2,$caret2-$caret-2);
+						$ret['Name'] = $this->dehexify($name);
+					}
 					$pan = $this->dehexify($pan);
 					$ret['Last4'] = substr($pan,-4);
 					$ret['Issuer'] = PaycardLib::paycard_issuer(str_replace("*","0",$pan));
