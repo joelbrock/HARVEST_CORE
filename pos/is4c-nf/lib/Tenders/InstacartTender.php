@@ -39,9 +39,9 @@ class InstacartTender extends TenderModule
 
         if(MiscLib::truncate2($CORE_LOCAL->get("amtdue")) != MiscLib::truncate2($this->amount)) {
             return DisplayLib::xboxMsg(_("tender must equal purchase amount"));
-        }
-
-        return true;
+        } else {
+			return true;
+		}
     }
     
     /**
