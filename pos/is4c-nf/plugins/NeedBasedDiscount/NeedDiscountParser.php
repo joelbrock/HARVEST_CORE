@@ -27,14 +27,38 @@ class NeedDiscountParser extends Parser {
 	}
 	function parse($str){
 		global $CORE_LOCAL;
-		$CORE_LOCAL->set('NeedDiscountFlag',1);
-		// add comment/informational line to transaction?
-		$ret = $this->default_json();
-		// re-calculate the discount
-		Database::getsubtotals();
-		// show new discount in footer
-		$ret['redraw_footer'] = True;		
-		return $ret;
-	}
+        $ret = $this->default_json();
+
+        if ($CORE_LOCAL->get('isMember') !== 1) {
+            $ret['output'] =  DisplayLib::boxMsg(_("must be a member to use this discount"));
+            return $ret;
+        } elseif ($CORE_LOCAL->get('NeedDiscountFlag')==1) {
+        	$ret['output'] =  DisplayLib::boxMsg(_("discount already applied"));
+    		return $ret;
+    	} else {
+    		$CORE_LOCAL->set('NeedDiscountFlag',1);
+        	Database::getsubtotals();
+        	$NBDisc = number_format($CORE_LOCAL->get('discountableTotal') * $CORE_LOCAL->get('needBasedPercent'), 2);
+        	// $NBDupc = substr(strtoupper(str_replace(' ','',$CORE_LOCAL->get('needBasedName'))),0,13);
+        	$NBDupc = "NEEDBASEDDISC";
+        	$NBDname = $CORE_LOCAL->get('needBasedName');
+        	TransRecord::addRecord(array(
+                'upc' => $NBDupc, 
+                'description' => $NBDname, 
+                'trans_type' => "I", 
+                'trans_subtype' => "IC", 
+                'trans_status' => "C", 
+                'quantity' => 1, 
+                'ItemQtty' => 1, 
+                'unitPrice' => -1*$NBDisc,
+                'total' => -1*$NBDisc,
+                'regPrice' => -1*$NBDisc,
+                'voided' => 29
+            ));
+        	$ret['output'] = DisplayLib::lastpage();
+        	$ret['redraw_footer'] = True;
+        	return $ret;
+        }
+    }
 }
 ?>

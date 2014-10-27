@@ -110,7 +110,20 @@ if ($entered != ""){
 				break;
 			}
 		}
-		if ($result && is_array($result)){
+		if ($result && is_array($result)) {
+
+            // postparse chain: modify result
+            if (!is_array($CORE_LOCAL->get("postparse_chain"))) {
+                $CORE_LOCAL->set("postparse_chain",PostParser::getPostParseChain());
+            }
+            foreach ($CORE_LOCAL->get('postparse_chain') as $class) {
+                if (!class_exists($class)) {
+                    continue;
+                }
+                $obj = new $class();
+                $result = $obj->parse($result);
+            }
+
 			$json = $result;
 			if (isset($result['udpmsg']) && $result['udpmsg'] !== False){
 				if (is_object($sd))
@@ -144,7 +157,7 @@ else {
 			$json['scale'] = $display['display'];
 		else
 			$json['scale'] = $display;
-		$term_display = DisplayLib::termdisplaymsg();
+		$term_display = DisplayLib::drawNotifications();
 		if (!empty($term_display))
 			$json['term'] = $term_display;
 	}

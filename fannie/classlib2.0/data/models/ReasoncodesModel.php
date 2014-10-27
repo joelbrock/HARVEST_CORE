@@ -24,44 +24,93 @@
 /**
   @class ReasoncodesModel
 */
-class ReasoncodesModel extends BasicModel {
+class ReasoncodesModel extends BasicModel 
+{
 
-	protected $name = "reasoncodes";
+    protected $name = "reasoncodes";
 
-	protected $preferred_db = 'op';
+    protected $preferred_db = 'op';
 
-	protected $columns = array(
-	'textStr' => array('type'=>'VARCHAR(100)'),
-	'mask' => array('type'=>'INT','primary_key'=>True,'default'=>0)
-	);
+    protected $columns = array(
+    'textStr' => array('type'=>'VARCHAR(100)'),
+    'mask' => array('type'=>'INT','primary_key'=>True,'default'=>0)
+    );
 
-	/* START ACCESSOR FUNCTIONS */
+    /* START ACCESSOR FUNCTIONS */
 
-	public function textStr(){
-		if(func_num_args() == 0){
-			if(isset($this->instance["textStr"]))
-				return $this->instance["textStr"];
-			elseif(isset($this->columns["textStr"]["default"]))
-				return $this->columns["textStr"]["default"];
-			else return null;
-		}
-		else{
-			$this->instance["textStr"] = func_get_arg(0);
-		}
-	}
+    public function textStr()
+    {
+        if(func_num_args() == 0) {
+            if(isset($this->instance["textStr"])) {
+                return $this->instance["textStr"];
+            } else if (isset($this->columns["textStr"]["default"])) {
+                return $this->columns["textStr"]["default"];
+            } else {
+                return null;
+            }
+        } else if (func_num_args() > 1) {
+            $value = func_get_arg(0);
+            $op = $this->validateOp(func_get_arg(1));
+            if ($op === false) {
+                throw new Exception('Invalid operator: ' . func_get_arg(1));
+            }
+            $filter = array(
+                'left' => 'textStr',
+                'right' => $value,
+                'op' => $op,
+                'rightIsLiteral' => false,
+            );
+            if (func_num_args() > 2 && func_get_arg(2) === true) {
+                $filter['rightIsLiteral'] = true;
+            }
+            $this->filters[] = $filter;
+        } else {
+            if (!isset($this->instance["textStr"]) || $this->instance["textStr"] != func_get_args(0)) {
+                if (!isset($this->columns["textStr"]["ignore_updates"]) || $this->columns["textStr"]["ignore_updates"] == false) {
+                    $this->record_changed = true;
+                }
+            }
+            $this->instance["textStr"] = func_get_arg(0);
+        }
+        return $this;
+    }
 
-	public function mask(){
-		if(func_num_args() == 0){
-			if(isset($this->instance["mask"]))
-				return (int)$this->instance["mask"];
-			elseif(isset($this->columns["mask"]["default"]))
-				return (int)$this->columns["mask"]["default"];
-			else return null;
-		}
-		else{
-			$this->instance["mask"] = func_get_arg(0);
-		}
-	}
-	/* END ACCESSOR FUNCTIONS */
+    public function mask()
+    {
+        if(func_num_args() == 0) {
+            if(isset($this->instance["mask"])) {
+                return $this->instance["mask"];
+            } else if (isset($this->columns["mask"]["default"])) {
+                return $this->columns["mask"]["default"];
+            } else {
+                return null;
+            }
+        } else if (func_num_args() > 1) {
+            $value = func_get_arg(0);
+            $op = $this->validateOp(func_get_arg(1));
+            if ($op === false) {
+                throw new Exception('Invalid operator: ' . func_get_arg(1));
+            }
+            $filter = array(
+                'left' => 'mask',
+                'right' => $value,
+                'op' => $op,
+                'rightIsLiteral' => false,
+            );
+            if (func_num_args() > 2 && func_get_arg(2) === true) {
+                $filter['rightIsLiteral'] = true;
+            }
+            $this->filters[] = $filter;
+        } else {
+            if (!isset($this->instance["mask"]) || $this->instance["mask"] != func_get_args(0)) {
+                if (!isset($this->columns["mask"]["ignore_updates"]) || $this->columns["mask"]["ignore_updates"] == false) {
+                    $this->record_changed = true;
+                }
+            }
+            $this->instance["mask"] = func_get_arg(0);
+        }
+        return $this;
+    }
+    /* END ACCESSOR FUNCTIONS */
 }
-?>
+

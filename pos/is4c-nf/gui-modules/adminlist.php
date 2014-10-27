@@ -21,8 +21,6 @@
 
 *********************************************************************************/
 
-ini_set('display_errors','1');
-
 include_once(dirname(__FILE__).'/../lib/AutoLoader.php');
 
 class adminlist extends NoInputPage {
@@ -42,6 +40,9 @@ class adminlist extends NoInputPage {
 		}
 
 		if (isset($_REQUEST['selectlist'])){
+            if (!FormLib::validateToken()) {
+                return false;
+            }
 			if (empty($_REQUEST['selectlist'])){
 				$this->change_page($this->page_url."gui-modules/pos2.php");
 				return False;
@@ -56,12 +57,12 @@ class adminlist extends NoInputPage {
 				else {
 					// ajax call to end transaction
 					// and print receipt
-					SuspendLib::suspendorder();
+					$ref = SuspendLib::suspendorder();
 					$this->add_onload_command("\$.ajax({
 						type:'post',
 						url:'{$this->page_url}ajax-callbacks/ajax-end.php',
 						cache: false,
-						data: 'receiptType=suspended',
+						data: 'receiptType=suspended&ref={$ref}',
 						dataType: 'json',
 						success: function(data){
 							\$.ajax({
@@ -115,26 +116,7 @@ class adminlist extends NoInputPage {
 	function head_content(){
 		?>
 		<script type="text/javascript" src="<?php echo $this->page_url; ?>js/ajax-parser.js"></script>
-		<script type="text/javascript" >
-		var prevKey = -1;
-		var prevPrevKey = -1;
-		function processkeypress(e) {
-			var jsKey;
-			if (e.keyCode) // IE
-				jsKey = e.keyCode;
-			else if(e.which) // Netscape/Firefox/Opera
-				jsKey = e.which;
-			if (jsKey==13) {
-				if ( (prevPrevKey == 99 || prevPrevKey == 67) &&
-				(prevKey == 108 || prevKey == 76) ){ //CL<enter>
-					$('#selectlist :selected').val('');
-				}
-				$('#selectform').submit();
-			}
-			prevPrevKey = prevKey;
-			prevKey = jsKey;
-		}
-		</script> 
+	        <script type="text/javascript" src="../js/selectSubmit.js"></script>
 		<?php
 	} // END head() FUNCTION
 
@@ -147,23 +129,32 @@ class adminlist extends NoInputPage {
 			<br />
 		<form id="selectform" method="post" action="<?php echo $_SERVER['PHP_SELF']; ?>">
 		<select name="selectlist" id="selectlist" onblur="$('#selectlist').focus();">
-		<option value=''>
+		<option value=''><?php echo _("Select a Task"); ?>
 		<option value='SUSPEND'>1. <?php echo _("Suspend Transaction"); ?>
 		<option value='RESUME'>2. <?php echo _("Resume Transaction"); ?>
-		<option value='TR'>3. <?php echo _("Tender Report"); ?>
+        <?php if ($CORE_LOCAL->get('SecurityTR') != 30 || $this->security >= 30) { ?>
+            <option value='TR'>3. <?php echo _("Tender Report"); ?>
+		<?php } ?>
 		<?php if ($this->security >= 30){ ?>
 			<option value='OTR'>4. <?php echo _("Any Tender Report"); ?>
 		<?php } ?>
 		</select>
+        <?php echo FormLib::tokenField(); ?>
 		</form>
 		<p>
-		<span class="smaller"><?php echo _("clear to cancel"); ?></span>
+		<span class="smaller"><?php
+		echo _("use arrow keys to navigate");
+		echo "<br />";
+		echo _("enter to select");
+		echo "<br />";
+		echo _("clear to cancel");
+		?></span>
 		</p>
 		</div>
 		</div>
 		<?php
 		$this->add_onload_command("\$('#selectlist').focus();");
-		$this->add_onload_command("\$('#selectlist').keypress(processkeypress);");
+	        $this->add_onload_command("selectSubmit('#selectlist', '#selectform')\n");
 	} // END body_content() FUNCTION
 
 }
