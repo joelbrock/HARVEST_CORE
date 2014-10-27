@@ -82,6 +82,7 @@ class RefundComment extends NoInputPage {
 			<option>Spoiled</option>
 			<option>Did not Need</option>
 			<option>Did not Like</option>
+			<option>Cashier Error</option>
 			<option>Other</option>
 			</select>
 		<?php
