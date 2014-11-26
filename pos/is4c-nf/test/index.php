@@ -14,6 +14,10 @@
 	<li><a href="phpinfo.php">PHP Environment</a><br />
 		(Displays phpinfo() output)
 	</li>
+	<li><a href="isc250.php">Test iSC250 Communication</a><br />
+		Send test messages to a connected iSC250 terminal
+	</li>
+	<li><a href="keypress.html">Test keydown events</a></li>
 </ul>
 </body>
 </html>

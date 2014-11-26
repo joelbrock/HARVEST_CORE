@@ -21,6 +21,8 @@
 
 *********************************************************************************/
 
+namespace COREPOS\Fannie\API\data {
+
 /**
   @class SyncLanes
 */
@@ -64,15 +66,15 @@ class SyncLanes
         $db = strtolower($db);
         if ($db != 'op' && $db != 'trans') {
             $ret['sending'] = False;
-            $ret['messages'] = 'Invalid database: '.$db;
+            $ret['messages'] = 'Error: Invalid database: '.$db;
             return $ret;
         } elseif(empty($table)) {
             $ret['sending'] = False;
-            $ret['messages'] = 'No table given';
+            $ret['messages'] = 'Error: No table given';
             return $ret;
         } elseif (ereg("[^A-Za-z0-9_]",$table)) {
             $ret['sending'] = False;
-            $ret['messages'] = 'Illegal table name: '.$table;
+            $ret['messages'] = 'Error: Illegal table name: '.$table;
             return $ret;
         }
 
@@ -94,7 +96,7 @@ class SyncLanes
             *   to copy records onto each lane
             */
             $server_db = $db=='op' ? $FANNIE_OP_DB : $FANNIE_TRANS_DB;
-            $dbc = FannieDB::get( $server_db );
+            $dbc = \FannieDB::get( $server_db );
             $laneNumber=1;
             foreach($FANNIE_LANES as $lane) {
                 $dbc->add_connection($lane['host'],$lane['type'],
@@ -111,10 +113,10 @@ class SyncLanes
                     if ($success) {
                         $ret['messages'] .= "Lane $laneNumber ({$lane['host']}) $table completed successfully";
                     } else {
-                        $ret['messages'] .= "Lane $laneNumber ({$lane['host']}) $table completed but with some errors";
+                        $ret['messages'] .= "Error: Lane $laneNumber ({$lane['host']}) $table completed but with some errors";
                     }
                 } else {
-                    $ret['messages'] .= "Couldn't connect to lane $laneNumber ({$lane['host']})";
+                    $ret['messages'] .= "Error: Couldn't connect to lane $laneNumber ({$lane['host']})";
                 }
                 $laneNumber++;
             }
@@ -151,22 +153,22 @@ class SyncLanes
         $db = strtolower($db);
         if ($db != 'op' && $db != 'trans') {
             $ret['sending'] = False;
-            $ret['messages'] = 'Invalid database: '.$db;
+            $ret['messages'] = 'Error: Invalid database: '.$db;
             return $ret;
         } elseif(empty($table)) {
             $ret['sending'] = False;
-            $ret['messages'] = 'No table given';
+            $ret['messages'] = 'Error: No table given';
             return $ret;
         } elseif (ereg("[^A-Za-z0-9_]",$table)) {
             $ret['sending'] = False;
-            $ret['messages'] = 'Illegal table name: '.$table;
+            $ret['messages'] = 'Error: Illegal table name: '.$table;
             return $ret;
         }
 
         // use the transfer option in SQLManager to copy
         // records from each lane
         $server_db = $db=='op' ? $FANNIE_OP_DB : $FANNIE_TRANS_DB;
-        $dbc = FannieDB::get( $server_db );
+        $dbc = \FannieDB::get( $server_db );
         if ($truncate & self::TRUNCATE_DESTINATION) {
             $dbc->query("TRUNCATE TABLE $table",$server_db);
         }
@@ -186,10 +188,10 @@ class SyncLanes
                 if ($success) {
                     $ret['messages'] .= "Lane $laneNumber ({$lane['host']}) $table completed successfully";
                 } else {
-                    $ret['messages'] .= "Lane $laneNumber ({$lane['host']}) $table completed but with some errors";
+                    $ret['messages'] .= "Error: Lane $laneNumber ({$lane['host']}) $table completed but with some errors";
                 }
             } else {
-                $ret['messages'] .= "Couldn't connect to lane $laneNumber ({$lane['host']})";
+                $ret['messages'] .= "Error: Couldn't connect to lane $laneNumber ({$lane['host']})";
             }
             $laneNumber++;
         }
@@ -201,5 +203,11 @@ class SyncLanes
     {
         return self::pullTable($table, $db, $truncate);
     }
+}
+
+}
+
+namespace {
+    class SyncLanes extends \COREPOS\Fannie\API\data\SyncLanes {}
 }
 

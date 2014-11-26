@@ -22,8 +22,6 @@
 *********************************************************************************/
 
 include('../../config.php');
-include($FANNIE_ROOT.'classlib2.0/FannieAPI.php');
-$dbc = FannieDB::get($FANNIE_OP_DB);
 include('audit.php');
 include('../../auth/login.php');
 
@@ -34,6 +32,7 @@ if ($user) {
 	refreshSession();
 }
 
+include('../../src/mysql_connect.php');
 if (!function_exists("updateProductAllLanes")) include($FANNIE_ROOT.'item/laneUpdates.php');
 
 $batchtypes = array();
@@ -624,8 +623,7 @@ function addItemUPCInput($newtags=false){
 }
 
 function addItemLCInput($newtags=false){
-	global $FANNIE_OP_DB;
-    $dbc = FannieDB::get($FANNIE_OP_DB);
+	global $dbc;
 	$ret = "<form onsubmit=\"addItem(); return false;\">";
 	$ret .= "<span class=\"newBatchBlack\">";
 	$ret .= "<b>Like code</b>: <input type=text id=addItemUPC size=4 value=1 /> ";
@@ -648,8 +646,7 @@ function addItemLCInput($newtags=false){
 }
 
 function addItemPriceInput($upc,$newtags=false){
-	global $FANNIE_OP_DB;
-    $dbc = FannieDB::get($FANNIE_OP_DB);
+	global $dbc;
 	$fetchQ = "select description,normal_price from products where upc='$upc'";
 	$fetchR = $dbc->query($fetchQ);
 	$fetchW = $dbc->fetch_array($fetchR);
@@ -670,8 +667,7 @@ function addItemPriceInput($upc,$newtags=false){
 }
 
 function addItemPriceLCInput($lc){
-	global $FANNIE_OP_DB;
-    $dbc = FannieDB::get($FANNIE_OP_DB);
+	global $dbc;
 	$fetchQ = "select likecodedesc from likeCodes where likecode=$lc";
 	$fetchR = $dbc->query($fetchQ);
 	$desc = array_pop($dbc->fetch_array($fetchR));
@@ -700,8 +696,7 @@ function addItemPriceLCInput($lc){
 }
 
 function newTagInput($upc,$price,$id){
-	global $FANNIE_OP_DB;
-    $dbc = FannieDB::get($FANNIE_OP_DB);
+	global $dbc;
 	$unfiQ = "select brand,sku,size,upc,units,cost,description,depart from unfi where upc = '$upc'";
 	$unfiR = $dbc->query($unfiQ);
 	$unfiN = $dbc->num_rows($unfiR);
@@ -755,8 +750,7 @@ function newTagInput($upc,$price,$id){
  * displayarea div
  */
 function batchListDisplay($filter='',$mode='all',$maxBatchID=''){
-	global $batchtypes, $FANNIE_OP_DB, $FANNIE_URL;
-    $dbc = FannieDB::get($FANNIE_OP_DB);
+	global $batchtypes, $dbc, $FANNIE_URL;
 	
 	$colors = array('#ffffff','#ffffcc');
 	$c = 0;
@@ -874,8 +868,7 @@ function batchListDisplay($filter='',$mode='all',$maxBatchID=''){
 }
 
 function showBatchDisplay($id,$orderby=' ORDER BY b.listID DESC'){
-	global $FANNIE_OP_DB,$FANNIE_SERVER_DBMS,$FANNIE_URL,$uid;
-    $dbc = FannieDB::get($FANNIE_OP_DB);
+	global $dbc,$FANNIE_SERVER_DBMS,$FANNIE_URL,$uid;
 	$uid = ltrim($uid,'0');
 	$nameQ = "select batchName,batchType from batches where batchID=$id";
 	$nameR = $dbc->query($nameQ);
@@ -1033,8 +1026,7 @@ function showBatchDisplay($id,$orderby=' ORDER BY b.listID DESC'){
 }
 
 function showPairedBatchDisplay($id,$name){
-	global $FANNIE_OP_DB,$FANNIE_SERVER_DBMS,$FANNIE_URL,$uid;
-    $dbc = FannieDB::get($FANNIE_OP_DB);
+	global $dbc,$FANNIE_SERVER_DBMS,$FANNIE_URL,$uid;
 	$ret = "";
 	$ret .= sprintf('<input type="hidden" id="currentBatchID" value="%d" />',$id);
 	$ret .= "<b>Batch name</b>: $name<br />";

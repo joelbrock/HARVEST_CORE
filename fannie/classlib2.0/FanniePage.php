@@ -38,6 +38,17 @@ class FanniePage
     Base class for creating HTML pages.
     ";
 
+    public $discoverable = true;
+
+    public $page_set = 'Misc';
+
+    public $doc_link = '';
+
+    /**
+      Page has been updated to support themeing
+    */
+    public $themed = false;
+
     /** force users to login immediately */
     protected $must_authenticate = False;
     /** name of the logged in user (or False is no one is logged in) */
@@ -52,6 +63,12 @@ class FanniePage
     protected $scripts = array();
     protected $css_files = array();
 
+    /**
+      Include javascript necessary to integrate linea
+      scanner device
+    */
+    protected $enable_linea = false;
+
     protected $error_text;
 
     public function __construct()
@@ -63,6 +80,8 @@ class FanniePage
         if (isset($FANNIE_COOP_ID) && $FANNIE_COOP_ID == 'WEFC_Toronto') {
             $this->auth_classes[] = 'admin';
         }
+        /*
+        */
     }
 
     /**
@@ -85,13 +104,84 @@ class FanniePage
     */
     public function getHeader()
     {
-        global $FANNIE_ROOT;
+        global $FANNIE_URL;
         ob_start();
         $page_title = $this->title;
         $header = $this->header;
-        include($FANNIE_ROOT.'src/header.html');
+        if ($this->themed) {
+            include(dirname(__FILE__) . '/../src/header.bootstrap.html');
+            $this->addJQuery();
+            if (!$this->addBootstrap()) {
+                echo '<em>Warning: bootstrap does not appear to be installed. Try running composer update</em>';
+            }
+            $this->addScript($FANNIE_URL . 'src/javascript/jquery-ui.js');
+            $this->addCssFile($FANNIE_URL . 'src/javascript/jquery-ui.css?id=20140625');
+            $this->addCssFile($FANNIE_URL . 'src/css/configurable.php');
+            $this->addCssFile($FANNIE_URL . 'src/css/print.css');
+        } else {
+            include(dirname(__FILE__) . '/../src/header.html');
+        }
+
+        if ($this->enable_linea) {
+            $this->addScript($FANNIE_URL . 'src/javascript/linea/cordova-2.2.0.js');
+            $this->addScript($FANNIE_URL . 'src/javascript/linea/ScannerLib-Linea-2.0.0.js');
+        }
 
         return ob_get_clean();
+    }
+
+    /**
+      Add css and js files required for bootstrap.
+      If a version installed via composer is present, that
+      is the version used.
+      @return [boolean] success
+    */
+    public function addBootstrap()
+    {
+        global $FANNIE_URL;
+        $path1 = dirname(__FILE__) . '/../src/javascript/composer-components/';
+        $path2 = dirname(__FILE__) . '/../src/javascript/';
+        if (file_exists($path1 . 'bootstrap/js/bootstrap.min.js')) {
+            $this->addCssFile($FANNIE_URL . 'src/javascript/composer-components/bootstrap/css/bootstrap.min.css');
+            $this->addCssFile($FANNIE_URL . 'src/javascript/composer-components/bootstrap-default/css/bootstrap.min.css');
+            $this->addCssFile($FANNIE_URL . 'src/javascript/composer-components/bootstrap-default/css/bootstrap-theme.min.css');
+            $this->addScript($FANNIE_URL . 'src/javascript/composer-components/bootstrap/js/bootstrap.min.js');
+        } elseif (file_exists($path2 . 'bootstrap/js/bootstrap.min.js')) {
+            $this->addCssFile($FANNIE_URL . 'src/javascript/bootstrap/css/bootstrap.min.css');
+            $this->addCssFile($FANNIE_URL . 'src/javascript/bootstrap-default/css/bootstrap.min.css');
+            $this->addCssFile($FANNIE_URL . 'src/javascript/bootstrap-default/css/bootstrap-theme.min.css');
+            $this->addScript($FANNIE_URL . 'src/javascript/bootstrap/js/bootstrap.min.js');
+        } else {
+            return false; // bootstrap not found!
+        }
+
+        return true;
+    }
+
+    /**
+      Add jquery js file to the page
+      If present, the version installed via composer is used
+      @return [boolean] success
+    */
+    public function addJQuery()
+    {
+        global $FANNIE_URL;
+        $path1 = dirname(__FILE__) . '/../src/javascript/composer-components/';
+        $path2 = dirname(__FILE__) . '/../src/javascript/';
+        if (file_exists($path1 . 'jquery/jquery.min.js')) {
+            $this->addFirstScript($FANNIE_URL . 'src/javascript/composer-components/jquery/jquery.min.js');
+        } elseif (file_exists($path2 . 'jquery.js')) {
+            $this->addFirstScript($FANNIE_URL . 'src/javascript/jquery.js');
+        } else {
+            return false;
+        }
+
+        return true;
+    }
+
+    public function get_header()
+    {
+        return $this->getHeader();
     }
 
     /**
@@ -102,9 +192,21 @@ class FanniePage
     {
         global $FANNIE_ROOT, $FANNIE_AUTH_ENABLED, $FANNIE_URL;
         ob_start();
-        include($FANNIE_ROOT.'src/footer.html');
+        if ($this->themed) {
+            include($FANNIE_ROOT.'src/footer.bootstrap.html');
+            $modal = $this->helpModal();
+            if ($modal) {
+                echo "\n" . $modal . "\n";
+            }
+        } else {
+            include($FANNIE_ROOT.'src/footer.html');
+        }
 
         return ob_get_clean();
+    }
+    public function get_footer()
+    {
+        return $this->getFooter();
     }
 
     /**
@@ -153,6 +255,52 @@ class FanniePage
         return $this->javascript_content();
     }
 
+    protected function lineaJS()
+    {
+        ob_start();
+        ?>
+/**
+  Enable linea scanner on page
+  @param selector - jQuery selector for the element where
+    barcode data should be entered
+  @param callback [optional] function called after
+    barcode scan
+
+  If the callback is omitted, the parent <form> of the
+  selector's element is submitted.
+*/
+function enableLinea(selector, callback)
+{
+    Device = new ScannerDevice({
+        barcodeData: function (data, type){
+            var upc = data.substring(0,data.length-1);
+            if ($(selector).length > 0){
+                $(selector).val(upc);
+                if (typeof callback === 'function') {
+                    callback();
+                } else {
+                    $(selector).closest('form').submit();
+                }
+            }
+        },
+        magneticCardData: function (track1, track2, track3){
+        },
+        magneticCardRawData: function (data){
+        },
+        buttonPressed: function (){
+        },
+        buttonReleased: function (){
+        },
+        connectionState: function (state){
+        }
+    });
+    ScannerDevice.registerListener(Device);
+}
+        <?php
+
+        return ob_get_clean();
+    }
+
     /**
       Add a script to the page using <script> tags
       @param $file_url the script URL
@@ -161,6 +309,15 @@ class FanniePage
     public function addScript($file_url, $type='text/javascript')
     {
         $this->scripts[$file_url] = $type;
+    }
+
+    private function addFirstScript($file_url, $type='text/javascript')
+    {
+        $new = array($file_url => $type);
+        foreach ($this->scripts as $url => $t) {
+            $new[$url] = $t;
+        }
+        $this->scripts = $new;
     }
 
     public function add_script($file_url,$type="text/javascript")
@@ -216,6 +373,11 @@ class FanniePage
         header('Location: '.$url.'?redirect='.$redirect);
     }
 
+    public function login_redirect()
+    {
+        $this->loginRedirect();
+    }
+
     /**
       Check if the user is logged in
     */
@@ -240,6 +402,11 @@ class FanniePage
         }
 
         return False;
+    }
+
+    public function check_auth()
+    {
+        return $this->checkAuth();
     }
 
     public function draw_page()
@@ -309,6 +476,46 @@ class FanniePage
     }
 
     /**
+      Helper method to wrap helpContent()
+      in markup for a bootstrap modal dialog.
+    */
+    protected function helpModal()
+    {
+        $help = $this->helpContent();
+        if (!$help) {
+            return false;
+        }
+
+        return '
+            <div class="modal" id="help-modal" role="modal">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <button type="button" class="close" data-dismiss="modal">
+                                <span aria-hidden="true">&times;</span><span class="sr-only">Close</span>
+                            </button>
+                            <h4>' . $this->title . '</h4>
+                        </div>
+                        <div class="modal-body">' . $help . '</div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                        </div>
+                    </div>
+                </div>
+            </div>';
+    }
+
+    /**
+      User-facing help text explaining how to 
+      use a page.
+      @return [string] html content
+    */
+    public function helpContent()
+    {
+        return false;
+    }
+
+    /**
       Check for input and display the page
     */
     public function drawPage()
@@ -333,16 +540,21 @@ class FanniePage
             }
             
             if ($this->readinessCheck() !== false) {
-                echo $this->bodyContent();
+                $body = $this->bodyContent();
             } else {
-                echo $this->errorContent();
+                $body = $this->errorContent();
             }
 
             if ($this->window_dressing) {
+                echo $body;
                 $footer = $this->getFooter();
                 $footer = str_ireplace('</html>','',$footer);
                 $footer = str_ireplace('</body>','',$footer);
                 echo $footer;
+            } else {
+                $body = str_ireplace('</html>','',$body);
+                $body = str_ireplace('</body>','',$body);
+                echo $body;
             }
 
             foreach($this->scripts as $s_url => $s_type) {
@@ -352,13 +564,45 @@ class FanniePage
             }
             
             $js_content = $this->javascriptContent();
-            if (!empty($js_content) || !empty($this->onload_commands)) {
+            if (!empty($js_content) || !empty($this->onload_commands) || $this->themed) {
                 echo '<script type="text/javascript">';
                 echo $js_content;
                 echo "\n\$(document).ready(function(){\n";
                 foreach($this->onload_commands as $oc)
                     echo $oc."\n";
                 echo "});\n";
+                if ($this->themed) {
+                    ?>
+function showBootstrapAlert(selector, type, msg)
+{
+    var alertbox = '<div class="alert alert-' + type + '" role="alert">';
+    alertbox += '<button type="button" class="close" data-dismiss="alert">';
+    alertbox += '<span>&times;</span></button>';
+    alertbox += msg + '</div>';
+    $(selector).append(alertbox);
+}
+function showBootstrapPopover(element, original_value, error_message)
+{
+    var timeout = 1500;
+    if (error_message == '') {
+        error_message = 'Saved!';
+    } else {
+        element.val(original_value);
+        timeout = 3000;
+    }
+    element.popover({
+        html: true,
+        content: error_message,
+        placement: 'auto bottom'
+    });
+    element.popover('show');
+    setTimeout(function(){element.popover('destroy');}, timeout);
+}
+                    <?php
+                }
+                if ($this->enable_linea) {
+                    echo $this->lineaJS();
+                }
                 echo '</script>';
             }
 
@@ -368,7 +612,6 @@ class FanniePage
                 echo "\n";
             }
             
-            // 22May13 Eric Lee  Moved after css_files so these take precedence.
             $page_css = $this->css_content();
             if (!empty($page_css)) {
                 echo '<style type="text/css">';
@@ -376,9 +619,7 @@ class FanniePage
                 echo '</style>';
             }
 
-            if ($this->window_dressing) {
-                echo '</body></html>';
-            }
+            echo '</body></html>';
         }
     }
 }

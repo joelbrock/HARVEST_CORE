@@ -164,7 +164,7 @@ class BaseLibsTest extends PHPUnit_Framework_TestCase
 		*/
 
 		$ph = new PrintHandler();
-		$file = dirname(__FILE__).'/../graphics/WFC_Logo.bmp';
+		$file = dirname(__FILE__).'/../graphics/WfcLogo2014.bmp';
 
 		$this->assertFileExists($file);
 		$bitmap = $ph->RenderBitmapFromFile($file);
@@ -585,7 +585,7 @@ class BaseLibsTest extends PHPUnit_Framework_TestCase
 		unset($record['amount2']); // not real column
 		$record['trans_type'] = 'L';
 		$record['trans_subtype'] = 'OG';
-		$record['trans_status'] = 'D';
+		$record['trans_status'] = 'X';
 		lttLib::verifyRecord(1, $record, $this);
 
 		lttLib::clear();

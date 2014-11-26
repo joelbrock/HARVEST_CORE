@@ -131,6 +131,26 @@ static public function systemInit()
 	  device. Very alpha.
 	*/
 	$CORE_LOCAL->set("ccTermOut","idle");
+
+    /**
+      Load lane and store numbers from LaneMap array
+      if present
+    */
+    if (is_array($CORE_LOCAL->get('LaneMap'))) {
+        $my_ips = MiscLib::getAllIPs();
+        foreach ($my_ips as $ip) {
+            if (!isset($map[$ip])) {
+                continue;
+            }
+            if (isset($map[$ip]['register_id']) && isset($map[$ip]['store_id'])) {
+                $CORE_LOCAL->set('laneno', $map[$ip]['register_id']);
+                $CORE_LOCAL->set('store_id', $map[$ip]['store_id']);
+            }
+            // use first matching IP
+            break;
+        }
+
+    }
 }
 
 /**
@@ -461,6 +481,10 @@ static public function transReset()
 	  is only capable of producing swipe-style data.
 	*/
 	$CORE_LOCAL->set("paycard_keyed",False);
+    
+    if (!is_array($CORE_LOCAL->get('PluginList'))) {
+        $CORE_LOCAL->set('PluginList', array());
+    }
 
     if (is_array($CORE_LOCAL->get('PluginList'))) {
         foreach($CORE_LOCAL->get('PluginList') as $p) {
@@ -477,6 +501,8 @@ static public function transReset()
             $obj->transactionReset();
         }
     }
+
+    FormLib::clearTokens();
 }
 
 /**
@@ -738,7 +764,8 @@ static public function cashierLogin($transno=False, $age=0)
 	}
 }
 
-static public function loadParams(){
+static public function loadParams()
+{
     global $CORE_LOCAL;
 
     $db = Database::pDataConnect();
@@ -750,44 +777,23 @@ static public function loadParams(){
     }
     
     // load global settings first
-    $prep = $db->prepare_statement('SELECT param_key, param_value, is_array FROM parameters
-                            WHERE (lane_id=0 OR lane_id IS NULL) AND
-                            (store_id=0 OR store_id IS NULL)');
-    $globals = $db->exec_statement($prep);
-    while($row = $db->fetch_row($globals)) {
-        $key = $row['param_key'];
-        $value = $row['param_value'];
-        if ($row['is_array'] == 1) {
-            $value = explode(',', $value);
-        }
+    $parameters = new ParametersModel($db);
+    $parameters->lane_id(0);
+    $parameters->store_id(0);
+    foreach ($parameters->find() as $global) {
+        $key = $global->param_key();
+        $value = $global->materializeValue();
         $CORE_LOCAL->set($key, $value);
     }
 
     // apply local settings next
     // with any overrides that occur
-    $prep = $db->prepare_statement('SELECT param_key, param_value, is_array FROM parameters
-                            WHERE lane_id=?');
-    $locals = $db->exec_statement($prep, array($CORE_LOCAL->get('laneno')));
-    while($row = $db->fetch_row($locals)) {
-        $key = $row['param_key'];
-        $value = $row['param_value'];
-        if ($row['is_array'] == 1) {
-            $value = explode(',', $value);
-            if (isset($value[0]) && strstr($value[0], '=>')) {
-                // keyed array
-                $tmp = array();
-                foreach($value as $entry) {
-                    list($k, $v) = explode('=>', $entry, 2);
-                    $tmp[$k] = $v;
-                }
-                $value = $tmp;
-            }
-        } else if (strtoupper($value) === 'TRUE') {
-            $value = true;
-        } else if (strtoupper($value) === 'FALSE') {
-            $value = false;
-        }
-
+    $parameters->reset();
+    $parameters->lane_id($CORE_LOCAL->get('laneno'));
+    $parameters->store_id(0);
+    foreach ($parameters->find() as $local) {
+        $key = $local->param_key();
+        $value = $local->materializeValue();
         $CORE_LOCAL->set($key, $value);
     }
 }

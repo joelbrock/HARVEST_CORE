@@ -638,20 +638,7 @@ class PrintHandler {
 	  @param the output string
 	*/
 	function writeLine($text){
-		global $CORE_LOCAL;
-		if ($CORE_LOCAL->get("print") != 0) {
-
-			/* check fails on LTP1: in PHP4
-			   suppress open errors and check result
-			   instead 
-			*/
-			//if (is_writable($CORE_LOCAL->get("printerPort"))){}
-			$fp = fopen($CORE_LOCAL->get("printerPort"), "w");
-			if ($fp){
-				fwrite($fp, $text);
-				fclose($fp);
-			}
-		}
+        ReceiptLib::writeLine($text);
 	}
 
 	/**
@@ -705,6 +692,28 @@ class PrintHandler {
 
 		return $slip;
 	}
+
+    /**
+      Wrapper for raw ESC byte strings so 
+      subclass handlers can decide whether they're
+      compatible
+      @param $command [string] command bytes
+      @return [string] receipt text
+    */
+    public function rawEscCommand($command)
+    {
+        return '';
+    }
+
+    /**
+      Show bitmap stored on the printer device itself
+      @param $image_id [int] storage location ID
+      @return [string] receipt text
+    */
+    public function renderBitmapFromRam($image_id)
+    {
+        return '';
+    }
 } 
 
 ?>

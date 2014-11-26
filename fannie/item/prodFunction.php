@@ -33,19 +33,15 @@
 
 */
 
-include('../config.php');
+
+include_once('../src/mysql_connect.php');
 include_once('../auth/login.php');
 include_once('ajax.php');
-if (!class_exists('FannieAPI')) {
-    include($FANNIE_ROOT.'classlib2.0/FannieAPI.php');
-}
 
-function itemParse($upc)
-{
-    global $FANNIE_OP_DB,$FANNIE_URL;
+function itemParse($upc){
+    global $dbc,$FANNIE_URL;
     global $FANNIE_STORE_ID;
     global $FANNIE_COOP_ID;
-    $dbc = FannieDB::get($FANNIE_OP_DB);
 
     $logged_in = checkLogin();
 
@@ -54,7 +50,7 @@ function itemParse($upc)
     if(is_numeric($upc)){
 			switch($numType){
 				case 'UPC':
-                    $upc = BarcodeLib::padUPC($upc);
+					$upc = str_pad($upc,13,0,STR_PAD_LEFT);
 					$savedUPC = $upc;
 					$queryItem = "SELECT p.*,x.distributor,x.manufacturer 
 						FROM products as p left join 
@@ -692,8 +688,7 @@ function itemParse($upc)
 
 function likedtotable($query,$border,$bgcolor)
 {
-    global $FANNIE_OP_DB;
-    $dbc = FannieDB::get($FANNIE_OP_DB);
+	global $dbc;
         $results = $dbc->query($query) or
                 die("<li>errorno=".$dbc->errno()
                         ."<li>error=" .$dbc->error()

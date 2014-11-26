@@ -21,7 +21,7 @@
 
 *********************************************************************************/
 
-include('../../config.php');
+include(dirname(__FILE__) . '/../../config.php');
 if (!class_exists('FannieAPI')) {
     include($FANNIE_ROOT.'classlib2.0/FannieAPI.php');
 }
@@ -29,6 +29,7 @@ if (!class_exists('FannieAPI')) {
 class DDDReport extends FannieReportPage 
 {
     public $description = '[Shrink Reports] lists items marked as DDD/shrink at the registers.';
+    public $themed = true;
 
     protected $title = "Fannie : DDD Report";
     protected $header = "DDD Report";
@@ -37,12 +38,12 @@ class DDDReport extends FannieReportPage
 
     protected $sort_direction = 1;
 
-	public function fetch_report_data()
+    public function fetch_report_data()
     {
-		global $FANNIE_OP_DB, $FANNIE_TRANS_DB;
+        global $FANNIE_OP_DB, $FANNIE_TRANS_DB;
         $dbc = FannieDB::get($FANNIE_OP_DB);
-		$date1 = FormLib::get_form_value('date1');
-		$date2 = FormLib::get_form_value('date2');
+        $date1 = FormLib::get_form_value('date1');
+        $date2 = FormLib::get_form_value('date2');
 
         $dtrans = $FANNIE_TRANS_DB . $dbc->sep() . 'transarchive';
         $union = true;
@@ -75,9 +76,10 @@ class DDDReport extends FannieReportPage
                     LEFT JOIN ShrinkReasons AS s ON d.numflag=s.shrinkReasonID
                   WHERE trans_status = 'Z'
                     AND trans_type IN ('D', 'I')
-                    AND trans_subtype = ''
+                    AND trans_subtype IN ('','0')
                     AND emp_no <> 9999
                     AND register_no <> 99
+                    AND upc <> '0'
                     {{date_clause}}
                   GROUP BY
                     YEAR(datetime),
@@ -124,31 +126,34 @@ class DDDReport extends FannieReportPage
         }
 
         return $data;
-	}
-	
-	public function form_content()
+    }
+    
+    public function form_content()
     {
+        $this->add_onload_command('$(\'#date1\').datepicker();');
+        $this->add_onload_command('$(\'#date2\').datepicker();');
         return '
-            <form method="get" action="DDDReport.php">
-            <table>
-            <tr>
-                <td colspan="3"><i>Dates are optional; omit for last quarter (including today)</i></td>
-            </tr>
-            <tr>
-                <th>Start Date</th>
-                <td><input type="text" id="date1" name="date1" onfocus="showCalendarControl(this);" /></td>
-                <td rowspan="2">' . FormLib::dateRangePicker() . '</td>
-            </tr>
-            <tr>
-                <th>End Date</th>
-                <td><input type="text" id="date2" name="date2" onfocus="showCalendarControl(this);" /></td>
-            </tr>
-            <tr>
-                <td><input type="submit" name="submitted" value="Get Report" /></td>
-            </tr>
-            </table>
-            </form>';
-	}
+<div class="well">Dates are optional; omit for last quarter</div>
+<div class="col-sm-4">
+    <div class="form-group">
+    <label>Date Start</label>
+    <input type=text id=date1 name=date1 class="form-control" />
+    </div>
+    <div class="form-group">
+    <label>Date End</label>
+    <input type=text id=date2 name=date2 class="form-control" />
+    </div>
+    <p>
+    <button type=submit name=submit class="btn btn-default">Submit</button>
+    <button type=reset name=reset class="btn btn-default">Start Over</button>
+    </p>
+</div>
+<div class="col-sm-4">'
+    . FormLib::date_range_picker() . '
+</div>
+</form>
+        ';
+    }
 }
 
 FannieDispatch::conditionalExec();

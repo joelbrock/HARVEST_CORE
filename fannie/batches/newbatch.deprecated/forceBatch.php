@@ -30,8 +30,7 @@
 */
 
 function forceBatch($batchID){
-	global $FANNIE_OP_DB,$FANNIE_SERVER_DBMS,$FANNIE_STORE_ID;
-    $dbc = FannieDB::get($FANNIE_OP_DB);
+	global $dbc,$FANNIE_SERVER_DBMS,$FANNIE_STORE_ID;
 
 	$batchInfoQ = "SELECT batchType,discountType FROM batches WHERE batchID = $batchID";
 	$batchInfoR = $dbc->query($batchInfoQ);

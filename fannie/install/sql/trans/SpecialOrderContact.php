@@ -9,9 +9,6 @@ Depends on:
 	PendingSpecialOrder
 
 Use:
-
-DEPRECATED SOON: See SpecialOrders
-
 This table is for a work-in-progress special
 order tracking system. Conceptually, it will
 work like a partial suspended transactions,

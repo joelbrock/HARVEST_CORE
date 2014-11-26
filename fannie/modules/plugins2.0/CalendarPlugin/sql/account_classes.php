@@ -23,7 +23,7 @@
 
 $PLUGIN_CREATE['account_classes'] = "
 	CREATE TABLE account_classes (
-	classID INT NOT NULL AUTO_INCREMENT,
+	classID INT,
 	classDesc varchar(50),
 	PRIMARY KEY (classID)
 	)

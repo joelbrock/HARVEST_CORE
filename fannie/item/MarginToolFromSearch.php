@@ -21,15 +21,19 @@
 
 *********************************************************************************/
 
-include('../config.php');
-include_once($FANNIE_ROOT.'classlib2.0/FannieAPI.php');
+require(dirname(__FILE__) . '/../config.php');
+if (!class_exists('FannieAPI')) {
+    include($FANNIE_ROOT.'classlib2.0/FannieAPI.php');
+}
 
 class MarginToolFromSearch extends FannieRESTfulPage
 {
     protected $header = 'Margin Search Results';
     protected $title = 'Margin Search Results';
 
-    protected $window_dressing = false;
+    public $description = '[Margin Preview] takes a set of advanced search results and shows the effect on
+    margin of various price changes. Must be accessed via Advanced Search.';
+    public $themed = true;
 
     protected $upcs = array();
     private $save_results = array();
@@ -310,14 +314,11 @@ class MarginToolFromSearch extends FannieRESTfulPage
         // did not select "none" for tags
         // so create some shelftags
         if ($this->tags != -1) {
-            $ins = $dbc->prepare('INSERT INTO shelftags (id, upc, description, normal_price, 
-                            brand, sku, size, units, vendor, pricePerUnit) VALUES (?, ?, ?, ?,
-                            ?, ?, ?, ?, ?, ?)');
             $lookup = $dbc->prepare('SELECT p.description, v.brand, v.sku, v.size, v.units, n.vendorName
                                 FROM products AS p LEFT JOIN vendorItems AS v ON p.upc=v.upc
                                 LEFT JOIN vendors AS n ON v.vendorID=n.vendorID
                                 WHERE p.upc=? ORDER BY v.vendorID');
-            $clear = $dbc->prepare('DELETE FROM shelftags WHERE id=? AND upc=?');
+            $tag = new ShelfTagModel($dbc);
             for($i=0; $i<count($this->upcs);$i++) {
                 $upc = $this->upcs[$i];
                 if (!isset($this->newprices[$i])) {
@@ -330,12 +331,19 @@ class MarginToolFromSearch extends FannieRESTfulPage
                 if ($dbc->num_rows($lookupR) > 0) {
                     $info = $dbc->fetch_row($lookupR);
                 }
-                $ppo = ($info['size'] !== '') ? PriceLib::pricePerUnit($price, $info['size']) : '';
+                $ppo = ($info['size'] !== '') ? \COREPOS\Fannie\API\lib\PriceLib::pricePerUnit($price, $info['size']) : '';
 
-                $dbc->execute($clear, array($this->tags, $upc));
-                $dbc->execute($ins, array($this->tags, $upc, $info['description'], $price,
-                                        $info['brand'], $info['sku'], $info['size'],
-                                        $info['units'], $info['vendorName'], $ppo));
+                $tag->id($this->tags);
+                $tag->upc($upc);
+                $tag->description($info['description']);
+                $tag->normal_price($price);
+                $tag->brand($info['brand']);
+                $tag->sku($info['sku']);
+                $tag->size($info['size']);
+                $tag->units($info['units']);
+                $tag->vendor($info['vendorName']);
+                $tag->pricePerUnit($ppo);
+                $tag->save();
             }
         }
 
@@ -381,10 +389,8 @@ class MarginToolFromSearch extends FannieRESTfulPage
     {
         global $FANNIE_OP_DB, $FANNIE_URL, $FANNIE_ARCHIVE_DB;
         $dbc = FannieDB::get($FANNIE_OP_DB);
-        $this->add_script($FANNIE_URL.'/src/jquery/jquery.js');
-        $this->add_script($FANNIE_URL.'src/jquery/jquery.tablesorter.js');
-        $this->add_css_file($FANNIE_URL.'/src/style.css');
-        $this->add_css_file($FANNIE_URL.'src/jquery/themes/blue/style.css');
+        $this->add_script($FANNIE_URL.'src/javascript/tablesorter/jquery.tablesorter.js');
+        $this->add_css_file($FANNIE_URL.'src/javascript/tablesorter/themes/blue/style.css');
         $ret = '';
 
         // list super depts & starting margins
@@ -398,12 +404,12 @@ class MarginToolFromSearch extends FannieRESTfulPage
                    GROUP BY m.superID, super_name";
         $superP = $dbc->prepare($superQ);
         $superR = $dbc->execute($superP, $info['args']);
-        $ret .= '<div style="position: fixed; top: 1em; right: 1em;">';
-        $ret .= '<fieldset><legend>Overall Margins</legend>';
-        $ret .= '<table cellspacing="0" cellpadding="4" border="1">';
+        $ret .= '<div class="col-sm-2 pull-right">';
+        $ret .= '<div class="fluid-container form-group"><strong>Overall Margins</strong>';
+        $ret .= '<table class="table table-bordered small">';
         $first_superID = 0;
         $batchName = 'priceChange '.date('Y-m-d');
-        while($superW = $dbc->fetch_row($superR)) {
+        while ($superW = $dbc->fetch_row($superR)) {
             $this->upc = 'n/a';
             $this->newprice = 0;
             $this->superID = $superW['superID'];
@@ -440,23 +446,31 @@ class MarginToolFromSearch extends FannieRESTfulPage
                             $marginW['weightedMargin']*100
             );
         }
-        $ret .= '</table></fieldset>';
-        $ret .= '<fieldset><legend>Create Batch</legend><table>'; 
-        $ret .= '<tr><th>Name</th><td><input type="text" id="batchName" size="15" value="' . $batchName . '" /></td></tr>';
-        $ret .= '<tr><th>Tags</th><td><select id="shelftagSet"><option value="-1">None</option>';
+        $ret .= '</table></div>';
+        $ret .= '<div class="fluid-contaienr">
+                <strong>Create Batch</strong>'; 
+        $ret .= '<div class="form-group">
+            <label>Name</label>
+            <input type="text" id="batchName" class="form-control input-sm" 
+                value="' . $batchName . '" />
+            </div>';
+        $ret .= '<div class="form-group">
+            <label>Tags</label>
+            <select id="shelftagSet" class="form-control input-sm"><option value="-1">None</option>';
         $tagR = $dbc->query('SELECT superID, super_name FROM MasterSuperDepts GROUP BY superID, super_name ORDER BY superID');
         while($tagW = $dbc->fetch_row($tagR)) {
             $ret .= sprintf('<option %s value="%d">%s</option>',
                             $first_superID == $tagW['superID'] ? 'selected' : '',
                             $tagW['superID'], $tagW['super_name']);
         }
-        $ret .= '</select></td></tr>';
-        $ret .= '<tr><td colspan="2"><input type="submit" onclick="createBatch(); return false;" value="Create Batch" /></td></tr>';
-        $ret .= '</table></fieldset></div>';
+        $ret .= '</select></div>';
+        $ret .= '<p><button type="submit" onclick="createBatch(); return false;" class="btn btn-default">Create Batch</button></p>';
+        $ret .= '</div></div>';
 
         // list the actual items
+        $ret .= '<div class="col-sm-10">';
         $ret .= '<form onsubmit="return false;" method="post">';
-        $ret .= '<table id="maintable" class="tablesorter" style="width:80%;"><thead>';
+        $ret .= '<table id="maintable" class="table tablesorter"><thead>';
         $ret .= '<tr>
                 <th>UPC</th>
                 <th>Description</th>
@@ -492,7 +506,7 @@ class MarginToolFromSearch extends FannieRESTfulPage
                             <td class="currentprice">%.2f</td>
                             <td id="margin%s">%.4f%%</td>
                             <td class="dept%d super%d">
-                                <input type="text" size="5" name="price[]" class="newprice"
+                                <input type="text" size="5" name="price[]" class="newprice form-control input-sm"
                                 value="%.2f" onchange="reCalc(\'%s\', this.value, %f, %d, %d);" />
                                 <input type="hidden" name="upc[]" class="itemupc" value="%s" />
                             </td>
@@ -514,6 +528,7 @@ class MarginToolFromSearch extends FannieRESTfulPage
         $ret .= '</tbody></table>';
 
         $ret .= '</form>';
+        $ret .= '</div>';
 
         $this->add_onload_command("\$('#maintable').tablesorter({sortList: [[0,0]], widgets: ['zebra']});");
 

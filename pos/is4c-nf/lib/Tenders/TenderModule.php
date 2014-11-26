@@ -81,8 +81,9 @@ class TenderModule
         global $CORE_LOCAL;
 
         //force negative entered value when the total is negative.
-        if ($CORE_LOCAL->get("amtdue") <0 && $this->amount >= 0)
+        if ($CORE_LOCAL->get("amtdue") <0 && $this->amount >= 0) {
             $this->amount = -1 * $this->amount;
+        }
 
         if ($CORE_LOCAL->get("LastID") == 0) {
             return DisplayLib::boxMsg(_("no transaction in progress"));
@@ -101,7 +102,7 @@ class TenderModule
             // the return tender needs to be exact because the transaction state can get weird.
             return DisplayLib::xboxMsg(_("return tender must be exact"));
         } elseif($CORE_LOCAL->get("amtdue")>0 && $this->amount < 0) { 
-            return DisplayLib::xboxMsg(_("Why are you useing a negative number for a positve sale?"));
+            return DisplayLib::xboxMsg(_("Why are you using a negative number for a positve sale?"));
         }
 
         return true;
@@ -143,8 +144,12 @@ class TenderModule
     */
     public function add()
     {
-        TransRecord::addItem('', $this->name_string, "T", $this->tender_code, 
-            "", 0, 0, 0, -1*$this->amount, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        TransRecord::addRecord(array(
+            'description' => $this->name_string,
+            'trans_type' => 'T',
+            'trans_subtype' => $this->tender_code,
+            'total' => -1 * $this->amount,
+        ));
     }
 
     /**

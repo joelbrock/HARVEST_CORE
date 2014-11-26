@@ -21,7 +21,7 @@
 
 *********************************************************************************/
 
-include('../../config.php');
+include(dirname(__FILE__) . '/../../config.php');
 if (!class_exists('FannieAPI')) {
     include($FANNIE_ROOT.'classlib2.0/FannieAPI.php');
 }
@@ -29,6 +29,7 @@ if (!class_exists('FannieAPI')) {
 class HourlyCustomersReport extends FannieReportPage 
 {
     public $description = '[Hourly Customers] lists number of customers per hour for a given day.';
+    public $themed = true;
 
     protected $header = "Customers per Hour";
     protected $title = "Fannie : Customers per Hour";
@@ -41,20 +42,18 @@ class HourlyCustomersReport extends FannieReportPage
     {
         ob_start();
         ?>
-<form method=get action=<?php echo $_SERVER["PHP_SELF"]; ?> >
-Get transactions per hour for what date (YYYY-MM-DD)?<br />
-<input type=text onfocus="showCalendarControl(this);" name=date />&nbsp;
-<input type=submit value=Generate />
+<form method=get action="<?php echo $_SERVER["PHP_SELF"]; ?>" >
+<div class="well">Get transactions per hour for what date (YYYY-MM-DD)?</div>
+<input type=text name=date id="date" required
+    class="form-control" placeholder="Date" />
+<p>
+<button type=submit class="btn btn-default">Generate</button>
+</p>
 </form>
         <?php
+        $this->add_onload_command('$(\'#date\').datepicker();');
+
         return ob_get_clean();
-    }
-
-    public function report_description_content()
-    {
-        $date = FormLib::get_form_value('date', date('Y-m-d'));
-
-        return array("Report for $date");
     }
 
     public function fetch_report_data()
