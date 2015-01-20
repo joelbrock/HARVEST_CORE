@@ -33,8 +33,7 @@ class login3 extends BasicPage {
 
 	function preprocess(){
 		$this->color = "coloredArea";
-		$this->img = $this->page_url."graphics/bluekey4.gif";
-
+		$this->img = $this->page_url."graphics/key-icon.png";
 		$this->msg = _("please enter password");
 		if (isset($_REQUEST['reginput']) || isset($_REQUEST['scannerInput'])){
 
@@ -47,10 +46,7 @@ class login3 extends BasicPage {
 				UdpComm::udpSend('goodBeep');
 			}
 
-			if (Authenticate::check_password($passwd,4)){
-				$sd = MiscLib::scaleObject();
-				if (is_object($sd))
-					$sd->ReadReset();
+			if (Authenticate::checkPassword($passwd,4)){
 				$this->change_page($this->page_url."gui-modules/pos2.php");
 				return False;
 			}
@@ -65,7 +61,6 @@ class login3 extends BasicPage {
 
 	function head_content(){
 		$this->default_parsewrapper_js('scannerInput');
-		$this->scanner_scale_polling(True);
 	}
 
 	function body_content(){
@@ -83,7 +78,6 @@ class login3 extends BasicPage {
 			</div>
 		</div>
 		<?php
-		TransRecord::addactivity(3);
 		Database::getsubtotals();
 		echo "<div id=\"footer\">";
 		echo DisplayLib::printfooter();

@@ -10,12 +10,9 @@ class BaseLibsTest extends PHPUnit_Framework_TestCase
 
 		$here = getcwd();
 		chdir(dirname(__FILE__).'/../gui-modules/');
-		$rel = MiscLib::base_url();
+		$rel = MiscLib::baseURL();
 		$this->assertEquals('../',$rel);
 		chdir($here);
-
-		$this->assertEquals(5, MiscLib::int(5.1));
-		$this->assertEquals(10, MiscLib::int("10"));
 
 		$this->assertEquals(1, MiscLib::nullwrap(1));
 		$this->assertEquals(1.5, MiscLib::nullwrap(1.5));
@@ -96,23 +93,23 @@ class BaseLibsTest extends PHPUnit_Framework_TestCase
 
 		Database::setglobalvalue('LoggedIn',1);
 		Database::setglobalvalue('CashierNo',1);
-		$fail = Authenticate::check_password('9999');
+		$fail = Authenticate::checkPassword('9999');
 		$this->assertEquals(False, $fail);
 
 		Database::setglobalvalue('CashierNo',9999);
-		$pass = Authenticate::check_password('9999');
+		$pass = Authenticate::checkPassword('9999');
 		$this->assertEquals(True, $pass);
 
 		Database::setglobalvalue('LoggedIn',0);
 		Database::setglobalvalue('CashierNo',1);
-		$pass = Authenticate::check_password('9999');
+		$pass = Authenticate::checkPassword('9999');
 		$this->assertEquals(True, $pass);
 	}
 
 	public function testAutoLoader(){
 		global $CORE_LOCAL;
 		
-		AutoLoader::LoadMap();
+		AutoLoader::loadMap();
 		$class_map = $CORE_LOCAL->get('ClassLookup');
 		$this->assertInternalType('array', $class_map);
 		$this->assertNotEmpty($class_map);
@@ -148,7 +145,7 @@ class BaseLibsTest extends PHPUnit_Framework_TestCase
 			$this->assertFileExists($class_map[$class]);
 		}
 
-		$mods = AutoLoader::ListModules('Parser');
+		$mods = AutoLoader::listModules('Parser');
 		$this->assertInternalType('array',$mods);
 		$this->assertNotEmpty($mods);
 		foreach($mods as $m){
@@ -235,15 +232,15 @@ class BaseLibsTest extends PHPUnit_Framework_TestCase
 		$this->assertInternalType('string',$headerb);
 		$this->assertNotEmpty($headerb);
 
-		$item = DisplayLib::printitem('name','weight','1.99','T',1);
+		$item = DisplayLib::printItem('name','weight','1.99','T',1);
 		$this->assertInternalType('string',$item);
 		$this->assertNotEmpty($item);
 
-		$itemC = DisplayLib::printitem('name','weight','1.99','T',2);
+		$itemC = DisplayLib::printItemColor('004080','name','weight','1.99','T',2);
 		$this->assertInternalType('string',$itemC);
 		$this->assertNotEmpty($itemC);
 
-		$itemH = DisplayLib::printitemcolorhilite('004080','name','weight','1.99','T');
+		$itemH = DisplayLib::printItemColorHilite('004080','name','weight','1.99','T');
 		$this->assertInternalType('string',$itemH);
 		$this->assertNotEmpty($itemH);
 
@@ -289,13 +286,13 @@ class BaseLibsTest extends PHPUnit_Framework_TestCase
 		$term = DisplayLib::termdisplaymsg();
 		$this->assertInternalType('string',$term);
 
-		$list = DisplayLib::listitems(0,0);
+		$list = DisplayLib::listItems(0,0);
 		$this->assertInternalType('string',$list);
 
 		$rf = DisplayLib::printReceiptFooter();
 		$this->assertInternalType('string',$rf);
 
-		$draw = DisplayLib::drawitems(0,11,0);
+		$draw = DisplayLib::drawItems(0,11,0);
 		$this->assertInternalType('string',$draw);
 
 		$lp = DisplayLib::lastpage();
@@ -417,15 +414,6 @@ class BaseLibsTest extends PHPUnit_Framework_TestCase
 		$record['trans_subtype'] = 'FS';
 		$record['total'] = 3;
 		$record['voided'] = 8;
-		lttLib::verifyRecord(1, $record, $this);
-
-		lttLib::clear();
-
-		TransRecord::addEndofShift(3);
-		$record = lttLib::genericRecord();
-		$record['upc'] = 'ENDOFSHIFT';
-		$record['description'] = 'End of Shift';
-		$record['trans_type'] = 'S';
 		lttLib::verifyRecord(1, $record, $this);
 
 		lttLib::clear();
@@ -597,7 +585,7 @@ class BaseLibsTest extends PHPUnit_Framework_TestCase
 		unset($record['amount2']); // not real column
 		$record['trans_type'] = 'L';
 		$record['trans_subtype'] = 'OG';
-		$record['trans_status'] = 'D';
+		$record['trans_status'] = 'X';
 		lttLib::verifyRecord(1, $record, $this);
 
 		lttLib::clear();

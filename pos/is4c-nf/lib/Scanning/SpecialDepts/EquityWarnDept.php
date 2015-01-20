@@ -21,27 +21,29 @@
 
 *********************************************************************************/
 
-class EquityWarnDept extends SpecialDept {
+class EquityWarnDept extends SpecialDept 
+{
+    public $help_summary = 'Require cashier confirmation on equity sale';
 
-	function handle($deptID,$amount,$json){
-		global $CORE_LOCAL;
-		
-		if ($CORE_LOCAL->get("memberID") == "0" || $CORE_LOCAL->get("memberID") == $CORE_LOCAL->get("defaultNonMem")
-				|| $CORE_LOCAL->get("Type") == 'REG'){
-			$CORE_LOCAL->set('strEntered','');
-			$CORE_LOCAL->set('boxMsg','Equity requires member.<br />Apply member number first');
-			$json['main_frame'] = MiscLib::base_url().'gui-modules/boxMsg2.php';
-			return $json;
-		}
+    public function handle($deptID,$amount,$json)
+    {
+        global $CORE_LOCAL;
+        
+        if ($CORE_LOCAL->get("memberID") == "0" || $CORE_LOCAL->get("memberID") == $CORE_LOCAL->get("defaultNonMem")) {
+            $CORE_LOCAL->set('strEntered','');
+            $CORE_LOCAL->set('boxMsg','Equity requires member.<br />Apply member number first');
+            $json['main_frame'] = MiscLib::base_url().'gui-modules/boxMsg2.php';
 
-		if ($CORE_LOCAL->get('msgrepeat') == 0){
-			$CORE_LOCAL->set("boxMsg","<b>Equity Sale</b><br>please confirm<br>
-				<font size=-1>[enter] to continue, [clear] to cancel</font>");
-			$json['main_frame'] = MiscLib::base_url().'gui-modules/boxMsg2.php?quiet=1';
-		}
+            return $json;
+        }
 
-		return $json;
-	}
+        if ($CORE_LOCAL->get('msgrepeat') == 0) {
+            $CORE_LOCAL->set("boxMsg","<b>Equity Sale</b><br>please confirm<br>
+                <font size=-1>[enter] to continue, [clear] to cancel</font>");
+            $json['main_frame'] = MiscLib::base_url().'gui-modules/boxMsg2.php?quiet=1';
+        }
+
+        return $json;
+    }
 }
 
-?>
