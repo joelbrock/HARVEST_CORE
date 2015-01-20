@@ -104,7 +104,6 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
 
     private int current_state;
     private int ack_counter;
-    private Thread MonoReadThread;
 
     /**
       Does card type screen include foodstamp option
@@ -136,6 +135,11 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
         int pid = 0x2310;
         usb_devicefile = string.Format("{0}&{1}",vid,pid);
         #endif
+        if (auto_state_change) {
+            System.Console.WriteLine("SPH_SignAndPay_USB starting in AUTO mode");
+        } else {
+            System.Console.WriteLine("SPH_SignAndPay_USB starting in COORDINATED mode");
+        }
     }
 
     private void GetHandle(){
@@ -574,7 +578,7 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
         /* Revision: 7May13 - use locks instead
         */
         try {
-	    byte[] input = (byte[])iar.AsyncState;
+        byte[] input = (byte[])iar.AsyncState;
             HandleReadData(input);        
             usb_fs.EndRead(iar);
         }
@@ -692,7 +696,7 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
                     SendReport(BuildCommand(LcdGetBitmapSig()));
                 }
             }
-            else if (msg.Length > 1024){
+            else if (msg.Length > 2 && msg[0] == 0x42 && msg[1] == 0x4d){
                 BitmapOutput(msg);
                 sig_message = "";
             }
@@ -751,6 +755,9 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
             }
             break;
         default:
+            if (this.verbose_mode > 0) {
+                System.Console.WriteLine("The driver has become confused!");
+            }
             break;
         }
     }
@@ -853,8 +860,10 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
             }
             break;
         case "termApproved":
-            lock(usb_lock){
-                SetStateApproved();
+            if (!auto_state_change) {
+                lock(usb_lock){
+                    SetStateApproved();
+                }
             }
             break;
         case "termSig":
@@ -863,30 +872,40 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
             }
             break;
         case "termGetType":
-            lock(usb_lock){
-                this.type_include_fs = false;
-                SetStateCardType();
+            if (!auto_state_change) {
+                lock(usb_lock){
+                    this.type_include_fs = false;
+                    SetStateCardType();
+                }
             }
             break;
         case "termGetTypeWithFS":
-            lock(usb_lock){
-                this.type_include_fs = true;
-                SetStateCardType();
+            if (!auto_state_change) {
+                lock(usb_lock){
+                    this.type_include_fs = true;
+                    SetStateCardType();
+                }
             }
             break;
         case "termCashBack":
-            lock(usb_lock){
-                SetStateCashBack();
+            if (!auto_state_change) {
+                lock(usb_lock){
+                    SetStateCashBack();
+                }
             }
             break;
         case "termGetPin":
-            lock(usb_lock){
-                SetStateGetPin();
+            if (!auto_state_change) {
+                lock(usb_lock){
+                    SetStateGetPin();
+                }
             }
             break;
         case "termWait":
-            lock(usb_lock){
-                SetStateWaitForCashier();
+            if (!auto_state_change) {
+                lock(usb_lock){
+                    SetStateWaitForCashier();
+                }
             }
             break;
         }
@@ -1016,7 +1035,7 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
         }
 
         usb_fs.Write(report,0,usb_report_size);
-	System.Threading.Thread.Sleep(100);
+    System.Threading.Thread.Sleep(100);
         ack_event.WaitOne(50, false);
     }
 
@@ -1137,6 +1156,10 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
         return ret;
     }
 
+    /**
+      Implemented based on spec but not used
+      Commented out to avoid compliation warnings.
+      29Dec2014
     private byte[] LcdDrawTextInRectangle(string text, int x_top_left, int y_top_left,
             int x_bottom_right, int y_bottom_right){
 
@@ -1170,6 +1193,7 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
 
         return ret;
     }
+    */
 
     private byte[] LcdFillColor(int red, int green, int blue){
         byte[] ret = new byte[6];
@@ -1390,9 +1414,14 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
         return ret;
     }
 
+    /**
+      Implemented based on spec but not used
+      Commented out to avoid compliation warnings.
+      29Dec2014
     private byte[] LcdCalibrateTouch(){
         return new byte[3]{ 0x7a, 0x46, 0x1 };
     }
+    */
 
     /**
      * Mode 5 => buffered
