@@ -33,6 +33,7 @@ class ObfWeeklyReport extends FannieReportPage
 
     public $page_set = 'Plugin :: Open Book Financing';
     public $description = '[Weekly Report] shows sales and labor data for a given week.';
+    public $themed = true;
 
     protected $required_fields = array('weekID');
 
@@ -144,7 +145,7 @@ class ObfWeeklyReport extends FannieReportPage
 
             $trans1Q = str_replace('__table__', $dlog1, $transQ);
             $transP = $dbc->prepare($trans1Q);
-            $transR = $dbc->execute($transP, array($args));
+            $transR = $dbc->execute($transP, $args);
             if (!$future && $transR) {
                 $sales->transactions($dbc->num_rows($transR));
             } else {
@@ -171,7 +172,7 @@ class ObfWeeklyReport extends FannieReportPage
 
             $trans2Q = str_replace('__table__', $dlog2, $transQ);
             $transP = $dbc->prepare($trans2Q);
-            $transR = $dbc->execute($transP, array($args));
+            $transR = $dbc->execute($transP, $args);
             if ($transR) {
                 $sales->lastYearTransactions($dbc->num_rows($transR));
             } else {
@@ -185,6 +186,10 @@ class ObfWeeklyReport extends FannieReportPage
                 $sales->obfCategoryID($w['id']);
                 $sales->superID($w['superID']);
                 $sales->lastYearSales($w['sales']);
+                if ($future) {
+                    $sales->actualSales(0);
+                    $sales->growthTarget($week->growthTarget());
+                }
                 $sales->save();
             }
         }
@@ -246,6 +251,39 @@ class ObfWeeklyReport extends FannieReportPage
                                         WHERE w.obfQuarterID=?
                                             AND l.obfCategoryID=?
                                             AND w.endDate <= ?');
+        /**
+          Calculate actual sales growth over
+          the last three weeks with complete
+          year-over-year basis. Used to allocate
+          labor hours using growth trend and
+          sales per labor hour goal
+        */
+        $splhWeeks = '(';
+        $splhWeekQ = '
+            SELECT c.obfWeekID
+            FROM ObfSalesCache AS c
+                INNER JOIN ObfWeeks AS w ON c.obfWeekID=w.obfWeekID
+            GROUP BY c.obfWeekID
+            HAVING SUM(c.actualSales) > 0
+            ORDER BY MAX(w.endDate) DESC';
+        $splhWeekQ = $dbc->add_select_limit($splhWeekQ, 3);
+        $splhWeekR = $dbc->query($splhWeekQ);
+        while ($splhWeekW = $dbc->fetch_row($splhWeekR)) {
+            $splhWeeks .= sprintf('%d,', $splhWeekW['obfWeekID']);
+        }
+        $splhWeeks = substr($splhWeeks, 0, strlen($splhWeeks)-1) . ')';
+        $splhGrowthQ = '
+            SELECT 
+                (SUM(c.actualSales) - SUM(c.lastYearSales)) / SUM(c.actualSales) as avgGrowth,
+                SUM(c.actualSales) AS actualSales,
+                SUM(c.lastYearSales) AS lastYearSales
+            FROM ObfSalesCache AS c
+            WHERE c.obfCategoryID = ?
+                AND c.actualSales > 0
+                AND c.obfWeekID IN ' . $splhWeeks . '
+            GROUP BY c.obfCategoryID';
+        $splhGrowthP = $dbc->prepare($splhGrowthQ);
+        $splh_info = array('actual'=>0.0, 'lastYear' => 0.0);
 
         foreach ($categories->find('name') as $category) {
             $data[] = array($category->name(), '', '', '', '', '', '', '', '',
@@ -325,8 +363,15 @@ class ObfWeeklyReport extends FannieReportPage
             );
             $data[] = $record;
 
+            $splhR = $dbc->execute($splhGrowthP, array($category->obfCategoryID()));
+            $splhW = $dbc->fetch_row($splhR);
+            $splh_info['actual'] += $splhW['actualSales'];
+            $splh_info['lastYear'] += $splhW['lastYearSales'];
+            $splh_sales_projection = $sum[1] * (1 + $splhW['avgGrowth']);
             $average_wage = $labor->hours() == 0 ? 0 : $labor->wages() / ((float)$labor->hours());
-            $proj_hours = $labor->hoursTarget();
+            // use SPLH instead of pre-allocated
+            //$proj_hours = $labor->hoursTarget();
+            $proj_hours = $splh_sales_projection / $category->salesPerLaborHourTarget();
             $proj_wages = $proj_hours * $average_wage;
 
             $quarter = $dbc->execute($quarterLaborP, 
@@ -461,7 +506,12 @@ class ObfWeeklyReport extends FannieReportPage
             if ($labor->hours() != 0) {
                 $average_wage = $labor->wages() / ((float)$labor->hours());
             }
-            $proj_hours = $labor->hoursTarget();
+            // use SPLH instead of pre-allocated
+            //$proj_hours = $labor->hoursTarget();
+            $splh_avg_growth = $this->percentGrowth($splh_info['actual'], $splh_info['lastYear']) / 100.00;
+            $splh_proj_sales = $total_sales[1] * (1 + $splh_avg_growth);
+            $proj_hours = $splh_proj_sales / $c->salesPerLaborHourTarget();
+
             $proj_wages = $proj_hours * $average_wage;
 
             $data[] = array(
@@ -770,15 +820,21 @@ class ObfWeeklyReport extends FannieReportPage
         ');
 
         $args1 = array(
-            date('Y-01-01 00:00:00', $end_ts),
+            date('Y-07-01 00:00:00', $end_ts),
             date('Y-m-d 23:59:59', $end_ts),
         );
+        if (date('n', $end_ts) < 7) {
+            $args1[0] = (date('Y', $end_ts) - 1) . '-07-01 00:00:00';
+        }
 
         $last_year = mktime(0, 0, 0, date('n',$end_ts), date('j',$end_ts), date('Y',$end_ts)-1);
         $args2 = array(
-            date('Y-01-01 00:00:00', $last_year),
+            date('Y-07-01 00:00:00', $last_year),
             date('Y-m-d 23:59:59', $last_year),
         );
+        if (date('n', $last_year) < 7) {
+            $args2[0] = (date('Y', $last_year) - 1) . '-07-01 00:00:00';
+        }
 
         $args3 = array(
             date('Y-m-d 00:00:00', $start_ts),
@@ -856,7 +912,9 @@ class ObfWeeklyReport extends FannieReportPage
         $dbc = FannieDB::get($FANNIE_PLUGIN_SETTINGS['ObfDatabase']);
 
         $ret = '<form action="' . $_SERVER['PHP_SELF'] . '" method="get">';
-        $ret .= 'Week Starting: <select name="weekID">';
+        $ret .= '<div class="form-group form-inline">
+            <label>Week Starting</label>: 
+            <select class="form-control" name="weekID">';
         $model = new ObfWeeksModel($dbc);
         foreach ($model->find('startDate', true) as $week) {
             $ret .= sprintf('<option value="%d">%s</option>',
@@ -867,10 +925,12 @@ class ObfWeeklyReport extends FannieReportPage
         }
         $ret .= '</select>';
         $ret .= '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;';
-        $ret .= '<input type="submit" value="Get Report" />';
+        $ret .= '<button type="submit" class="btn btn-default">Get Report</button>';
+        $ret .= '</div>';
         $ret .= '</form>';
-        $ret .= '<br /><br />
-                <button onclick="location=\'ObfIndexPage.php\';return false;">Home</button>';
+        $ret .= '<p><button class="btn btn-default"
+                onclick="location=\'ObfIndexPage.php\';return false;">Home</button>
+                </p>';
 
         return $ret;
     }

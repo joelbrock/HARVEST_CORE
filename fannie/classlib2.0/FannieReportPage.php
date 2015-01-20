@@ -118,6 +118,13 @@ class FannieReportPage extends FanniePage
     protected $sort_direction = 0;
 
     /**
+      Disable inclusion of jquery. In rare cases the report 
+      content may be embedded in a page that already included
+      jquery and multiple copies included can cause problems.
+    */
+    protected $no_jquery = false;
+
+    /**
       Column containing chart labels.
     */
     protected $chart_label_column = 0;
@@ -570,7 +577,7 @@ class FannieReportPage extends FanniePage
                     }
                     $ret .= sprintf('<a href="%s%sexcel=csv">Download CSV</a>
                         &nbsp;&nbsp;&nbsp;&nbsp;
-                        <a href="javascript:history:back();">Back</a>',
+                        <a href="javascript:history.back();">Back</a>',
                         $_SERVER['REQUEST_URI'],
                         (strstr($_SERVER['REQUEST_URI'],'?') ===False ? '?' : '&')
                     );
@@ -672,7 +679,9 @@ class FannieReportPage extends FanniePage
                 foreach($this->report_end_content() as $line) {
                     $ret .= (substr($line,0,1)=='<'?'':'<br />').$line;
                 }
-                $this->add_script($FANNIE_URL.'src/javascript/jquery.js');
+                if (!$this->no_jquery) {
+                    $this->add_script($FANNIE_URL.'src/javascript/jquery.js');
+                }
                 $this->add_script($FANNIE_URL.'src/javascript/tablesorter/jquery.tablesorter.js');
                 $sort = sprintf('[[%d,%d]]',$this->sort_column,$this->sort_direction);
                 if ($this->sortable) {
@@ -829,7 +838,6 @@ class FannieReportPage extends FanniePage
             while(array_key_exists($i+$span,$row) && $row[$i+$span] === null && ($i+$span)<count($row)) {
                 $span++;
             }
-            $date = '';
             $styles = $color_styles;
             if ($row[$i] === "" || $row[$i] === null) {
                 $row[$i] = '&nbsp;';
