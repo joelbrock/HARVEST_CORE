@@ -46,7 +46,7 @@ class login3 extends BasicPage {
 				UdpComm::udpSend('goodBeep');
 			}
 
-			if (Authenticate::checkPassword($passwd,4)){
+			if (Authenticate::checkPassword($passwd)){
 				$this->change_page($this->page_url."gui-modules/pos2.php");
 				return False;
 			}
