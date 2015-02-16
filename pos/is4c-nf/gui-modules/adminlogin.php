@@ -166,6 +166,9 @@ class adminlogin extends NoInputPage {
 		</div>
 		<?php
 		$this->add_onload_command("\$('#userPassword').focus();");
+        if (CoreLocal::get('LoudLogins') == 1) {
+            UdpComm::udpSend('twoPairs');
+        }
 	} // END true_body() FUNCTION
 
 
