@@ -21,21 +21,22 @@
 
 *********************************************************************************/
 
-if (!class_exists('FannieAPI'))
+if (!class_exists('FannieAPI')) {
     include_once(dirname(__FILE__).'/../../classlib2.0/FannieAPI.php');
+}
 
 class ProdUserModule extends ItemModule 
 {
 
     public function showEditForm($upc, $display_mode=1, $expand_mode=1)
     {
-        global $FANNIE_URL;
+        $FANNIE_URL = FannieConfig::config('URL');
         $upc = BarcodeLib::padUPC($upc);
 
         $ret = '<div id="ProdUserFieldset" class="panel panel-default">';
         $ret .=  "<div class=\"panel-heading\">
                 <a href=\"\" onclick=\"\$('#ProdUserFieldsetContent').toggle();return false;\">
-                Longform Info</a>
+                Sign/Web Info</a>
                 </div>";
         $css = ($expand_mode == 1) ? '' : ' collapse';
         $ret .= '<div id="ProdUserFieldsetContent" class="panel-body' . $css . '">';
@@ -200,7 +201,7 @@ class ProdUserModule extends ItemModule
 
     public function getFormJavascript($upc)
     {
-        global $FANNIE_URL;
+        $FANNIE_URL = FannieConfig::config('URL');
         ob_start();
         ?>
         function createSign()
@@ -223,7 +224,7 @@ class ProdUserModule extends ItemModule
 
     public function summaryRows($upc)
     {
-        global $FANNIE_URL;
+        $FANNIE_URL = FannieConfig::config('URL');
         $form = sprintf('<form id="newSignForm" method="post" action="%sadmin/labels/SignFromSearch.php">
                         <input type="hidden" name="u[]" value="%s" />
                         </form>', $FANNIE_URL, $upc);
