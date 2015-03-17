@@ -53,6 +53,11 @@ body {
     <td><?php echo InstallUtilities::installSelectField('SecurityLineItemDiscount', $privLevels, 20); ?></td>
 </tr>
 <tr>
+    <td><b>Percent Discount</b>: </td>
+    <td><?php echo InstallUtilities::installSelectField('SecurityPercentDiscount', $privLevels, 20); ?></td>
+</tr>
+
+<tr>
     <td><b>Void Limit</b>:</td>
     <td>
     <?php
