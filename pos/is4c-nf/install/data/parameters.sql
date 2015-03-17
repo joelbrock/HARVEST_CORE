@@ -62,6 +62,7 @@
 (0,0,'SecurityTR','20',0)
 (0,0,'SecurityRefund','20',0)
 (0,0,'SecurityLineItemDiscount','20',0)
+(0,0,'SecurityPercentDiscount','20',0)
 (0,0,'VoidLimit','0',0)
 (0,0,'Debug_CoreLocal','0',0)
 (0,0,'Debug_Redirects','0',0)
