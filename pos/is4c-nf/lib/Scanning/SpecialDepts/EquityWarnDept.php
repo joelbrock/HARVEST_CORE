@@ -27,7 +27,7 @@ class EquityWarnDept extends SpecialDept
 
     public function handle($deptID,$amount,$json)
     {
-        if (CoreLocal::get("memberID") == "0" || CoreLocal::get("memberID") == CoreLocal::get("defaultNonMem")) {
+        if (CoreLocal::get("memberID") == "0" || CoreLocal::get("memytpe") == 0 || CoreLocal::get("memberID") == CoreLocal::get("defaultNonMem")) {
             CoreLocal::set('strEntered','');
             CoreLocal::set('boxMsg','Equity requires member.<br />Apply member number first');
             $json['main_frame'] = MiscLib::base_url().'gui-modules/boxMsg2.php';
