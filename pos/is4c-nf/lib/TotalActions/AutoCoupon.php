@@ -38,6 +38,7 @@ class AutoCoupon extends TotalAction
     public function apply()
     {
         $db = Database::pDataConnect();
+        $repeat = CoreLocal::get('msgrepeat');
 
         $coupons = array();
         $hc_table = $db->table_definition('houseCoupons');
@@ -62,7 +63,7 @@ class AutoCoupon extends TotalAction
 
         foreach($coupons as $id => $description) {
 
-            if ($hc->checkQualifications($id) !== true) {
+            if ($hc->checkQualifications($id, true) !== true) {
                 // member or transaction does not meet requirements
                 // for auto-coupon purposes, this isn't really an 
                 // error. no feedback necessary
@@ -92,6 +93,8 @@ class AutoCoupon extends TotalAction
 
             TransRecord::addhousecoupon($upc, $add['department'], -1 * $next_val, $description);
         }
+
+        CoreLocal::set('msgrepeat', $repeat);
 
         return true;
     }

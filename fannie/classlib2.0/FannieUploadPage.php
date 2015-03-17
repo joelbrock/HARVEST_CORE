@@ -23,11 +23,8 @@
 
 namespace COREPOS\Fannie\API {
 
-if (!class_exists('\FanniePage')) {
-    include_once(dirname(__FILE__).'/FanniePage.php');
-}
-if (!class_exists('\FormLib')) {
-    include_once(dirname(__FILE__).'/lib/FormLib.php');
+if (!class_exists('\FannieAPI')) {
+    include_once(dirname(__FILE__).'/FannieAPI.php');
 }
 if (!class_exists('\Spreadsheet_Excel_Reader')) {
     include_once(dirname(__FILE__).'/../src/Excel/xls_read/reader.php');
@@ -112,8 +109,6 @@ class FannieUploadPage extends \FanniePage
     */
     public function preprocess()
     {
-        global $FANNIE_URL, $FANNIE_OP_DB;
-
         $col_select = \FormLib::get_form_value('cs','');
 
         if (isset($_FILES[$this->upload_field_name])) {
@@ -124,7 +119,7 @@ class FannieUploadPage extends \FanniePage
                 if (!$this->themed) {
                     $this->window_dressing = false;
                 }
-                $this->add_script($FANNIE_URL.'src/javascript/jquery.js');
+                $this->add_script($this->config->get('URL') . 'src/javascript/jquery.js');
             } else {
                 $this->content_function = 'uploadError';
             }
@@ -177,7 +172,7 @@ class FannieUploadPage extends \FanniePage
                         // Extract lines & process
                         $lines = array();
                         for ($i=$offset; $i<count($fileData); $i++) {
-                            if (count($fileData[$i]) != $num_columns) {
+                            if (count($fileData[$i]) < $num_columns-2 || count($fileData[$i]) > $num_columns+2) {
                                 continue;
                             }
                             $lines[] = $fileData[$i];
@@ -190,7 +185,7 @@ class FannieUploadPage extends \FanniePage
                         $done = ($offset + $chunk_size) > count($fileData) ? true : false;
 
                         if (count($lines) == 0 && !$done) {
-                            $ret['error'] = 'Upload into database failed';
+                            $ret['error'] .= 'Upload into database failed';
                             unlink($this->upload_file_name);
                             echo json_encode($ret);
                             return false;
@@ -281,7 +276,7 @@ class FannieUploadPage extends \FanniePage
             } else { // selected columns were invalid; redisplay preview screen
                 $this->content_function = 'basicPreview';
                 $this->window_dressing = False;
-                $this->add_script($FANNIE_URL.'src/javascript/jquery.js');
+                $this->add_script($this->config->get('URL') . 'src/javascript/jquery.js');
             }
         }
 

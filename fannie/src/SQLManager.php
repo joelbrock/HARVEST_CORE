@@ -30,9 +30,12 @@
  across two servers that are useful for lane-server
  communication
 */
+if (!class_exists('FannieAPI')) {
+    include(dirname(__FILE__) . '/../classlib2.0/FannieAPI.php');
+}
 if (!function_exists("ADONewConnection")) {
-    if (file_exists(dirname(__FILE__) . '/../vendor/adodb/adodb-php/adodb.inc.php')) {
-        include(dirname(__FILE__) . '/../vendor/adodb/adodb-php/adodb.inc.php');
+    if (file_exists(dirname(__FILE__) . '/../../vendor/adodb/adodb-php/adodb.inc.php')) {
+        include(dirname(__FILE__) . '/../../vendor/adodb/adodb-php/adodb.inc.php');
     } else {
         include(dirname(__FILE__).'/../adodb5/adodb.inc.php');
     }
@@ -64,7 +67,7 @@ class SQLManager
 	*/
 	public function SQLManager($server,$type,$database,$username,$password='',$persistent=false, $new=false)
     {
-		$this->QUERY_LOG = dirname(__FILE__)."/../logs/queries.log";
+		$this->QUERY_LOG = new FannieLogger();
 		$this->connections=array();
 		$this->default_db = $database;
 		$this->addConnection($server,$type,$database,$username,$password,$persistent,$new);
@@ -176,7 +179,39 @@ class SQLManager
         if ($this->isConnected()) {
             $this->query('use ' . $db_name, $db_name);
             $this->connections[$db_name]->database = $db_name;
+
+            return true;
+        } else {
+            return false;
         }
+    }
+
+    /**
+      Change the default database on a given connection
+      (i.e., mysql_select_db equivalent)
+      @param $db_name [string] database name
+      @param $which_connection [optional]
+      @return boolean
+
+      Using this method will recycle an existing connection
+      object where as calling addConnection will create a
+      new connection object.
+    */
+    public function selectDB($db_name, $which_connection='')
+    {
+		if ($which_connection == '') {
+			$which_connection=$this->default_db;
+        }
+
+        $current_db = $this->defaultDatabase($which_connection);
+        if ($current_db === false) {
+            // no connection; cannot switch database
+            return false;
+        }
+
+        $this->connections[$db_name] = $this->connections[$which_connection];
+
+        return $this->setDefaultDB($db_name);
     }
 
 	/**
@@ -187,7 +222,6 @@ class SQLManager
 	*/
 	public function query($query_text,$which_connection='',$params=false)
     {
-		$ql = $this->QUERY_LOG;
 		if ($which_connection == '') {
 			$which_connection=$this->default_db;
         }
@@ -200,16 +234,10 @@ class SQLManager
 				$query_text = $query_text[0];
             }
 
-			$errorMsg = $_SERVER['PHP_SELF'] . ': ' . date('r') . ': ' . $query_text . "\n";
-			$errorMsg .= $this->error($which_connection) . "\n\n";
-
-            if (is_writable($ql)) {
-                $fp = fopen($ql,'a');
-                fwrite($fp, $errorMsg);
-                fclose($fp);
-            } else {
-                echo str_replace("\n", '<br />', $errorMsg);
-            }
+            $this->QUERY_LOG->debug('Failed Query on ' . $_SERVER['PHP_SELF']);
+            $this->QUERY_LOG->debug($query_text);
+            $errorMsg = $this->error($which_connection);
+            $this->QUERY_LOG->debug($errorMsg);
 
             if ($this->throw_on_fail) {
                 throw new Exception($errorMsg);
@@ -1510,15 +1538,9 @@ class SQLManager
 	*/  
 	public function logger($str)
     {
-		$ql = $this->QUERY_LOG;
-		if (is_writable($ql)) {
-			$fp = fopen($ql,'a');
-			fputs($fp,$_SERVER['PHP_SELF'].": ".date('r').': '.$str."\n");
-			fclose($fp);
-			return true;
-		} else {
-			return false;
-		}
+        $this->QUERY_LOG->debug($_SERVER['PHP_SELF'] . ' - QUERY - ' . $str);
+
+        return true;
 	}
 
     /**
@@ -1536,6 +1558,10 @@ class SQLManager
         
         $definition1 = $this->table_definition($table1, $which_connection);
         $definition2 = $this->table_definition($table2, $which_connection);
+        if (!is_array($definition1) || ! is_array($definition2)) {
+            return array();
+        }
+
         $matches = array();
         foreach($definition1 as $col_name => $info) {
             if (isset($definition2[$col_name])) {
@@ -1579,6 +1605,45 @@ class SQLManager
     {
         $this->throw_on_fail = $mode;
     }
+
+	/**
+	  Create temporary table
+      @param name string temporary table name
+      @param source_table string source table name
+	  @param which_connection see method close
+	  @return String separator
+	*/
+	public function temporaryTable($name, $source_table, $which_connection='')
+    {
+		if ($which_connection == '') {
+			$which_connection=$this->default_db;
+        }
+		switch ($this->connections[$which_connection]->databaseType) {
+            case 'mysql':
+            case 'mysqli':
+            case 'pdo':
+            case 'pgsql':
+                $created = $this->query('
+                    CREATE TEMPORARY TABLE ' . $name . '
+                    LIKE ' . $source_table
+                );
+                return $created ? $name : false;
+            case 'mssql':
+                if (strstr($name, '.dbo.')) {
+                    list($schema, $table) = explode('.dbo.', $name, 2);
+                    $name = $schema . '.dbo.#' . $name;
+                } else {
+                    $name = '#' . $name;
+                }
+                $created = $this->query('
+                    CREATE TABLE ' . $name . '
+                    LIKE ' . $source_table
+                );
+                return $created ? $name : false;
+		}
+
+		return false;
+	}
 
 	// skipping fetch_cell on purpose; generic-db way would be slow as heck
 

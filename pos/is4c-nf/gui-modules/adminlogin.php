@@ -75,7 +75,9 @@ class adminlogin extends NoInputPage {
 		$this->heading = $class::$adminLoginMsg;
 
 		if (isset($_REQUEST['reginput']) || isset($_REQUEST['userPassword'])){
-
+            if (CoreLocal::get('LoudLogins') == 1) {
+                UdpComm::udpSend('twoPairs');
+            }
 			$passwd = '';
 			if (isset($_REQUEST['reginput']) && !empty($_REQUEST['reginput'])) {
 				$passwd = $_REQUEST['reginput'];

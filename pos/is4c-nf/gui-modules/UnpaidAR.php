@@ -27,6 +27,10 @@ class UnpaidAR extends BasicPage {
 
 	function preprocess()
     {
+    		$AR_department = '990';
+    		if (CoreLocal::get("store") == 'WEFC_Toronto') {
+    			$AR_department = '1005';
+    		}
 		if (isset($_REQUEST['reginput'])){
 			$dec = $_REQUEST['reginput'];
 			$amt = CoreLocal::get("old_ar_balance");
@@ -36,7 +40,7 @@ class UnpaidAR extends BasicPage {
 
 			if (strtoupper($dec) == "CL"){
 				if (CoreLocal::get('memType') == 0){
-					PrehLib::memberID(CoreLocal::get("defaultNonMem"));
+					PrehLib::setMember(CoreLocal::get("defaultNonMem"), 1);
 				}
 				$this->change_page($this->page_url."gui-modules/pos2.php");
 				return False;
@@ -44,7 +48,7 @@ class UnpaidAR extends BasicPage {
 			elseif ($dec == "" || strtoupper($dec) == "BQ"){
 				if (strtoupper($dec)=="BQ")
 					$amt = CoreLocal::get("balance");
-				CoreLocal::set("strRemembered", ($amt*100).'DP9900');
+				CoreLocal::set("strRemembered", ($amt*100)."DP{$AR_department}0");
 				CoreLocal::set("msgrepeat",1);
 				$memtype = CoreLocal::get("memType");
 				$type = CoreLocal::get("Type");

@@ -38,8 +38,8 @@ class Totals extends Parser {
 		return False;
 	}
 
-	function parse($str){
-		global $CORE_LOCAL;
+	function parse($str)
+    {
 		$ret = $this->default_json();
 		if ($str == "FNTL"){
 			$ret['main_frame'] = MiscLib::base_url().'gui-modules/fsTotalConfirm.php';
@@ -50,7 +50,7 @@ class Totals extends Parser {
 		elseif ($str == "FTTL")
 			PrehLib::finalttl();
 		elseif ($str == "TL"){
-            $CORE_LOCAL->set('End', 0);
+            CoreLocal::set('End', 0);
 			$chk = PrehLib::ttl();
 			if ($chk !== True)
 				$ret['main_frame'] = $chk;
@@ -64,7 +64,8 @@ class Totals extends Parser {
             $ret['output'] = DisplayLib::boxMsg(
                 _('WIC Total') . sprintf(': $%.2f', $ttl), 
                 '', 
-                true
+                true,
+                DisplayLib::standardClearButton()
             );
 
             // return early since output has been set
