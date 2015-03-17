@@ -61,7 +61,7 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
         if false, screen only changes in response
         to POS commands
     */
-    private bool auto_state_change = true;
+    private bool auto_state_change = false;
 
     private const int LCD_X_RES = 320;
     private const int LCD_Y_RES = 240;
