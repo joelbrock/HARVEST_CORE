@@ -125,10 +125,6 @@ class UPC extends Parser
             $ret['main_frame'] = $my_url."gui-modules/adminlogin.php?class=LineItemDiscountAdminLogin";
             return $ret;
         }
-        if (CoreLocal::get('itemPD') > 0 && CoreLocal::get('SecurityPercentDiscount') == 30 && CoreLocal::get('msgrepeat')==0){
-            $ret['main_frame'] = $my_url."gui-modules/adminlogin.php?class=PercentDiscountAdminLogin";
-            return $ret;
-        }
         /**
           11Sep14 Andy
           Disabled until keypress double form submission is
