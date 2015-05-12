@@ -353,7 +353,7 @@ class UPC extends Parser
                     ".$db->dayofweek($db->now())."=restrict_dow
                   ) AND
                   ( (restrict_start IS NULL AND restrict_end IS NULL) OR
-                    ".$db->curtime()." BETWEEN restrict_start AND restrict_end
+                    ".$db->now()." BETWEEN restrict_start AND restrict_end
                   )
                  ) OR
                 ( dept_ID='{$row['department']}' AND
@@ -361,7 +361,7 @@ class UPC extends Parser
                     ".$db->dayofweek($db->now())."=restrict_dow
                   ) AND
                   ( (restrict_start IS NULL AND restrict_end IS NULL) OR
-                    ".$db->curtime()." BETWEEN restrict_start AND restrict_end
+                    ".$db->now()." BETWEEN restrict_start AND restrict_end
                   )
                 )";
             $restrictR = $db->query($restrictQ);
