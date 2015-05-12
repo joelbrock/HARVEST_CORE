@@ -680,7 +680,7 @@ static public function graphedLocalTTL()
         return '';
 
     $percent = ((float)$row['localTTL']) / ((float)$row['itemTTL']);
-    $str = sprintf('LOCAL PURCHASES = $%.2f (%.2f%%)',
+    $str = sprintf('YOUR LOCAL PURCHASES = $%.2f (%.2f%%)',
             $row['localTTL'], 100*$percent);
     $str .= "\n";
 
