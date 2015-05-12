@@ -656,9 +656,9 @@ static public function localTTL()
 {
     if (CoreLocal::get("localTotal") == 0) return "";
 
-    $str = sprintf("LOCAL PURCHASES = \$%.2f",
+    $str = sprintf("YOUR LOCAL PURCHASES = \$%.2f",
         CoreLocal::get("localTotal"));
-    return $str."\n";
+    return "\n".$str."\n";
 }
 
 static public function graphedLocalTTL()
