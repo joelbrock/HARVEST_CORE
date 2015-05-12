@@ -21,9 +21,9 @@
 
 *********************************************************************************/
 
-/* this module is intended for re-use. 
+/* this module is intended for re-use.
  * Pass the name of a class with the
- * static properties: 
+ * static properties:
  *  - adminLoginMsg (message to display)
  *  - adminLoginLevel (employees.frontendsecurity requirement)
  * and static method:
@@ -75,9 +75,6 @@ class adminlogin extends NoInputPage {
 		$this->heading = $class::$adminLoginMsg;
 
 		if (isset($_REQUEST['reginput']) || isset($_REQUEST['userPassword'])){
-            if (CoreLocal::get('LoudLogins') == 1) {
-                UdpComm::udpSend('twoPairs');
-            }
 			$passwd = '';
 			if (isset($_REQUEST['reginput']) && !empty($_REQUEST['reginput'])) {
 				$passwd = $_REQUEST['reginput'];
@@ -88,7 +85,7 @@ class adminlogin extends NoInputPage {
 			if (strtoupper($passwd) == "CL"){
 				$class::adminLoginCallback(False);
 				$this->change_page($this->page_url."gui-modules/pos2.php");
-				return False;	
+				return False;
 			}
 			else if (empty($passwd)){
 				$this->box_color="errorColoredArea";
@@ -96,16 +93,15 @@ class adminlogin extends NoInputPage {
 			}
 			else {
 				$db = Database::pDataConnect();
-				$query = "
-                    SELECT emp_no, 
-                        FirstName, 
-                        LastName 
-                    FROM employees 
-					where EmpActive = 1 
-                        AND frontendsecurity >= ?
-                        AND (CashierPassword = ? OR AdminPassword = ?)";
-                $args = array($class::$adminLoginLevel, $passwd, $passwd);
-                $prep = $db->prepare($query);
+				$query = "SELECT emp_no,
+          FirstName,
+          LastName
+          FROM employees
+					where EmpActive = 1
+          AND frontendsecurity >= ?
+          AND (CashierPassword = ? OR AdminPassword = ?)";
+        $args = array($class::$adminLoginLevel, $passwd, $passwd);
+        $prep = $db->prepare($query);
 				$result = $db->execute($prep, $args);
 				$num_rows = $db->num_rows($result);
 				if ($num_rows != 0) {
@@ -116,9 +112,9 @@ class adminlogin extends NoInputPage {
 						'charflag' => 'PW',
 						'num_flag' => $row['emp_no']
 					));
-                    if (CoreLocal::get('LoudLogins') == 1) {
-                        UdpComm::udpSend('twoPairs');
-                    }
+          if (CoreLocal::get('LoudLogins') == 1) {
+              UdpComm::udpSend('twoPairs');
+          }
 					$result = $class::adminLoginCallback(True);
 					if ($result === True)
 						$this->change_page(MiscLib::base_url().'gui-modules/pos2.php');
@@ -164,7 +160,7 @@ class adminlogin extends NoInputPage {
 		<span class="larger">
 		<?php echo $this->heading ?>
 		</span><br />
-		<form name="form" id="formlocal" method="post" 
+		<form name="form" id="formlocal" method="post"
 			autocomplete="off" action="<?php echo $_SERVER['PHP_SELF']; ?>">
 		<input type="password" id="userPassword" name="userPassword" tabindex="0" onblur="$('#userPassword').focus();" />
 		<input type="hidden" name="reginput" id="reginput" value="" />
@@ -177,9 +173,6 @@ class adminlogin extends NoInputPage {
 		</div>
 		<?php
 		$this->add_onload_command("\$('#userPassword').focus();");
-        if (CoreLocal::get('LoudLogins') == 1) {
-            UdpComm::udpSend('twoPairs');
-        }
 	} // END true_body() FUNCTION
 
 
