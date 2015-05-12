@@ -56,7 +56,10 @@ class HarvestSeparateReceiptSavings extends DefaultReceiptSavings
         }
         $row = $db->fetch_row($result);
 
-        $msg = 'TODAY YOU SAVED:';
+        $msg = '';
+        if (($row['transDiscount'] > 0) || ($row['sales'] + $row['memSales'] > 0) || ($row['coupons'] > 0)) {
+            $msg = "TODAY YOU SAVED:\n";
+        }
         if ($row['transDiscount'] > 0) {
             $msg .= '  ' . $row['percentDiscount'] . _('% Harvest Discount = $') . number_format($row['transDiscount'], 2) . "\n";
         }
