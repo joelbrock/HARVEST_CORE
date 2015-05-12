@@ -101,7 +101,7 @@ class HouseCouponList extends NoInputPage
         <?php echo _("use arrow keys to navigate"); ?><br />
         <p>
             <button type="submit" class="pos-button wide-button coloredArea">
-            Reprint <span class="smaller">[enter]</span>
+            Select <span class="smaller">[enter]</span>
             </button>
         </p>
         <p>
