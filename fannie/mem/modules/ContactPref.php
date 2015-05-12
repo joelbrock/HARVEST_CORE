@@ -3,7 +3,7 @@
 
     Copyright 2010 Whole Foods Co-op, Duluth, MN
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -22,6 +22,11 @@
 *********************************************************************************/
 
 class ContactPref extends \COREPOS\Fannie\API\member\MemberModule {
+
+    public function width()
+    {
+        return parent::META_WIDTH_HALF;
+    }
 
     // Return a form segment to display or edit the Contact Preference.
     function showEditForm($memNum, $country="US"){
@@ -53,7 +58,7 @@ class ContactPref extends \COREPOS\Fannie\API\member\MemberModule {
 
         $ret .= '<div class="form-group form-inline">
             <span class="label primaryBackground">Preference</span>';
-        $ret .= '<select name="MemContactPref" class="form-control">';
+        $ret .= ' <select name="MemContactPref" class="form-control">';
         while ($infoW = $dbc->fetch_row($infoR)) {
             $ret .= sprintf("<option value=%d %s>%s</option>",
                 $infoW['pref_id'],

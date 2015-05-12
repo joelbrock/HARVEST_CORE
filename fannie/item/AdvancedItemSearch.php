@@ -3,14 +3,14 @@
 
     Copyright 2013 Whole Foods Community Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -103,8 +103,14 @@ class AdvancedItemSearch extends FannieRESTfulPage
 
         $desc = FormLib::get('description');
         if ($desc !== '') {
-            $where .= ' AND p.description LIKE ? ';
-            $args[] = '%' . $desc . '%';
+            if (FormLib::get('serviceScale') !== '') {
+                $where .= ' AND (p.description LIKE ? OR h.itemdesc LIKE ?) ';
+                $args[] = '%' . $desc . '%';
+                $args[] = '%' . $desc . '%';
+            } else {
+                $where .= ' AND p.description LIKE ? ';
+                $args[] = '%' . $desc . '%';
+            }
         }
 
         $brand = FormLib::get('brand');
@@ -246,11 +252,11 @@ class AdvancedItemSearch extends FannieRESTfulPage
             $args[] = $fs;
         }
 
-		$inUse = FormLib::get('in_use');
-		if ($inUse !== '') {
-			$where .= ' AND p.inUse=? ';
-			$args[] = $inUse;
-		}
+        $inUse = FormLib::get('in_use');
+        if ($inUse !== '') {
+            $where .= ' AND p.inUse=? ';
+            $args[] = $inUse;
+        }
 
         $discount = FormLib::get('discountable');
         if ($discount !== '') {
@@ -304,11 +310,19 @@ class AdvancedItemSearch extends FannieRESTfulPage
             return false;
         }
 
-        $query = 'SELECT p.upc, p.description, m.super_name, p.department, d.dept_name,
-                 p.normal_price, p.special_price,
-                 CASE WHEN p.discounttype > 0 THEN \'X\' ELSE \'-\' END as onSale,
-                 0 as selected
-                 FROM ' . $from . ' WHERE ' . $where;
+        $query = '
+            SELECT p.upc, 
+                p.brand,
+                p.description, 
+                m.super_name, 
+                p.department, 
+                d.dept_name,
+                p.normal_price, 
+                p.special_price,
+                CASE WHEN p.discounttype > 0 THEN \'X\' ELSE \'-\' END as onSale,
+                0 as selected
+            FROM ' . $from . '
+            WHERE ' . $where;
         $prep = $dbc->prepare($query);
         $result = $dbc->execute($prep, $args);
 
@@ -421,14 +435,20 @@ class AdvancedItemSearch extends FannieRESTfulPage
 
         $savedItems = FormLib::get('u', array());
         if (is_array($savedItems) && count($savedItems) > 0) {
-            $savedQ = 'SELECT p.upc, p.description, m.super_name, p.department, d.dept_name,
-                        p.normal_price, p.special_price,
-                        CASE WHEN p.discounttype > 0 THEN \'X\' ELSE \'-\' END as onSale,
-                        1 as selected
-                       FROM products AS p 
-                        LEFT JOIN departments AS d ON p.department=d.dept_no
-                        LEFT JOIN MasterSuperDepts AS m ON p.department=m.dept_ID
-                       WHERE p.upc IN (';
+            $savedQ = '
+                SELECT p.upc, 
+                    p.brand,
+                    p.description, 
+                    m.super_name, 
+                    p.department, 
+                    d.dept_name,
+                    p.normal_price, p.special_price,
+                    CASE WHEN p.discounttype > 0 THEN \'X\' ELSE \'-\' END as onSale,
+                    1 as selected
+               FROM products AS p 
+                   LEFT JOIN departments AS d ON p.department=d.dept_no
+                   LEFT JOIN MasterSuperDepts AS m ON p.department=m.dept_ID
+               WHERE p.upc IN (';
             foreach ($savedItems as $item) {
                 $savedQ .= '?,';
             }
@@ -478,13 +498,15 @@ class AdvancedItemSearch extends FannieRESTfulPage
         $ret .= '<table class="table search-table">';
         $ret .= '<thead><tr>
                 <th><input type="checkbox" onchange="toggleAll(this, \'.upcCheckBox\');" /></th>
-                <th>UPC</th><th>Desc</th><th>Super</th><th>Dept</th>
+                <th>UPC</th><th>Brand</th><th>Desc</th><th>Super</th><th>Dept</th>
                 <th>Retail</th><th>On Sale</th><th>Sale</th>
                 </tr></thead><tbody>';
         foreach($data as $upc => $record) {
             $ret .= sprintf('<tr>
-                            <td><input type="checkbox" name="u[]" class="upcCheckBox" value="%s" %s /></td>
+                            <td><input type="checkbox" name="u[]" class="upcCheckBox" value="%s" %s 
+                                onchange="checkedCount(\'#selection-counter\', \'.upcCheckBox\');" /></td>
                             <td><a href="ItemEditorPage.php?searchupc=%s" target="_advs%s">%s</a></td>
+                            <td>%s</td>
                             <td>%s</td>
                             <td>%s</td>
                             <td>%d %s</td>
@@ -494,6 +516,7 @@ class AdvancedItemSearch extends FannieRESTfulPage
                             </tr>', 
                             $upc, ($record['selected'] == 1 ? 'checked' : ''),
                             $upc, $upc, $upc,
+                            $record['brand'],
                             $record['description'],
                             $record['super_name'],
                             $record['department'], $record['dept_name'],
@@ -535,6 +558,16 @@ function toggleAll(elem, selector) {
         $(selector).prop('checked', true);
     } else {
         $(selector).prop('checked', false);
+    }
+    checkedCount('#selection-counter', selector);
+}
+function checkedCount(output_selector, checked_selector)
+{
+    var count = $(checked_selector + ':checked').length;
+    if (count == 0) {
+        $(output_selector).html('');
+    } else {
+        $(output_selector).html(count + ' items selected. These items will be retained in the next search.');
     }
 }
 // helper: add all selected upc values to hidden form
@@ -796,7 +829,7 @@ function chainSuper(superID)
         $ret .= ' | 
                 <label class="small" for="in_use">
                 InUse
-				<input type="checkbox" name="in_use" id="in_use" value="1" checked class="checkbox-inline" />
+                <input type="checkbox" name="in_use" id="in_use" value="1" checked class="checkbox-inline" />
                 </label>
                 </td>'; 
 
@@ -820,9 +853,9 @@ function chainSuper(superID)
         $ret .= '<td colspan="2" class="form-inline">
             <label class="control-label">Local</label>
             <select name="local" class="form-control input-sm"><option value="">Any</option><option value="0">No</option>';
-        $origins = $dbc->query('SELECT originID, shortName FROM originName WHERE local=1');
-        while($row = $dbc->fetch_row($origins)) {
-            $ret .= sprintf('<option value="%d">%s</option>', $row['originID'], $row['shortName']);
+        $origins = new OriginsModel($dbc);
+        foreach ($origins->getLocalOrigins() as $originID => $shortName) {
+            $ret .= sprintf('<option value="%d">%s</option>', $originID, $shortName);
         }
         $ret .= '</select> ';
 
@@ -892,6 +925,8 @@ function chainSuper(superID)
         $ret .= '<button type="submit" class="btn btn-default">Find Items</button>';
         $ret .= '&nbsp;&nbsp;&nbsp;&nbsp;';
         $ret .= '<button type="reset" class="btn btn-default">Clear Settings</button>';
+        $ret .= '&nbsp;&nbsp;&nbsp;&nbsp;';
+        $ret .= '<span id="selection-counter"></span>';
         $ret .= '</form>';
 
         $ret .= '<hr />';
@@ -945,6 +980,29 @@ function chainSuper(superID)
         $this->addScript('../src/javascript/tablesorter/jquery.tablesorter.js');
         
         return $ret;
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            Specify one or more search conditions to find a set
+            of products in POS. Select one or more products in
+            the list of results and click one of the right hand
+            buttons to feed the select product(s) into different
+            tools and reports. Star (*) is permitted as a wild
+            card in text fields.
+            </p>
+            <p>
+            Selected items are retained across searches and can
+            be used to build larger sets of products. For example,
+            you could run a search for items in department one
+            with a description including "CAN", select a few products
+            in the result set, then run a second search for items
+            in department two with a description including
+            "FROZEN". The second search results will include 
+            products that match the second search <strong>and</strong>
+            products that were selected in the first search.
+            </p>';
     }
 
 }

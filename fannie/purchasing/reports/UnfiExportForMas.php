@@ -3,14 +3,14 @@
 
     Copyright 2012 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -33,7 +33,7 @@ class UnfiExportForMas extends FannieReportPage
     protected $sortable = false;
     protected $no_sort_but_style = true;
 
-    public $page_set = 'Reports';
+    public $page_set = 'Purchasing';
     public $description = '[MAS Invoice Export] exports vendor invoices for MAS90.';
     public $themed = true;
 
@@ -173,6 +173,16 @@ class UnfiExportForMas extends FannieReportPage
 <?php
 
         return ob_get_clean();
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            Transforms vendor invoice data into a format that
+            can be imported into Sage MAS90. This probably cannot
+            be used outside WFC other than as an example to
+            base similar import/export reports on.
+            </p>';
     }
 }
 

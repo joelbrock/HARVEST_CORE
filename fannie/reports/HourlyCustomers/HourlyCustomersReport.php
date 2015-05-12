@@ -3,14 +3,14 @@
 
     Copyright 2013 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -30,6 +30,7 @@ class HourlyCustomersReport extends FannieReportPage
 {
     public $description = '[Hourly Customers] lists number of customers per hour for a given day.';
     public $themed = true;
+    public $report_set = 'Transaction Reports';
 
     protected $header = "Customers per Hour";
     protected $title = "Fannie : Customers per Hour";
@@ -85,6 +86,20 @@ class HourlyCustomersReport extends FannieReportPage
         }
 
         return $data;
+    }
+
+    public function helpContent()
+    {
+        return '<p>This report shows hourly transactions over a range of dates.
+            The rows are always hours. The columns are either calendar
+            dates or named weekdays (e.g., Monday, Tuesday) if grouping
+            by week day.</p>
+            <p>If a <em>Buyer/Dept</em> option is used, the result will
+            be transactions from that super department. Otherwise, the result
+            will be transactions from the specified department range. Note there
+            are a couple special options in the <em>Buyer/Dept</em> list:
+            <em>All</em> is simply all sales and <em>All Retail</em> is
+            everything except for super department #0 (zero).</p>';
     }
 }
 

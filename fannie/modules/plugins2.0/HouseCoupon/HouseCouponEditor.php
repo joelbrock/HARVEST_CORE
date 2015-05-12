@@ -3,7 +3,7 @@
 
     Copyright 2012 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -22,7 +22,9 @@
 *********************************************************************************/
 
 include(dirname(__FILE__).'/../../../config.php');
-include_once($FANNIE_ROOT.'classlib2.0/FannieAPI.php');
+if (!class_exists('FannieAPI')) {
+    include_once($FANNIE_ROOT.'classlib2.0/FannieAPI.php');
+}
 
 /**
   @class HouseCouponEditor
@@ -30,10 +32,11 @@ include_once($FANNIE_ROOT.'classlib2.0/FannieAPI.php');
 class HouseCouponEditor extends FanniePage 
 {
 
-    public $description = "
-    Module for managing in store coupons
-    ";
+    public $description = "[Module] for managing in store coupons";
     public $themed = true;
+
+    protected $must_authenticate = true;
+    protected $auth_classes = array('tenders');
 
     protected $header = "Fannie :: House Coupons";
     protected $title = "House Coupons";
@@ -106,7 +109,12 @@ class HouseCouponEditor extends FanniePage
             $dbc = FannieDB::get($this->config->get('OP_DB'));
 
             $maxQ = $dbc->prepare_statement("SELECT max(coupID) from houseCoupons");
-            $max = array_pop($dbc->fetch_row($dbc->exec_statement($maxQ)));
+            $maxR = $dbc->execute($maxQ);
+            $max = 0;
+            if ($maxR && $dbc->numRows($maxR)) {
+                $maxW = $dbc->fetchRow($maxR);
+                $max = $maxW[0];
+            }
             $this->coupon_id = $max+1;
             
             $insQ = $dbc->prepare_statement("INSERT INTO houseCoupons (coupID) values (?)");
@@ -127,7 +135,9 @@ class HouseCouponEditor extends FanniePage
 
             $this->coupon_id = FormLib::get_form_value('cid',0);
             $expires = FormLib::get_form_value('expires');
-            if ($expires == '') $expires = null;
+            if ($expires == '') {
+                $expires = null;
+            }
             $limit = FormLib::get_form_value('limit',1);
             $mem = FormLib::get_form_value('memberonly',0);
             $dept = FormLib::get_form_value('dept',0);
@@ -138,6 +148,9 @@ class HouseCouponEditor extends FanniePage
             $descript = FormLib::get_form_value('description',0);
             $auto = FormLib::get('autoapply', 0);
             $starts = FormLib::get('starts');
+            if ($starts == '') {
+                $starts = null;
+            }
 
             $model = new HouseCouponsModel($dbc);
             $model->coupID($this->coupon_id);
@@ -513,7 +526,7 @@ class HouseCouponEditor extends FanniePage
 
     public function helpContent()
     {
-        $help = file_get_contents('explainify.html');
+        $help = file_get_contents(dirname(__FILE__) . '/explainify.html');
         $extract = preg_match('/<body>(.*)<\/body>/ms', $help, $matches);
         if ($extract) {
             return $matches[1];

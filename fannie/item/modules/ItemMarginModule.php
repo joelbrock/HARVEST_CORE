@@ -3,7 +3,7 @@
 
     Copyright 2013 Whole Foods Co-op, Duluth, MN
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -20,6 +20,9 @@
     Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 *********************************************************************************/
+
+use \COREPOS\Fannie\API\item\Margin;
+use \COREPOS\Fannie\API\item\PriceRounder;
 
 if (!class_exists('FannieAPI')) {
     include_once(dirname(__FILE__).'/../../classlib2.0/FannieAPI.php');
@@ -50,7 +53,7 @@ class ItemMarginModule extends ItemModule
                 </a></div>";
         $css = ($expand_mode == 1) ? '' : ' collapse';
         $ret .= '<div id="ItemMarginContents" class="panel-body' . $css . '">';
-        $ret .= '<div id="ItemMarginMeter" class="col-sm-5">';
+        $ret .= '<div id="ItemMarginMeter">'; 
         $ret .= $this->calculateMargin($product->normal_price(),$product->cost(),$product->department(), $upc);
         $ret .= '</div>';
         $ret .= '</div>';
@@ -59,35 +62,28 @@ class ItemMarginModule extends ItemModule
         return $ret;
     }
 
-    private function getSRP($cost,$margin){
-        $srp = sprintf("%.2f",$cost/(1-$margin));
-        while (substr($srp,strlen($srp)-1,strlen($srp)) != "5" &&
-               substr($srp,strlen($srp)-1,strlen($srp)) != "9")
-            $srp += 0.01;
-        return $srp;
+    private function getSRP($cost,$margin)
+    {
+        $srp = Margin::toPrice($cost, $margin);
+        $pr = new PriceRounder();
+
+        return $pr->round($srp);
     }
 
     private function calculateMargin($price, $cost, $deptID, $upc)
     {
         $dbc = $this->db();
 
-        $dm = 'Unknown';
+        $desired_margin = 'Unknown';
         $dept = new DepartmentsModel($dbc);
         $dept->dept_no($deptID);
+        $dept_name = 'n/a';
         if ($dept->load()) {
-            $dm = $dept->margin() * 100;
+            $desired_margin = $dept->margin() * 100;
+            $dept_name = $dept->dept_name();
         }
 
-        if ((empty($dm) || $dm == 'Unknown') && $dbc->tableExists('deptMargin')) {
-            $dmP = $dbc->prepare_statement("SELECT margin FROM deptMargin WHERE dept_ID=?");
-            $dmR = $dbc->exec_statement($dmP,array($deptID));
-            if ($dbc->num_rows($dmR) > 0){
-                $row = $dbc->fetch_row($dmR);
-                $dm = sprintf('%.2f',$row['margin']*100);
-            }
-        }
-
-        $ret = "Desired margin on this department is " . $dm . "%";
+        $ret = "Desired margin on this department (" . $dept_name . ") is " . $desired_margin . "%";
         $ret .= "<br />";
 
         $vendorP = $dbc->prepare('
@@ -102,39 +98,47 @@ class ItemMarginModule extends ItemModule
         $vendorR = $dbc->execute($vendorP, array($upc));
         if ($vendorR && $dbc->num_rows($vendorR) > 0) {
             $w = $dbc->fetch_row($vendorR);
-            $dm = $w['margin'] * 100;
+            $desired_margin = $w['margin'] * 100;
             $ret .= sprintf('Desired margin for this vendor category (%s) is %.2f%%<br />',
                     $w['vendorName'],
-                    $dm);
+                    $desired_margin);
         }
 
         $shippingP = $dbc->prepare('
             SELECT v.shippingMarkup,
+                v.discountRate,
                 v.vendorName
             FROM products AS p
                 INNER JOIN vendors AS v ON p.default_vendor_id = v.vendorID
             WHERE p.upc=?');
         $shippingR = $dbc->execute($shippingP, array($upc));
-        if ($shippingR && $dbc->num_rows($shippingR) > 0) {
-            $w = $dbc->fetch_row($shippingR);
-            $ret .= sprintf('Shipping markup for this vendor (%s) is %.2f%%<br />',
-                    $w['vendorName'],
-                    ($w['shippingMarkup']*100));
-            $cost = $cost * (1+$w['shippingMarkup']);
+        $shipping_markup = 0.0;
+        $vendor_discount = 0.0;
+        if ($shippingR && $dbc->numRows($shippingR) > 0) {
+            $w = $dbc->fetchRow($shippingR);
+            if ($w['discountRate'] > 0) {
+                $ret .= sprintf('Discount rate for this vendor (%s) is %.2f%%<br />',
+                        $w['vendorName'],
+                        ($w['discountRate']*100));
+            }
+            if ($w['shippingMarkup'] > 0) {
+                $ret .= sprintf('Shipping markup for this vendor (%s) is %.2f%%<br />',
+                        $w['vendorName'],
+                        ($w['shippingMarkup']*100));
+            }
         }
+        $cost = Margin::adjustedCost($cost, $vendor_discount, $shipping_markup);
+        $actual_margin = Margin::toMargin($cost, $price, array(100,2));
         
-        $actual = 0;
-        if ($price != 0)
-            $actual = (($price-$cost)/$price)*100;
-        if ($actual > $dm && is_numeric($dm)){
+        if ($actual_margin > $desired_margin && is_numeric($desired_margin)){
             $ret .= sprintf("<span class=\"alert-success\">Current margin on this item is %.2f%%</span><br />",
-                $actual);
+                $actual_margin);
         } elseif (!is_numeric($price)) {
-            $ret .= "<span class=\"alert-success\">No price has been saved for this item</span><br />";
+            $ret .= "<span class=\"alert-danger\">No price has been saved for this item</span><br />";
         } else {
             $ret .= sprintf("<span class=\"alert-danger\">Current margin on this item is %.2f%%</span><br />",
-                $actual);
-            $srp = $this->getSRP($cost,$dm/100.0);
+                $actual_margin);
+            $srp = $this->getSRP($cost, $desired_margin/100.0);
             $ret .= sprintf("Suggested price: \$%.2f ",$srp);
             $ret .= sprintf("(<a href=\"\" onclick=\"\$('#price').val(%.2f); updateMarginMod(); return false;\">Use this price</a>)",$srp);
         }
@@ -167,25 +171,6 @@ class ItemMarginModule extends ItemModule
         }
         <?php
         return ob_get_clean();
-    }
-
-    function SaveFormData($upc)
-    {
-        $upc = BarcodeLib::padUPC($upc);
-        $cost = FormLib::get_form_value('cost',0.00);
-        $dbc = $this->db();
-
-        $r2 = true;
-        if ($dbc->tableExists('prodExtra')) {
-            $p = $dbc->prepare_statement('UPDATE prodExtra SET cost=? WHERE upc=?');
-            $r2 = $dbc->exec_statement($p,array($cost,$upc));
-        }
-
-        if (!$r2) {
-            return false;
-        } else {
-            return true;    
-        }
     }
 
     function AjaxCallback(){

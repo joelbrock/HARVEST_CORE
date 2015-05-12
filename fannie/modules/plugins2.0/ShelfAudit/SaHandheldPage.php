@@ -3,7 +3,7 @@
 
     Copyright 2013 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -22,7 +22,9 @@
 *********************************************************************************/
 
 include(dirname(__FILE__).'/../../../config.php');
-include_once($FANNIE_ROOT.'classlib2.0/FannieAPI.php');
+if (!class_exists('FannieAPI')) {
+    include_once($FANNIE_ROOT.'classlib2.0/FannieAPI.php');
+}
 
 /**
   @class SaHandheldPage
@@ -70,13 +72,14 @@ class SaHandheldPage extends FanniePage {
 
             $dbc = FannieDB::get($FANNIE_PLUGIN_SETTINGS['ShelfAuditDB']);
             $delP = $dbc->prepare_statement('DELETE FROM sa_inventory
-                    WHERE upc=? AND '.$dbc->datediff($dbc->now(),'datetime').'=0');         
+                    WHERE upc=? AND clear=0 AND section=?');
             $insP = $dbc->prepare_statement('INSERT INTO sa_inventory (datetime,upc,clear,quantity,section)
                     VALUES ('.$dbc->now().',?,0,?,?)');
-            $dbc->exec_statement($delP, array($upc));
+            $dbc->exec_statement($delP, array($upc, $this->section));
             if ($qty > 0){
                 $dbc->exec_statement($insP, array($upc, $qty, $this->section));
             }
+            echo $qty;
             echo 'quantity updated';
             return False;
         }

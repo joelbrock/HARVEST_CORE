@@ -3,7 +3,7 @@
 
     Copyright 2011 Whole Foods Co-op, Duluth, MN
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -30,6 +30,8 @@ class PatronageChecks extends FannieRESTfulPage
     protected $title = "Fannie :: Patronage Checks";
     protected $header = "Fannie :: Patronage Checks";
     public $themed = true;
+    public $description = '[Patronage Checks] is an elaborate tool for generating PDFs with
+        patronage info that will print on check paper.';
 
     public function helpContent()
     {

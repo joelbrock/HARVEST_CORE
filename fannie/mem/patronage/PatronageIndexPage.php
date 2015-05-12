@@ -3,7 +3,7 @@
 
     Copyright 2011 Whole Foods Co-op, Duluth, MN
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -30,6 +30,7 @@ class PatronageIndexPage extends FannieRESTfulPage
     protected $title = "Fannie :: Patronage Tools";
     protected $header = "Fannie :: Patronage Tools";
     public $themed = true;
+    public $description = '[Patronage Menu] lists various patronage calculation tools';
 
     public function helpContent()
     {

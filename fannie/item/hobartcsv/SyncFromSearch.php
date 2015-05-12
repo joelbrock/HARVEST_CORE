@@ -3,14 +3,14 @@
 
     Copyright 2013 Whole Foods Community Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -325,6 +325,18 @@ class SyncFromSearch extends FannieRESTfulPage
         }
         <?php
         return ob_get_clean();
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            Push item(s) from an advanced search to service scales.
+            Currently Hobart Quantums are supported. Choose which scale(s)
+            the items should be sent to and then either sync all items with
+            buttons at the top or sync individual items with the buttons
+            in the list of items.
+            </p>';
+
     }
 }
 

@@ -541,8 +541,24 @@ class BasicModel
         } else if ($db_name == CoreLocal::get('tDatabase')) {
             $this->connection = Database::tDataConnect();
         } else {
-            echo "Error: Unknown database ($db_name)";
-            return false;
+            /**
+              Allow for db other than main ones, e.g. for a plugin.
+              Force a new connection to avoid messing with the
+              one maintained by the Database class
+            */
+            $this->connection = new SQLManager(
+                $CORE_LOCAL->get("localhost"),
+                $CORE_LOCAL->get("DBMS"),
+                $db_name,
+                $CORE_LOCAL->get("localUser"),
+                $CORE_LOCAL->get("localPass"),
+                false,
+                true
+            );
+            if ($this->connection->isConnected($db_name)) {
+                echo "Error: Unknown database ($db_name)";
+                return false;
+            }
         }
 
         if (!$this->connection->table_exists($this->name)) {
@@ -820,7 +836,8 @@ class $name extends BasicModel\n");
         fwrite($fp,"\n");
         fwrite($fp,"    protected \$name = \"".substr($name,0,strlen($name)-5)."\";\n");
         fwrite($fp,"\n");
-        fwrite($fp,"    protected \$columns = array(\n\t);\n");
+        fwrite($fp,"    protected \$columns = array(\n");
+        fwrite($fp,"    );\n");
         fwrite($fp,"\n");
         fwrite($fp,"    /* START ACCESSOR FUNCTIONS */\n");
         fwrite($fp,"    /* END ACCESSOR FUNCTIONS */\n");

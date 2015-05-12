@@ -3,14 +3,14 @@
 
     Copyright 2013 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -48,7 +48,7 @@ class TrendsReport extends FannieReportPage
         
         $joins = '';
         $where = '1=1';
-        $groupby = 'd.upc, CASE WHEN p.description IS NULL THEN d.description ELSE p.description END';
+        $groupby = 'd.upc, p.brand, CASE WHEN p.description IS NULL THEN d.description ELSE p.description END';
         $args = array($date1.' 00:00:00', $date2.' 23:59:59');
         switch (FormLib::get('type', 'dept')) {
             case 'dept':
@@ -115,20 +115,24 @@ class TrendsReport extends FannieReportPage
         } 
         $dates[] = $date2;
         
-        $this->report_headers = array('UPC', 'Description');
+        $this->report_headers = array('UPC', 'Brand', 'Description');
         foreach ($dates as $i) {
             $this->report_headers[] = $i;
         }
         $this->report_headers[] = 'Total';
     
-        $current = array('upc'=>'', 'description'=>'');
+        $current = array('upc'=>'', 'brand'=> '', 'description'=>'');
         $data = array();
         // track upc while going through the rows, storing 
         // all data about a given upc before printing
         while ($row = $dbc->fetch_array($result)){  
             if ($current['upc'] != $row[3]){
                 if ($current['upc'] != ""){
-                    $record = array($current['upc'], $current['description']);
+                    $record = array(
+                        $current['upc'], 
+                        $current['brand'],
+                        $current['description']
+                    );
                     $sum = 0.0;
                     foreach ($dates as $i){
                         if (isset($current[$i])){
@@ -142,7 +146,12 @@ class TrendsReport extends FannieReportPage
                     $data[] = $record;
                 }
                 // update 'current' values and clear data
-                $current = array('upc'=>$row[3], 'description'=>$row[4]);
+                // brand may be missing in the case of like codes
+                $current = array(
+                    'upc'=>$row[3], 
+                    'brand' => isset($row['brand']) ? $row['brand'] : '',
+                    'description'=>$row[5]
+                );
             }
             // get a yyyy-mm-dd format date from sql results
             $year = $row['year'];

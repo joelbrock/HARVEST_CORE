@@ -3,7 +3,7 @@
 
     Copyright 2013 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -34,6 +34,9 @@ class DefaultUploadPage extends \COREPOS\Fannie\API\FannieUploadPage
 
     public $description = '[Vendor Catalog Import] is the default tool for loading or updating vendor item data
     via spreadsheet.';
+
+    protected $must_authenticate = true;
+    protected $auth_classes = array('pricechange');
 
     protected $preview_opts = array(
         'upc' => array(
@@ -145,16 +148,38 @@ class DefaultUploadPage extends \COREPOS\Fannie\API\FannieUploadPage
         $NET_UNIT = $this->get_column_index('unitSaleCost');
         $SRP = $this->get_column_index('srp');
 
-        $itemP = $dbc->prepare_statement("INSERT INTO vendorItems 
-                    (brand,sku,size,upc,units,cost,description,vendorDept,vendorID)
-                    VALUES (?,?,?,?,?,?,?,?,?)");
-        $vi_def = $dbc->tableDefinition('vendorItems');
-        if (isset($vi_def['saleCost'])) {
-            $itemP = $dbc->prepare_statement("INSERT INTO vendorItems 
-                        (brand,sku,size,upc,units,cost,description,vendorDept,vendorID,saleCost)
-                        VALUES (?,?,?,?,?,?,?,?,?,?)");
+        $itemP = $dbc->prepare("
+            INSERT INTO vendorItems (
+                brand, 
+                sku,
+                size,
+                upc,
+                units,
+                cost,
+                description,
+                vendorDept,
+                vendorID,
+                saleCost,
+                modified,
+                srp
+            ) VALUES (
+                ?,
+                ?,
+                ?,
+                ?,
+                ?,
+                ?,
+                ?,
+                ?,
+                ?,
+                ?,
+                ?,
+                ?
+            )");
+        $srpP = false;
+        if ($dbc->tableExists('vendorSRPs')) {
+            $srpP = $dbc->prepare_statement("INSERT INTO vendorSRPs (vendorID, upc, srp) VALUES (?,?,?)");
         }
-        $srpP = $dbc->prepare_statement("INSERT INTO vendorSRPs (vendorID, upc, srp) VALUES (?,?,?)");
         $pm = new ProductsModel($dbc);
 
         foreach($linedata as $data) {
@@ -233,18 +258,30 @@ class DefaultUploadPage extends \COREPOS\Fannie\API\FannieUploadPage
             // trim $ off amounts as well as commas for the
             // occasional > $1,000 item
             $srp = $this->priceFix($srp);
+            if (!is_numeric($srp)) {
+                $srp = 0;
+            }
 
             $brand = str_replace("'","",$brand);
             $description = str_replace("'","",$description);
 
-            $args = array($brand, $sku, $size,
-                    $upc,$qty,$reg_unit,$description,$category,$VENDOR_ID);
-            if (isset($vi_def['saleCost'])) {
-                $args[] = $net_unit;
-            }
-            $dbc->exec_statement($itemP,$args);
+            $args = array(
+                $brand, 
+                $sku, 
+                $size,
+                $upc,
+                $qty,
+                $reg_unit,
+                $description,
+                $category,
+                $VENDOR_ID,
+                $net_unit,
+                date('Y-m-d H:i:s'),
+                $srp
+            );
+            $dbc->execute($itemP, $args);
 
-            if (is_numeric($srp)) {
+            if ($srpP) {
                 $dbc->exec_statement($srpP,array($VENDOR_ID,$upc,$srp));
             }
 
@@ -306,6 +343,10 @@ class DefaultUploadPage extends \COREPOS\Fannie\API\FannieUploadPage
     function results_content()
     {
         $ret = "<p>Price data import complete</p>";
+        $ret .= sprintf('<p><a class="btn btn-default" 
+            href="%sbatches/UNFI/RecalculateVendorSRPs.php?id=%d">Update SRPs</a></p>',
+            $this->config->get('URL'), $_SESSION['vid']);
+
         unset($_SESSION['vid']);
         unset($_SESSION['vUploadCheckDigits']);
         unset($_SESSION['vUploadChangeCosts']);

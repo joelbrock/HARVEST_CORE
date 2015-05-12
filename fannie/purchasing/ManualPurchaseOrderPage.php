@@ -3,14 +3,14 @@
 
     Copyright 2015 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -35,6 +35,7 @@ class ManualPurchaseOrderPage extends FannieRESTfulPage
 
     public $description = '[Manual Purchase Order] is a tool for entering purchase order info
         in a grid from existing paperwork.';
+    public $page_set = 'Purchasing';
     
     public function preprocess()
     {
@@ -99,6 +100,7 @@ class ManualPurchaseOrderPage extends FannieRESTfulPage
         if (FormLib::get('order-id') !== '' && is_numeric(FormLib::get('order-id'))) {
             $orderID = FormLib::get('order-id');
             $po->orderID($orderID);
+            $po->save();
         } else {
             $orderID = $po->save();
         }
@@ -123,6 +125,15 @@ class ManualPurchaseOrderPage extends FannieRESTfulPage
             $units = $caseSize[$i];
             $qty = $cases[$i];
             $unitCost = $total[$i] / $qty / $units;
+            /**
+              Multiple same-SKU records
+              Sum the quantities and costs to merge
+              into a single record
+            */
+            if ($pitem->load()) {
+                $qty += $pitem->receivedQty();
+                $total[$i] += $pitem->receivedTotalCost();
+            }
 
             $pitem->quantity($qty);
             $pitem->caseSize($units);
@@ -204,6 +215,9 @@ class ManualPurchaseOrderPage extends FannieRESTfulPage
         }
         $itemsJSON .= ']';
 
+        $orderJSON = str_replace('\\', '\\\\', $orderJSON);
+        $itemsJSON = str_replace('\\', '\\\\', $itemsJSON);
+
         $this->addOnloadCommand("existingOrder('$orderJSON', '$itemsJSON');\n");
 
         return $this->get_id_view();
@@ -278,6 +292,15 @@ class ManualPurchaseOrderPage extends FannieRESTfulPage
             </div>';
 
         return $ret;
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            Build a purchase order or transcribe an invoice
+            one line at a time. Auto completion is available
+            via both product UPC and vendor item SKU.
+            </p>';
     }
 }
 

@@ -125,6 +125,7 @@ class UPC extends Parser
             $ret['main_frame'] = $my_url."gui-modules/adminlogin.php?class=LineItemDiscountAdminLogin";
             return $ret;
         }
+
         /**
           11Sep14 Andy
           Disabled until keypress double form submission is
@@ -447,7 +448,10 @@ class UPC extends Parser
         /* quantity required for this item. Send to
            entry page if one wasn't provided */
         if (($qttyEnforced == 1) && (CoreLocal::get("multiple") == 0) && (CoreLocal::get("msgrepeat" == 0) || CoreLocal::get('qttyvalid') == 0)) {
-            $ret['main_frame'] = $my_url."gui-modules/qtty2.php";
+            $ret['main_frame'] = 
+                    $my_url . 'gui-modules/QuantityEntryPage.php'
+                    . '?entered-item=' . CoreLocal::get('strEntered')
+                    . '&qty-mode=' . $scale;
             return $ret;
         } 
 

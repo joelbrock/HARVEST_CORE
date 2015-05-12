@@ -3,7 +3,7 @@
 
     Copyright 2013 Whole Foods Co-op, Duluth, MN
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -42,6 +42,16 @@ class MemImportIndex extends FanniePage {
         </ul>
         <?php
         return ob_get_clean();
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            These data import tools can load different kinds
+            of data from spreadsheets (generally CSVs). The tools
+            are intended for initializing the system as opposed to
+            for ongoing maintenance.
+            </p>';
     }
 }
 

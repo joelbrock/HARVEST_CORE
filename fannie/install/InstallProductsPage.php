@@ -3,14 +3,14 @@
 
     Copyright 2011 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -96,7 +96,13 @@ class InstallProductsPage extends \COREPOS\Fannie\API\InstallPage {
 ?>
 
         <form action=InstallProductsPage.php method=post>
-        <h1 class="install"><?php echo $this->header; ?></h1>
+        <h1 class="install">
+            <?php 
+            if (!$this->themed) {
+                echo "<h1 class='install'>{$this->header}</h1>";
+            }
+            ?>
+        </h1>
         <?php
         if (is_writable('../config.php')){
             echo "<div class=\"alert alert-success\"><i>config.php</i> is writeable</div>";
@@ -228,6 +234,17 @@ class InstallProductsPage extends \COREPOS\Fannie\API\InstallPage {
         ?>
         </table>
         <hr />
+        <label>Default Batch View</label>
+        <?php
+        $batch_opts = array(
+            'all' => 'All',
+            'current' => 'Current',
+            'Pending' => 'Pending',
+            'Historical' => 'Historical',
+        ); 
+        echo installSelectField('FANNIE_BATCH_VIEW', $FANNIE_BATCH_VIEW, $batch_opts, 'all');
+        ?>
+        <hr />
         <label>Default Shelf Tag Layout</label>
         <?php
         $layouts = 'No Layouts Found!';
@@ -236,6 +253,15 @@ class InstallProductsPage extends \COREPOS\Fannie\API\InstallPage {
             $layouts = scan_layouts();
         }
         echo installSelectField('FANNIE_DEFAULT_PDF', $FANNIE_DEFAULT_PDF, $layouts, 'Fannie Standard');
+        ?>
+        <label>Shelf Tag Data Source</label>
+        <?php
+        $mods = FannieAPI::listModules('TagDataSource');
+        $source = array('' => 'Default');
+        foreach ($mods as $m) {
+            $source[$m] = $m;
+        }
+        echo installSelectField('FANNIE_TAG_DATA_SOURCE', $FANNIE_TAG_DATA_SOURCE, $source);
         ?>
 
         <hr />

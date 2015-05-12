@@ -3,14 +3,14 @@
 
     Copyright 2014 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -134,6 +134,14 @@ class TransArchiveTask extends FannieTask
         $created_view = false;
         $sql = FannieDB::get($FANNIE_ARCHIVE_DB);
         $sql->throwOnFailure(true);
+        /* get table definition in partitioning mode to
+           have a list of existing partitions */
+        $bigArchive = false;
+        if ($FANNIE_ARCHIVE_METHOD == "partitions") {
+            $bigArchive = $sql->query('SHOW CREATE TABLE bigArchive');
+            $bigArchive = $sql->fetchRow($bigArchive);
+            $bigArchive = $bigArchive['Create Table'];
+        }
         foreach ($dates as $date) {
             /* figure out which monthly archive dtransactions data belongs in */
             list($year, $month, $day) = explode('-', $date);
@@ -142,10 +150,11 @@ class TransArchiveTask extends FannieTask
 
             if ($FANNIE_ARCHIVE_METHOD == "partitions") {
                 // we're just partitioning
-                // make a new partition if it's a new month
-                if (date('j') == 1 && !$added_partition) {
-                    $partition_name = "p" . date("Ym"); 
-                    $boundary = date("Y-m-d", mktime(0,0,0,date("n")+1,1,date("Y")));
+                // create a partition if it doesn't exist
+                $partition_name = "p" . date("Ym", strtotime($date)); 
+                if (strstr($bigArchive, 'PARTITION ' . $partition_name . ' VALUES') === false) {
+                    $ts = strtotime($date);
+                    $boundary = date("Y-m-d", mktime(0,0,0,date("n", $ts)+1,1,date("Y", $ts)));
                     // new partition named pYYYYMM
                     // ends on first day of next month
                     $newQ = sprintf("ALTER TABLE bigArchive ADD PARTITION 
@@ -154,7 +163,10 @@ class TransArchiveTask extends FannieTask
                         )",$partition_name,$boundary);
                     try {
                         $newR = $sql->query($newQ);
-                        $added_partition = true;
+                        /* refresh table definition after adding partition */
+                        $bigArchive = $sql->query('SHOW CREATE TABLE bigArchive');
+                        $bigArchive = $sql->fetchRow($bigArchive);
+                        $bigArchive = $bigArchive['Create Table'];
                     } catch (Exception $ex) {
                         /**
                         @severity lack of partitions will eventually

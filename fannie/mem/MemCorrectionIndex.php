@@ -3,7 +3,7 @@
 
     Copyright 2007 Alberta Cooperative Grocery, Portland, Oregon.
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -46,6 +46,15 @@ class MemCorrectionIndex extends FanniePage {
         </ul>
         <?php
         return ob_get_clean();
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            This is a set of tools for adjusting activity on a member
+            account or moving activity from one member account to
+            another.
+            </p>';
     }
 }
 

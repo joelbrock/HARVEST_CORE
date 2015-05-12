@@ -3,7 +3,7 @@
 
     Copyright 2010 Whole Foods Co-op, Duluth, MN
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -56,11 +56,11 @@ class MemDates extends \COREPOS\Fannie\API\member\MemberModule {
 
         $ret .= '<div class="form-group form-inline">';
         $ret .= '<span class="label primaryBackground">Start</span>';
-        $ret .= sprintf('<input name="MemDates_start"
+        $ret .= sprintf(' <input name="MemDates_start"
                 maxlength="10" value="%s" id="MemDates_start"
-                class="form-control date-field" />',$infoW['start_date']); 
+                class="form-control date-field" /> ',$infoW['start_date']); 
         $ret .= '<span class="label primaryBackground">End</span>';
-        $ret .= sprintf('<input name="MemDates_end" 
+        $ret .= sprintf(' <input name="MemDates_end" 
                 maxlength="10" value="%s" id="MemDates_end"
                 class="form-control date-field" />',$infoW['end_date']);  
         $ret .= '</div>';

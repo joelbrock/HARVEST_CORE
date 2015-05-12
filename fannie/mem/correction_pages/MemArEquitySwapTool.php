@@ -3,7 +3,7 @@
 
     Copyright 2010,2013 Whole Foods Co-op, Duluth, MN
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -33,6 +33,9 @@ class MemArEquitySwapTool extends FanniePage {
 
     public $description = '[Swap Equity/AR] turns an Equity payment into an AR payment or vice versa.';
     public $themed = true;
+
+    protected $must_authenticate = true;
+    protected $auth_classes =  array('editmembers');
 
     private $errors = '';
     private $mode = 'init';
@@ -187,6 +190,11 @@ class MemArEquitySwapTool extends FanniePage {
             $this->amount,$this->depts[$this->dept1],
             $this->depts[$this->dept2],$this->cn,$this->name1);
         $ret .= "</div><p>";
+        $ret .= sprintf('<div class="form-group">
+            <label>Comment</label>
+            <input type="text" class="form-control" 
+                name="correction-comment" value="AR EQUITY SWAP" />
+            </div>');
         $ret .= "<input type=\"hidden\" name=\"deptFrom\" value=\"{$this->dept1}\" />";
         $ret .= "<input type=\"hidden\" name=\"deptTo\" value=\"{$this->dept2}\" />";
         $ret .= "<input type=\"hidden\" name=\"amount\" value=\"{$this->amount}\" />";
@@ -213,6 +221,11 @@ class MemArEquitySwapTool extends FanniePage {
 
         $dtrans['trans_id']++;
         $this->doInsert($dtrans,$this->amount,$this->dept2,$this->cn);
+        $comment = FormLib::get('correction-comment');
+        if (!empty($comment)) {
+            $dtrans['trans_id']++;
+            $this->doComment($dtrans, $comment, $this->cn);
+        }
 
         $ret .= sprintf("Receipt #1: %s",$this->CORRECTION_CASHIER.'-'.$this->CORRECTION_LANE.'-'.$dtrans['trans_no']);
 
@@ -270,8 +283,8 @@ class MemArEquitySwapTool extends FanniePage {
         $dbc = FannieDB::get($FANNIE_TRANS_DB);
         $q = $dbc->prepare_statement("SELECT max(trans_no) FROM dtransactions WHERE register_no=? AND emp_no=?");
         $r = $dbc->exec_statement($q,array($register,$emp));
-        $n = array_pop($dbc->fetch_row($r));
-        return (empty($n)?1:$n+1);  
+        $w = $dbc->fetchRow($r);
+        return is_array($w) ? $w[0]+1 : 1;
     }
 
     function doInsert($dtrans,$amount,$department,$cardno){
@@ -359,6 +372,81 @@ class MemArEquitySwapTool extends FanniePage {
         $values = substr($values,0,strlen($values)-1);
         $prep = $dbc->prepare_statement("INSERT INTO dtransactions ($columns) VALUES ($values)");
         $dbc->exec_statement($prep, $args);
+    }
+
+    private function doComment($dtrans, $comment, $cardno)
+    {
+        global $FANNIE_OP_DB, $FANNIE_TRANS_DB;
+        $dbc = FannieDB::get($FANNIE_TRANS_DB);
+        $OP = $FANNIE_OP_DB.$dbc->sep();
+
+        $defaults = array(
+            'register_no'=>$this->CORRECTION_LANE,
+            'emp_no'=>$this->CORRECTION_CASHIER,
+            'trans_no'=>$dtrans['trans_no'],
+            'upc'=>'0',
+            'description'=>$comment,
+            'trans_type'=>'C',
+            'trans_subtype'=>'CM',
+            'trans_status'=>'',
+            'department'=>'',
+            'quantity'=>0,
+            'scale'=>0,
+            'cost'=>0,
+            'unitPrice'=>'',
+            'total'=>'',
+            'regPrice'=>'',
+            'tax'=>0,
+            'foodstamp'=>0,
+            'discount'=>0,
+            'memDiscount'=>0,
+            'discountable'=>0,
+            'discounttype'=>0,
+            'voided'=>0,
+            'percentDiscount'=>0,
+            'ItemQtty'=>0,
+            'volDiscType'=>0,
+            'volume'=>0,
+            'volSpecial'=>0,
+            'mixMatch'=>'',
+            'matched'=>0,
+            'memType'=>'',
+            'staff'=>'',
+            'numflag'=>0,
+            'charflag'=>'',
+            'card_no'=>$cardno,
+            'trans_id'=>$dtrans['trans_id']
+        );
+
+        $q = $dbc->prepare_statement("SELECT memType,Staff FROM {$OP}custdata WHERE CardNo=?");
+        $r = $dbc->exec_statement($q,array($cardno));
+        $w = $dbc->fetch_row($r);
+        $defaults['memType'] = $w[0];
+        $defaults['staff'] = $w[1];
+
+        $columns = 'datetime,';
+        $values = $dbc->now().',';
+        $args = array();
+        foreach($defaults as $k=>$v){
+            $columns .= $k.',';
+            $values .= '?,';
+            $args[] = $v;
+        }
+        $columns = substr($columns,0,strlen($columns)-1);
+        $values = substr($values,0,strlen($values)-1);
+        $prep = $dbc->prepare_statement("INSERT INTO dtransactions ($columns) VALUES ($values)");
+        $dbc->exec_statement($prep, $args);
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            Convert an AR payment into an equity payment or
+            vice versa for a given member. This is used for 
+            fixing simple miskeys. It may also be used to
+            "pay off" an outstanding AR balance using the
+            member\'s equity (if by-laws permit).
+            </p>';
     }
 }
 

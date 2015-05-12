@@ -3,14 +3,14 @@
 
     Copyright 2009,2013 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -50,7 +50,7 @@ class EditShelfTags extends FanniePage {
             $skus = FormLib::get_form_value('sku',array());
             $sizes = FormLib::get_form_value('size',array());
             $units = FormLib::get_form_value('units',array());
-            $vendors = FormLib::get_form_value('vendors',array());
+            $vendors = FormLib::get_form_value('vendor',array());
             $ppos = FormLib::get_form_value('ppo',array());
             $counts = FormLib::get_form_value('counts',array());
 
@@ -62,7 +62,7 @@ class EditShelfTags extends FanniePage {
                 $price = isset($prices[$i]) ? $prices[$i] : 0;
                 $brand = isset($brands[$i]) ? $brands[$i] : '';
                 $size = isset($sizes[$i]) ? $sizes[$i] : '';
-                $sku = isset($sku[$i]) ? $sku[$i] : '';
+                $sku = isset($skus[$i]) ? $skus[$i] : '';
                 $unit = isset($units[$i]) ? $units[$i] : 1;
                 $vendor = isset($vendors[$i]) ? $vendors[$i] : '';
                 $ppo = isset($ppos[$i]) ? $ppos[$i] : '';
@@ -144,6 +144,17 @@ class EditShelfTags extends FanniePage {
         $ret .= "</form>";
 
         return $ret;
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            Edit individual fields in a set of queued shelf tags.
+            These changes only impact the queued set of tags. 
+            Nothing will change in the actual product, nor will
+            changes persist to shelf tags created in the future.
+            This is for quick fine-tuning before printing tags.
+            </p>';
     }
 }
 

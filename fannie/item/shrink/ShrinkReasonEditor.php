@@ -3,14 +3,14 @@
 
     Copyright 2013 Whole Foods Community Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -113,6 +113,21 @@ class ShrinkReasonEditor extends FannieRESTfulPage
             </form>';
 
         return $ret;
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            Maintain a list of reasons for "shrinking" products.
+            In this context, shrink means entering loss quanties
+            from breakage, spoilage, etc. When entering shrink,
+            the user can select a specific reason.
+            </p>
+            <p>
+            Reasons are not strictly necessary unless the store
+            wants to track why different losses take place. For
+            the sake of quantity on hand, loss is loss.
+            </p>';
     }
 }
 

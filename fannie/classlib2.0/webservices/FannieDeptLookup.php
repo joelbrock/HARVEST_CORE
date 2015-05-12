@@ -3,7 +3,7 @@
 
     Copyright 2014 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -112,7 +112,29 @@ class FannieDeptLookup extends FannieWebService
             case 'children':
                 $query = '';
                 $params = array();
-                if (property_exists($args, 'superID')) {
+                if (property_exists($args, 'dept_no')) {
+                    $query = '
+                        SELECT s.subdept_no AS id,
+                            s.subdept_name AS name
+                        FROM departments AS d
+                            INNER JOIN subdepts AS s ON d.dept_no=s.dept_ID ';
+                        if (property_exists($args, 'superID') && is_numeric($args->superID)) {
+                            $query .= ' INNER JOIN superdepts AS a ON d.dept_no=a.dept_ID ';
+                        }
+                        if (is_array($args->dept_no)) {
+                            $query .= ' WHERE d.dept_no BETWEEN ? AND ? ';
+                            $params[] = $args->dept_no[0];
+                            $params[] = $args->dept_no[1];
+                        } else {
+                            $query .= ' WHERE d.dept_no = ? ';
+                            $params[] = $args->dept_no;
+                        }
+                        if (property_exists($args, 'superID') && is_numeric($args->superID)) {
+                            $query .= ' AND a.superID = ? ';
+                            $params[] = $args->superID;
+                        }
+                        $query .= ' ORDER BY s.subdept_no';
+                } else {
                     $query = '
                         SELECT d.dept_no AS id,
                             d.dept_name AS name
@@ -147,21 +169,6 @@ class FannieDeptLookup extends FannieWebService
                             $params = array();
                         }
                     }
-                } else {
-                    $query = '
-                        SELECT s.subdept_no AS id,
-                            s.subdept_name AS name
-                        FROM departments AS d
-                            INNER JOIN subdepts AS s ON d.dept_no=s.dept_ID ';
-                        if (is_array($args->dept_no)) {
-                            $query .= ' WHERE d.dept_no BETWEEN ? AND ? ';
-                            $params[] = $args->dept_no[0];
-                            $params[] = $args->dept_no[1];
-                        } else {
-                            $query .= ' WHERE d.dept_no = ? ';
-                            $params[] = $args->dept_no;
-                        }
-                        $query .= ' ORDER BY s.subdept_no';
                 }
                 $prep = $dbc->prepare($query);
                 $res = $dbc->execute($prep, $params);

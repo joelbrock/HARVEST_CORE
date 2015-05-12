@@ -139,3 +139,34 @@ function saveVC(vendorID){
 		}
 	});
 }
+
+function saveShipping(s)
+{
+    var dstr = 'action=saveShipping&id='+$('#vendorselect').val()+'&shipping='+s;
+	$.ajax({
+		url: 'VendorIndexPage.php',
+		method: 'post',
+		data: dstr,
+        dataType: 'json',
+		success: function(resp) {
+            var elem = $('#vc-shipping');
+            showBootstrapPopover(elem, 0, resp.error);
+        }
+    });
+}
+
+function saveDiscountRate(s)
+{
+    var dstr = 'action=saveDiscountRate&id='+$('#vendorselect').val()+'&rate='+s;
+	$.ajax({
+		url: 'VendorIndexPage.php',
+		method: 'post',
+		data: dstr,
+        dataType: 'json',
+		success: function(resp) {
+            var elem = $('#vc-discount');
+            showBootstrapPopover(elem, 0, resp.error);
+        }
+    });
+}
+

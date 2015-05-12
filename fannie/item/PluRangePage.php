@@ -3,7 +3,7 @@
 
     Copyright 2014 Whole Foods Co-op, Duluth, MN
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -205,6 +205,17 @@ class PluRangePage extends FannieRESTfulPage
         $ret .= '</form>';
 
         return $ret;
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            Find a block of available PLU numbers. The PLU length 
+            is the number of digits in the PLU. The number needed
+            refers to how many are needed. Setting number needed to
+            three will attempt to find three <em>consecutive</em>
+            PLU numbers that are not in use.
+            </p>';
     }
 
 }

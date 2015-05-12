@@ -3,14 +3,14 @@
 
     Copyright 2009 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -34,6 +34,9 @@ class BrowseVendorItems extends FanniePage
     public $description = '[Vendor Items] lists items in the vendor\'s catalog. Must be
     accessed via the Vendor Editor.';
     public $themed = true;
+
+    protected $must_authenticate = true;
+    protected $auth_classes = array('pricechange');
 
     function preprocess(){
 
@@ -169,31 +172,34 @@ class BrowseVendorItems extends FanniePage
         while($rw = $dbc->fetch_row($rp))
             $depts .= "<option value=$rw[0]>$rw[0] $rw[1]</option>";
 
-        $query = "SELECT v.upc,v.brand,v.description,v.size,
-            v.cost as cost,
-            CASE WHEN d.margin IS NULL THEN 0 ELSE d.margin END as margin,
-            CASE WHEN p.upc IS NULL THEN 0 ELSE 1 END as inPOS,
-            s.srp
-            FROM vendorItems AS v LEFT JOIN products AS p
-            ON v.upc=p.upc LEFT JOIN vendorDepartments AS d
-            ON d.deptID=v.vendorDept
-            LEFT JOIN vendorSRPs AS s 
-            ON v.upc=s.upc AND v.vendorID=s.vendorID
-            WHERE v.vendorID=? AND v.brand=?";
+        $query = "
+            SELECT v.upc,
+                v.brand,
+                v.description,
+                v.size,
+                v.cost as cost,
+                CASE WHEN d.margin IS NULL THEN 0 ELSE d.margin END as margin,
+                v.srp
+            FROM vendorItems AS v 
+                LEFT JOIN vendorDepartments AS d ON d.deptID=v.vendorDept AND d.vendorID=v.vendorID
+            WHERE v.vendorID=? 
+                AND v.brand=? ";
         $args = array($vid,$brand);
         if ($did != 'All'){
             $query .= ' AND vendorDept=? ';
             $args[] = $did;
         }
         $query .= "ORDER BY v.upc";
+        $posP = $dbc->prepare('SELECT upc FROM products WHERE upc=?');
         
         $ret = "<table class=\"table table-bordered\">";
         $ret .= "<tr><th>UPC</th><th>Brand</th><th>Description</th>";
-        $ret .= "<th>Size</th><th>Cost</th><th colspan=3>&nbsp;</th></tr>";
+        $ret .= "<th>Size</th><th>Cost</th><th>Price</th><th>Dept.</th><th>&nbsp;</th></tr>";
         $p = $dbc->prepare_statement($query);
         $result = $dbc->exec_statement($p,$args);
-        while($row = $dbc->fetch_row($result)){
-            if ($row['inPOS'] == 1){
+        while ($row = $dbc->fetch_row($result)) {
+            $inPOS = $dbc->execute($posP, array($row['upc']));
+            if ($inPOS && $dbc->numRows($inPOS) > 0) {
                 $ret .= sprintf("<tr class=\"alert-success\">
                     <td>%s</td><td>%s</td><td>%s</td>
                     <td>%s</td><td>\$%.2f</td><td colspan=3>&nbsp;
@@ -203,11 +209,11 @@ class BrowseVendorItems extends FanniePage
                 $srp = !empty($row['srp']) ? $row['srp'] : $this->getSRP($row['cost'],$row['margin']);
                 $ret .= sprintf("<tr id=row%s><td>%s</td><td>%s</td><td>%s</td>
                     <td>%s</td><td>\$%.2f</td>
-                    <td>
+                    <td class=\"col-sm-1\">
                         <div class=\"input-group\">
                             <span class=\"input-group-addon\">$</span>
                             <input type=text size=5 value=%.2f id=price%s 
-                                class=\"form-control\" />
+                                class=\"form-control price-field\" />
                         </div>
                     </td><td><select id=\"dept%s\" class=\"form-control\">%s</select></td>
                     <td id=button%s>
@@ -256,17 +262,18 @@ class BrowseVendorItems extends FanniePage
         $dbc->exec_statement($xInsQ,$args);
 
         if ($tags !== -1) {
-            $model = new ShelftagsModel($dbc);
-            $model->id($tags);
-            $model->upc($upc);
-            $model->normal_price($price);
-            $model->description($vinfo['description']);
-            $model->brand($vinfo['brand']);
-            $model->vendor($vinfo['vendorName']);
-            $model->sku($vinfo['sku']);
-            $model->size($vinfo['size']);
-            $model->units($vinfo['units']);
-            $model->pricePerUnit(\COREPOS\Fannie\API\lib\PriceLib::pricePerUnit($price, $vinfo['size']));
+            $tag = new ShelftagsModel($dbc);
+            $tag->id($tags);
+            $tag->upc($upc);
+            $info = $model->getTagData();
+            $model->normal_price($info['normal_price']);
+            $model->description($info['description']);
+            $model->brand($info['brand']);
+            $model->vendor($info['vendor']);
+            $model->sku($info['sku']);
+            $model->size($info['size']);
+            $model->units($info['units']);
+            $model->pricePerUnit($info['pricePerUnit']);
             $model->save();
         }
 
@@ -323,10 +330,8 @@ class BrowseVendorItems extends FanniePage
         <select id="shelftags" class="form-control">
         <option value="-1">Shelf Tag Page</option>
         <?php
-        $pages = $dbc->query('SELECT superID, super_name FROM MasterSuperDepts GROUP BY superID, super_name ORDER BY superID');
-        while($row = $dbc->fetch_row($pages)) {
-            printf('<option value="%d">%s</option>', $row['superID'], $row['super_name']);
-        }
+        $queues = new ShelfTagQueuesModel($dbc);
+        echo $queues->toOptions();
         ?>
         </select>
         </div>
@@ -353,6 +358,24 @@ class BrowseVendorItems extends FanniePage
         $this->add_script('browse.js');
 
         return ob_get_clean();
+    }
+
+    public function helpContent()
+    {
+        return '<p>This tool is used to create POS products from
+            entries in the vendor\'s catalog of items. Selecting
+            a department and brand first is necessary to keep the
+            list of available items a manageable size.
+            </p>
+            <p>Green rows are already in POS as products. Other
+            items can be added by entering an appropriate price
+            and department. CORE will try to guess correct values
+            but the default selections should still be verified.
+            </p>
+            <p>The third, rightmost dropdown box at the top controls
+            where new shelf tags are created for the added products.
+            Again CORE will try to guess the correct set.
+            </p>';
     }
 }
 

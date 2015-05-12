@@ -67,7 +67,10 @@ class InstacartTender extends TenderModule
     */
     public static $adminLoginMsg = 'Login for Instacart Tender';
 
-    public static $adminLoginLevel = 30;
+	// DHermann 31dec14: level reduced below standard 30, to allow non-supervisor
+	//   to approve Instacart tender only
+	// DHermann 6jan15: level reduced again below 20, which is the cutoff for returns
+    public static $adminLoginLevel = 15;
 
     static public function adminLoginCallback($success)
     {

@@ -3,7 +3,7 @@
 
     Copyright 2013 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -31,8 +31,9 @@ class VendorItemsModel extends BasicModel
     protected $preferred_db = 'op';
 
     protected $columns = array(
-    'upc' => array('type'=>'VARCHAR(13)','index'=>True),
-    'sku' => array('type'=>'VARCHAR(13)','index'=>True,'primary_key'=>True),
+    'vendorItemID' => array('type'=>'INT', 'index'=>true, 'increment'=>true),
+    'upc' => array('type'=>'VARCHAR(13)','index'=>true),
+    'sku' => array('type'=>'VARCHAR(13)','index'=>true,'primary_key'=>true),
     'brand' => array('type'=>'VARCHAR(50)'),
     'description' => array('type'=>'VARCHAR(50)'),
     'size' => array('type'=>'VARCHAR(25)'),
@@ -40,7 +41,9 @@ class VendorItemsModel extends BasicModel
     'cost' => array('type'=>'MONEY'),
     'saleCost' => array('type'=>'MONEY', 'default'=>0),
     'vendorDept' => array('type'=>'INT', 'default'=>0),
-    'vendorID' => array('type'=>'INT','index'=>True,'primary_key'=>True)
+    'vendorID' => array('type'=>'INT','index'=>true,'primary_key'=>true),
+    'srp' => array('type'=>'MONEY'),
+    'modified' => array('type'=>'datetime', 'ignore_updates'=>true),
     );
 
     public function doc()
@@ -133,7 +136,8 @@ SKUs.
     {
         $updateP = $this->connection->prepare('
             UPDATE vendorItems
-            SET cost=?
+            SET cost=?,
+                modified=' . $this->connection->now() . '
             WHERE vendorID=?
                 AND sku=?'); 
         $skuModel = new VendorSKUtoPLUModel($this->connection);
@@ -151,7 +155,53 @@ SKUs.
         }
     }
 
+    public function save()
+    {
+        if ($this->record_changed) {
+            $this->modified(date('Y-m-d H:i:s'));
+        }
+
+        return parent::save();
+    }
+
     /* START ACCESSOR FUNCTIONS */
+
+    public function vendorItemID()
+    {
+        if(func_num_args() == 0) {
+            if(isset($this->instance["vendorItemID"])) {
+                return $this->instance["vendorItemID"];
+            } else if (isset($this->columns["vendorItemID"]["default"])) {
+                return $this->columns["vendorItemID"]["default"];
+            } else {
+                return null;
+            }
+        } else if (func_num_args() > 1) {
+            $value = func_get_arg(0);
+            $op = $this->validateOp(func_get_arg(1));
+            if ($op === false) {
+                throw new Exception('Invalid operator: ' . func_get_arg(1));
+            }
+            $filter = array(
+                'left' => 'vendorItemID',
+                'right' => $value,
+                'op' => $op,
+                'rightIsLiteral' => false,
+            );
+            if (func_num_args() > 2 && func_get_arg(2) === true) {
+                $filter['rightIsLiteral'] = true;
+            }
+            $this->filters[] = $filter;
+        } else {
+            if (!isset($this->instance["vendorItemID"]) || $this->instance["vendorItemID"] != func_get_args(0)) {
+                if (!isset($this->columns["vendorItemID"]["ignore_updates"]) || $this->columns["vendorItemID"]["ignore_updates"] == false) {
+                    $this->record_changed = true;
+                }
+            }
+            $this->instance["vendorItemID"] = func_get_arg(0);
+        }
+        return $this;
+    }
 
     public function upc()
     {
@@ -519,6 +569,80 @@ SKUs.
                 }
             }
             $this->instance["vendorID"] = func_get_arg(0);
+        }
+        return $this;
+    }
+
+    public function srp()
+    {
+        if(func_num_args() == 0) {
+            if(isset($this->instance["srp"])) {
+                return $this->instance["srp"];
+            } else if (isset($this->columns["srp"]["default"])) {
+                return $this->columns["srp"]["default"];
+            } else {
+                return null;
+            }
+        } else if (func_num_args() > 1) {
+            $value = func_get_arg(0);
+            $op = $this->validateOp(func_get_arg(1));
+            if ($op === false) {
+                throw new Exception('Invalid operator: ' . func_get_arg(1));
+            }
+            $filter = array(
+                'left' => 'srp',
+                'right' => $value,
+                'op' => $op,
+                'rightIsLiteral' => false,
+            );
+            if (func_num_args() > 2 && func_get_arg(2) === true) {
+                $filter['rightIsLiteral'] = true;
+            }
+            $this->filters[] = $filter;
+        } else {
+            if (!isset($this->instance["srp"]) || $this->instance["srp"] != func_get_args(0)) {
+                if (!isset($this->columns["srp"]["ignore_updates"]) || $this->columns["srp"]["ignore_updates"] == false) {
+                    $this->record_changed = true;
+                }
+            }
+            $this->instance["srp"] = func_get_arg(0);
+        }
+        return $this;
+    }
+
+    public function modified()
+    {
+        if(func_num_args() == 0) {
+            if(isset($this->instance["modified"])) {
+                return $this->instance["modified"];
+            } else if (isset($this->columns["modified"]["default"])) {
+                return $this->columns["modified"]["default"];
+            } else {
+                return null;
+            }
+        } else if (func_num_args() > 1) {
+            $value = func_get_arg(0);
+            $op = $this->validateOp(func_get_arg(1));
+            if ($op === false) {
+                throw new Exception('Invalid operator: ' . func_get_arg(1));
+            }
+            $filter = array(
+                'left' => 'modified',
+                'right' => $value,
+                'op' => $op,
+                'rightIsLiteral' => false,
+            );
+            if (func_num_args() > 2 && func_get_arg(2) === true) {
+                $filter['rightIsLiteral'] = true;
+            }
+            $this->filters[] = $filter;
+        } else {
+            if (!isset($this->instance["modified"]) || $this->instance["modified"] != func_get_args(0)) {
+                if (!isset($this->columns["modified"]["ignore_updates"]) || $this->columns["modified"]["ignore_updates"] == false) {
+                    $this->record_changed = true;
+                }
+            }
+            $this->instance["modified"] = func_get_arg(0);
         }
         return $this;
     }

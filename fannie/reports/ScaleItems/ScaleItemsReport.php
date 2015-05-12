@@ -3,14 +3,14 @@
 
     Copyright 2013 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -28,8 +28,8 @@ if (!class_exists('FannieAPI')) {
 
 class ScaleItemsReport extends FannieReportPage 
 {
-    public $description = '[Scale Items] lists all items sent to Hobart scales';
-    public $report_set = '';
+    public $description = '[Scale Items] lists items with Hobart scale information';
+    public $report_set = 'Operational Data';
     public $themed = true;
 
     protected $report_headers = array('UPC', 'Description', 'Weight', 'Tare', 'Shelf Life',
@@ -145,6 +145,16 @@ class ScaleItemsReport extends FannieReportPage
             </form>';
 
         return $ret;
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            List service scale item information stored in POS, 
+            optionally limited to a range of departments. 
+            The search text option will search within both
+            descriptions and longer label text.
+            </p>';
     }
 
 }

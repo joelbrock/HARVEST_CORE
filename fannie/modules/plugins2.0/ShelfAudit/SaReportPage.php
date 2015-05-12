@@ -4,7 +4,7 @@
     Copyright 2013 Whole Foods Co-op
     Based on example code from Wedge Community Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -23,7 +23,9 @@
 *********************************************************************************/
 
 include(dirname(__FILE__).'/../../../config.php');
-include_once($FANNIE_ROOT.'classlib2.0/FannieAPI.php');
+if (!class_exists('FannieAPI')) {
+    include_once(dirname(__FILE__) . '/../../../classlib2.0/FannieAPI.php');
+}
 
 /**
   @class SaScanningPage
@@ -316,7 +318,7 @@ table.shelf-audit tr:hover {
                     <td id="col_e" class="right">'.money_format('%.2n', $row['cost']).'</td>
                     <td id="col_h" class="right">'.money_format('%!.2n', ($row['quantity']*$row['cost'])).'</td>
                     <td id="col_e" class="right">'.money_format('%.2n', $row['normal_retail']).'</td>
-                    <td id="col_f" class="right">'.money_format('%.2n', $row['atual_retail']).'</td>
+                    <td id="col_f" class="right">'.money_format('%.2n', $row['actual_retail']).'</td>
                     <td id="col_g">'.(($row['retailstatus'])?$row['retailstatus']:'&nbsp;').'</td>
                     <td id="col_h" class="right">'.money_format('%!.2n', ($row['quantity']*$row['normal_retail'])).'</td>
                     <td id="col_i"><a href="SaReportPage.php?delete=yes&id='.$row['id'].'">'

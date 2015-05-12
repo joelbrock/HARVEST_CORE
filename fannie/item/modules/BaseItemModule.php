@@ -3,7 +3,7 @@
 
     Copyright 2013 Whole Foods Co-op, Duluth, MN
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -81,7 +81,8 @@ class BaseItemModule extends ItemModule
                                         p.inUse,
                                         p.idEnforced,
                                         p.local,
-                                        p.deposit
+                                        p.deposit,
+                                        p.discounttype
                                       FROM products AS p 
                                         LEFT JOIN prodExtra AS x ON p.upc=x.upc 
                                         LEFT JOIN productUser AS u ON p.upc=u.upc 
@@ -156,6 +157,8 @@ class BaseItemModule extends ItemModule
                 'idEnforced' => 0,
                 'local' => 0,
                 'deposit' => 0,
+                'cost' => 0,
+                'discounttype' => 0,
             );
 
             /**
@@ -170,7 +173,7 @@ class BaseItemModule extends ItemModule
                     v.vendorName as distributor,
                     d.margin,
                     i.vendorID,
-                    s.srp,
+                    i.srp,
                     i.size,
                     i.units,
                     i.sku,
@@ -178,7 +181,6 @@ class BaseItemModule extends ItemModule
                 FROM vendorItems AS i 
                     LEFT JOIN vendors AS v ON i.vendorID=v.vendorID
                     LEFT JOIN vendorDepartments AS d ON i.vendorDept=d.deptID
-                    LEFT JOIN vendorSRPs AS s ON s.upc=i.upc AND s.vendorID=i.vendorID
                 WHERE i.upc=?";
             $args = array($upc);
             $vID = FormLib::get_form_value('vid','');
@@ -258,8 +260,12 @@ class BaseItemModule extends ItemModule
                 break;
             case 'PLU':
                 $trimmed = ltrim($upc, '0');
-                $ret .= str_repeat('0', 13-strlen($trimmed))
-                    . '<strong>' . $trimmed . '</strong>';
+                if (strlen($trimmed) < 13) {
+                    $ret .= str_repeat('0', 13-strlen($trimmed))
+                        . '<strong>' . $trimmed . '</strong>';
+                } else {
+                    $ret .= $upc;
+                }
                 break;
             default:
                 $ret .= $upc;
@@ -345,7 +351,7 @@ class BaseItemModule extends ItemModule
           valid reference to the vendors table
         */
         $normalizedVendorID = false;
-        if (isset($rowItem['default_vendor_id']) && $rowItem['default_vendor_id'] > 0) {
+        if (isset($rowItem['default_vendor_id']) && $rowItem['default_vendor_id'] <> 0) {
             $normalizedVendor = new VendorsModel($dbc);
             $normalizedVendor->vendorID($rowItem['default_vendor_id']);
             if ($normalizedVendor->load()) {
@@ -385,7 +391,7 @@ class BaseItemModule extends ItemModule
         $ret .= '</fieldset>';
         $ret .= '</div>';
 
-        if (isset($rowItem['special_price']) && $rowItem['special_price'] <> 0){
+        if (isset($rowItem['discounttype']) && $rowItem['discounttype'] <> 0){
             /* show sale info */
             $batchP = $dbc->prepare_statement("
                 SELECT b.batchName, 
@@ -412,27 +418,49 @@ class BaseItemModule extends ItemModule
             $ret .= '</td>';
         }
 
+        $supers = array();
         $depts = array();
         $subs = array();
-        $p = $dbc->prepare_statement('
+        $range_limit = FannieAuth::validateUserLimited('pricechange');
+        $deptQ = '
             SELECT dept_no,
                 dept_name,
                 subdept_no,
                 subdept_name,
                 s.dept_ID,
-                m.superID
+                MIN(m.superID) AS superID
             FROM departments AS d
                 LEFT JOIN subdepts AS s ON d.dept_no=s.dept_ID
-                LEFT JOIN MasterSuperDepts AS m ON d.dept_no=m.dept_ID
-            ORDER BY d.dept_no, s.subdept_name');
-        $r = $dbc->exec_statement($p);
+                LEFT JOIN superdepts AS m ON d.dept_no=m.dept_ID ';
+        if (is_array($range_limit) && count($range_limit) == 2) {
+            $deptQ .= ' WHERE m.superID BETWEEN ? AND ? ';
+        } else {
+            $range_limit = array();
+        }
+        $deptQ .= '
+            GROUP BY d.dept_no,
+                d.dept_name,
+                s.subdept_no,
+                s.subdept_name,
+                s.dept_ID
+            ORDER BY d.dept_no, s.subdept_name';
+        $p = $dbc->prepare($deptQ);
+        $r = $dbc->execute($p, $range_limit);
         $superID = '';
         while ($w = $dbc->fetch_row($r)) {
             if (!isset($depts[$w['dept_no']])) $depts[$w['dept_no']] = $w['dept_name'];
             if ($w['dept_no'] == $rowItem['department']) {
                 $superID = $w['superID'];
             }
-            if ($w['subdept_no'] == '') continue;
+            if (!isset($supers[$w['superID']])) {
+                $supers[$w['superID']] = array();
+            }
+            $supers[$w['superID']][] = $w['dept_no'];
+
+            if ($w['subdept_no'] == '') {
+                continue;
+            }
+
             if (!isset($subs[$w['dept_ID']]))
                 $subs[$w['dept_ID']] = '';
             $subs[$w['dept_ID']] .= sprintf('<option %s value="%d">%d %s</option>',
@@ -445,6 +473,10 @@ class BaseItemModule extends ItemModule
                 <td colspan="7" class="form-inline">
                 <select id="super-dept" class="form-control chosen-select" onchange="chainSuper(this.value);">';
         $names = new SuperDeptNamesModel($dbc);
+        if (is_array($range_limit) && count($range_limit) == 2) {
+            $names->superID($range_limit[0], '>=');
+            $names->superID($range_limit[1], '<=');
+        }
         foreach ($names->find('superID') as $obj) {
             $ret .= sprintf('<option %s value="%d">%s</option>',
                     $obj->superID() == $superID ? 'selected' : '',
@@ -454,6 +486,11 @@ class BaseItemModule extends ItemModule
                 <select name="department" id="department" 
                     class="form-control chosen-select" onchange="chainSelects(this.value);">';
         foreach ($depts as $id => $name){
+            if (is_array($supers[$superID])) {
+                if (!in_array($id, $supers[$superID]) && $id != $rowItem['department']) {
+                    continue;
+                }
+            }
             $ret .= sprintf('<option %s value="%d">%d %s</option>',
                     ($id == $rowItem['department'] ? 'selected':''),
                     $id,$id,$name);
@@ -566,7 +603,7 @@ class BaseItemModule extends ItemModule
                 <th class="small">Unit of measure</th>
                 <td class="col-sm-1">
                     <input type="text" name="unitm" class="form-control input-sm"
-                        value="' . $rowItem['unitofmeasure'] . '" />
+                        value="' . $rowItem['unitofmeasure'] . '" id="unit-of-measure" />
                 </td>
                 <th class="small">Age Req</th>
                 <td class="col-sm-1">
@@ -585,11 +622,8 @@ class BaseItemModule extends ItemModule
                     <select name="prod-local" id="prod-local" class="form-control input-sm"
                         onchange="$(\'#local-origin-id\').val(this.value);">';
         $local_opts = array(0=>'No');
-        $p = $dbc->prepare_statement('SELECT originID,shortName FROM originName WHERE local=1 ORDER BY originID');
-        $r = $dbc->exec_statement($p);
-        while ($w = $dbc->fetch_row($r)) {
-            $local_opts[$w['originID']] = $w['shortName'];  
-        }
+        $origin = new OriginsModel($dbc);
+        $local_opts = array_merge($local_opts, $origin->getLocalOrigins());
         if (count($local_opts) == 1) {
             $local_opts[1] = 'Yes'; // generic local if no origins defined
         }
@@ -916,6 +950,7 @@ class BaseItemModule extends ItemModule
             }
             $extra->manufacturer(str_replace("'",'',FormLib::get('manufacturer')));
             $extra->distributor(str_replace("'",'',FormLib::get('distributor')));
+            $extra->cost(FormLib::extract($this->form, 'cost', 0.00));
             $extra->save();
         }
 
@@ -950,6 +985,7 @@ class BaseItemModule extends ItemModule
                     if ($max && $maxW = $db->fetch_row($max)) {
                         $newID = ((int)$maxW['max']) + 1;
                     }
+                    $vendor->vendorAbbreviation(substr($name, 0, 10));
                     $vendor->vendorID($newID);
                     $vendor->save();
                     $json['vendorID'] = $newID;

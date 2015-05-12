@@ -3,14 +3,14 @@
 
     Copyright 2011,2013 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -95,6 +95,19 @@ class TaxRateEditor extends FanniePage {
         $ret .= '</form>';
 
         return $ret;
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            Manage sales tax rates. Rates should be 
+            specified as decimals - for example, 0.05 means 5%.
+            Entries should be effective tax rates as opposed to 
+            invdividual taxes. If, for example, there is a state
+            sales tax as well as city sales tax that applies to
+            taxable items, the <em>effective</em> rate is both
+            rates added together.
+            </p>';
     }
 }
 

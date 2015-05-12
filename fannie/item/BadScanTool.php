@@ -3,14 +3,14 @@
 
     Copyright 2013 Whole Foods Community Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -69,12 +69,11 @@ class BadScanTool extends FannieRESTfulPage
                     MIN(datetime) as oldest,
                     MAX(datetime) as newest,
                     p.description as prod,
-                    MAX(v.description) as vend, MAX(n.vendorName) as vendorName, MAX(s.srp) as srp
+                    MAX(v.description) as vend, MAX(n.vendorName) as vendorName, MAX(v.srp) as srp
                     FROM " . $FANNIE_TRANS_DB . $dbc->sep() . "transarchive AS t
                     LEFT JOIN products AS p ON p.upc=t.upc
                     LEFT JOIN vendorItems AS v ON t.upc=v.upc
                     LEFT JOIN vendors AS n ON v.vendorID=n.vendorID
-                    LEFT JOIN vendorSRPs AS s ON v.upc=s.upc AND v.vendorID=s.vendorID
                     WHERE t.trans_type='L' AND t.description='BADSCAN'
                     AND t.upc NOT LIKE '% %'
                     AND t.upc NOT LIKE '00000000000%'
@@ -229,6 +228,30 @@ function showMultiple() {
                 cursor: pointer;
             }
         ';
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            This list shows products entered at a lane in the
+            given time period that came up as "not found". PLUs are
+            excluded from this list as miskeys are more or less to
+            be expected. Viewing the last quarter may be a bit slow.
+            </p>
+            <p>
+            Entries marked in green have already been fixed. Entries
+            in red are found in vendor catalogs and can be added
+            instantly. Entries in blue are also found in vendor 
+            catalogs but have a low number of rings. These may be
+            incidental barcodes on reusable containers.
+            </p>
+            <p>
+            The <strong>Fixable</strong> view only show red and blue
+            entries - the ones that can be added to POS directly.
+            The <strong>Repeats</strong> view shows unknown UPCs
+            that were scanned at least twice. The <strong>All</strong>
+            view lists every single unknown UPC.
+            </p>';
     }
 }
 

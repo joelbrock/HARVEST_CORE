@@ -3,7 +3,7 @@
 
     Copyright 2010 Whole Foods Co-op, Duluth, MN
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -46,6 +46,24 @@ class MemberIndexPage extends FanniePage {
         </ul>
         <?php
         return ob_get_clean();
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            A collection of membership tools.
+            </p>
+            <p>
+            View/edit is the primary tool for managing individual
+            memberships. Members can be categorized into Member Types.
+            Types can even include customers who are not members
+            of the co-op. Creating new members is oriented towards
+            pre-allocating sets of memberships so they are available
+            for purchase and immediate use. Stickers is perhaps
+            WFC-only. Corrections deal with adjusting activity on
+            and between memberships. Import data is for loading initial
+            data into CORE.
+            </p>';
     }
 }
 

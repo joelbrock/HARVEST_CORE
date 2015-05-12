@@ -3,14 +3,14 @@
 
     Copyright 2013 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -31,6 +31,7 @@ class NewItemsReport extends FannieReportPage
     public $description = '[New Items] shows products recently added to POS. This is more
         approximate than definitive.';
     public $themed = true;
+    public $report_set = 'Operational Data';
 
     protected $title = "Fannie : New Items Report";
     protected $header = "New Items Report";
@@ -131,6 +132,14 @@ class NewItemsReport extends FannieReportPage
         $form = FormLib::dateAndDepartmentForm($d_list, $s_list, true);
 
         return $form;
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            List items that were added to POS
+            in the given date range.
+            </p>';
     }
 }
 

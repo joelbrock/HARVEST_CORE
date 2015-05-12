@@ -3,14 +3,14 @@
 
     Copyright 2010 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -524,12 +524,11 @@ function addUPC($orderID,$memNum,$upc,$num_cases=1)
         SELECT units,
             vendorName,
             description,
-            srp,
+            i.srp,
             i.upc,
             CASE WHEN i.upc=? THEN 0 ELSE 1 END as skuMatch 
         FROM vendorItems as i
             LEFT JOIN vendors AS v ON i.vendorID=v.vendorID 
-            LEFT JOIN vendorSRPs AS s ON i.upc=s.upc AND i.vendorID=s.vendorID
         WHERE i.upc=? 
             OR i.sku=? 
             OR i.sku=?

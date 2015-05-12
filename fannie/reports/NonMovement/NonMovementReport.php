@@ -3,14 +3,14 @@
 
     Copyright 2012 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -37,6 +37,8 @@ class NonMovementReport extends FannieReportPage {
     public $report_set = 'Movement Reports';
     public $themed = true;
 
+    protected $report_headers = array('UPC', 'Brand', 'Description', 'Dept#', 'Department', '', '');
+
     function preprocess()
     {
         global $FANNIE_OP_DB;
@@ -54,6 +56,15 @@ class NonMovementReport extends FannieReportPage {
 
             echo 'Deleted';
             exit;
+        } elseif (FormLib::get('deactivate') !== '') {
+            $upc = BarcodeLib::padUPC(FormLib::get('deactivate'));
+            $this->connection->selectDB($this->config->OP_DB);
+            $model = new ProductsModel($this->connection);
+            $model->upc($upc);
+            $model->inUse(0);
+            $model->save();
+
+            echo 'Deactivated';
         }
 
         $ret = parent::preprocess();
@@ -81,19 +92,28 @@ class NonMovementReport extends FannieReportPage {
         $tempQ = $dbc->prepare_statement("CREATE TABLE $tempName (upc varchar(13))");
         $dbc->exec_statement($tempQ);
 
-        $insQ = $dbc->prepare_statement("INSERT INTO $tempName
+        $insQ = $dbc->prepare("
+            INSERT INTO $tempName
             SELECT d.upc FROM $dlog AS d
             WHERE 
-            d.tdate BETWEEN ? AND ?
+                d.tdate BETWEEN ? AND ?
+                AND d.trans_type='I'
             GROUP BY d.upc");
-        $dbc->exec_statement($insQ,array($date1.' 00:00:00',$date2.' 23:59:59'));
+        $dbc->exec_statement($insQ, array($date1.' 00:00:00',$date2.' 23:59:59'));
 
-        $query = $dbc->prepare_statement("SELECT p.upc,p.description,d.dept_no,
-            d.dept_name FROM products AS p LEFT JOIN
-            departments AS d ON p.department=d.dept_no
-            WHERE p.upc NOT IN (select upc FROM $tempName)
-            AND p.department
-            BETWEEN ? AND ?
+        $query = $dbc->prepare("
+            SELECT p.upc,
+                p.brand,
+                p.description,
+                d.dept_no,
+                d.dept_name 
+            FROM products AS p 
+                LEFT JOIN departments AS d ON p.department=d.dept_no
+            WHERE p.upc NOT IN (
+                SELECT upc FROM $tempName
+                )
+                AND p.department BETWEEN ? AND ?
+                AND p.inUse=1
             ORDER BY p.upc");
         $result = $dbc->exec_statement($query,array($dept1,$dept2));
 
@@ -109,13 +129,21 @@ class NonMovementReport extends FannieReportPage {
             $record[] = $row[1];
             $record[] = $row[2];
             $record[] = $row[3];
+            $record[] = $row[4];
+            if ($this->report_format == 'html') {
+                $record[] = sprintf('<a href="" id="del%s"
+                        onclick="backgroundDeactivate(\'%s\');return false;">
+                        Deactivate this item</a>',$row[0],$row[0]);
+            } else {
+                $record[] = '';
+            }
             if ($this->report_format == 'html'){
                 $record[] = sprintf('<a href="" id="del%s"
                         onclick="backgroundDelete(\'%s\',\'%s\');return false;">
                         Delete this item</a>',$row[0],$row[0],$row[1]);
-            }
-            else
+            } else {
                 $record[] = '';
+            }
             $ret[] = $record;
         }
 

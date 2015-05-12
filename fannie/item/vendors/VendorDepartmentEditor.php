@@ -3,14 +3,14 @@
 
     Copyright 2009,2013 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -29,6 +29,9 @@ if (!class_exists('FannieAPI')) {
 class VendorDepartmentEditor extends FanniePage {
     protected $title = "Fannie : Manage Vendors";
     protected $header = "Manage Vendors";
+
+    protected $must_authenticate = true;
+    protected $auth_classes = array('pricechange');
 
     public $description = '[Vendor Departments] manages vendor-specific departments or categories.
     These are distinct from POS departments.';
@@ -186,9 +189,10 @@ class VendorDepartmentEditor extends FanniePage {
         global $FANNIE_OP_DB, $FANNIE_URL;
         $dbc = FannieDB::get($FANNIE_OP_DB);
         
-        $nameQ = $dbc->prepare_statement("SELECT vendorName FROM vendors WHERE vendorID=?");
-        $nameR = $dbc->exec_statement($nameQ,array($id));
-        $name = array_pop($dbc->fetch_row($nameR));
+        $v = new VendorsModel($dbc);
+        $v->vendorID($id);
+        $v->load();
+        $name = $v->vendorName();
 
         $ret = "<strong>Departments in $name</strong><br />";
         $ret .= "<table class=\"table\">"; 
@@ -235,6 +239,22 @@ class VendorDepartmentEditor extends FanniePage {
         $ret .= '<p><a href="VendorIndexPage.php?vid=' . $id . '" class="btn btn-default">Home</a></p>';
 
         return $ret;
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            Vendor departments are distinct from POS\' department
+            hierarchy. The primary purpose for categorizing vendor
+            items into vendor-specific departments is that specialize
+            margin targets can be assigned to each vendor department.
+            </p>
+            <p>
+            To simply set a vendor-specific margin, create a single
+            vendor department containing all the vendor\'s items.
+            Depending how entries were created, this should be
+            vendor department #0 or #1.
+            </p>';
     }
 }
 

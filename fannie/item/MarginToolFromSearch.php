@@ -3,14 +3,14 @@
 
     Copyright 2013 Whole Foods Community Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -654,6 +654,21 @@ function reCalc(upc, price, cost, deptID, superID) {
         $str = substr($str, 0, strlen($str)-1);
 
         return array('in'=>$str, 'args'=>$args);
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            This tool lists the selected item\'s cost,
+            price, and margins as well as each item\'s
+            percentage of overall store, super department,
+            and department sales. Entering a new price
+            will calculate the new item margin. The percentages
+            are used for a weighted, contribution to margin
+            calculation to predict how changes to an individual
+            item will impact overal margin at a department
+            or super department level.
+            </p>';
     }
 }
 

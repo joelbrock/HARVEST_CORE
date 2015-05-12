@@ -3,14 +3,14 @@
 
     Copyright 2015 Whole Foods Community Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -31,7 +31,7 @@ class ShrinkEditor extends FannieRESTfulPage
     protected $header = 'Edit Entries';
     protected $title = 'Edit Entries';
     public $themed = true;
-    public $description = '[Shrink Edtior] can adjust or remove shrink entries for the current day.';
+    public $description = '[Shrink Editor] can adjust or remove shrink entries for the current day.';
 
     public function post_id_handler()
     {
@@ -175,6 +175,22 @@ class ShrinkEditor extends FannieRESTfulPage
         $ret .= '</form>';
 
         return $ret;
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            Shrink entries are for loss tracking and may be made
+            via the lane or office tools. Entries from the current
+            day can be edited until the day closes. Adjusting
+            quantity and reason is allowed.
+            </p>
+            <p>
+            Loss vs Contribute may be WFC specific. From an inventory
+            standpoint, the item is gone either way but if it
+            can be donated ("contributed") to charity that may
+            be relevant for tax accounting.
+            </p>';
     }
 }
 

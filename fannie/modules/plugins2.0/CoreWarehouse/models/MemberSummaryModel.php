@@ -3,7 +3,7 @@
 
     Copyright 2015 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -178,6 +178,7 @@ class MemberSummaryModel extends CoreWarehouseModel
 
         $oldlight = array(strtotime($spotlight_args[0]), strtotime($spotlight_args[1]));
         $oldlight_args = array(
+            $spotlight_args[0],
             date('Ym01', mktime(0,0,0,date('n',$oldlight[0]),1,date('Y',$oldlight[0])-1)),
             date('Ymt', mktime(0,0,0,date('n',$oldlight[1]),1,date('Y',$oldlight[1])-1)),
         );

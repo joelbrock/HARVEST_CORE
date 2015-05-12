@@ -3,14 +3,14 @@
 
     Copyright 2009,2013 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -55,7 +55,7 @@ class BatchShelfTags extends FanniePage {
         <?php
         $ret = ob_get_clean();
 
-        $ret .= "<form action=genLabels.php method=get>";
+        $ret .= "<form id=\"batch-tag-form\" action=genLabels.php method=get>";
         //echo "<form action=barcodenew.php method=get>";
         $ret .= "<label>Select batch(es*) to be printed</label>";
         
@@ -85,6 +85,10 @@ class BatchShelfTags extends FanniePage {
         $ret .= "</select>";
         $ret .= "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
         $ret .= "<button type=submit class=\"btn btn-default\">Print</button>";
+        $ret .= "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
+        $ret .= "<button type=submit class=\"btn btn-default\" 
+            onclick=\"\$('#batch-tag-form').attr('action','EditBatchTags.php').submit(); return false;\">
+            Edit Tag Info</button>";
         $ret .= "</div></p>";
         $ret .= "</form>";
 

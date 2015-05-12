@@ -3,14 +3,14 @@
 
     Copyright 2013 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -38,7 +38,7 @@ class MarginMovementReport extends FannieReportPage
     protected $sort_column = 5;
     protected $sort_direction = 1;
 
-    protected $report_headers = array('UPC', 'Desc', 'Dept#', 'Dept', 'Cost', 'Sales', 'Margin', 'Markup', 'Contrib');
+    protected $report_headers = array('UPC', 'Brand', 'Desc', 'Dept#', 'Dept', 'Cost', 'Sales', 'Margin', 'Markup', 'Contrib');
     protected $required_fields = array('date1', 'date2');
 
     public function report_description_content()
@@ -95,6 +95,7 @@ class MarginMovementReport extends FannieReportPage
         $dlog = DTransactionsModel::selectDlog($date1, $date2);
 
         $query = "SELECT d.upc,
+                    p.brand,
                     p.description,
                     d.department,
                     t.dept_name,
@@ -124,16 +125,17 @@ class MarginMovementReport extends FannieReportPage
         $sum_total = 0.0;
         $sum_cost = 0.0;
         while($row = $dbc->fetch_row($result)) {
-            $margin = ($row['total'] - $row['cost']) / $row['total'] * 100;
+            $margin = $row['total'] == 0 ? 0 : ($row['total'] - $row['cost']) / $row['total'] * 100;
             $record = array(
                 $row['upc'],
+                $row['brand'],
                 $row['description'],
                 $row['department'],
                 $row['dept_name'],
                 sprintf('%.2f', $row['cost']),
                 sprintf('%.2f', $row['total']),
                 sprintf('%.2f', $margin),
-                sprintf('%.2f', ($row['total'] - $row['cost']) / $row['qty']),
+                sprintf('%.2f', $row['qty'] == 0 ? 0 : ($row['total'] - $row['cost']) / $row['qty']),
             );
 
             $sum_total += $row['total'];
@@ -161,11 +163,11 @@ class MarginMovementReport extends FannieReportPage
         $sum_cost = 0.0;
         $sum_ttl = 0.0;
         foreach($data as $row) {
-            $sum_cost += $row[4];
-            $sum_ttl += $row[5];
+            $sum_cost += $row[5];
+            $sum_ttl += $row[6];
         }
 
-        return array('Totals', null, null, null, sprintf('%.2f',$sum_cost), sprintf('%.2f',$sum_ttl), '', null, null);
+        return array('Totals', null, null, null, null, sprintf('%.2f',$sum_cost), sprintf('%.2f',$sum_ttl), '', null, null);
     }
 
     public function form_content()
@@ -189,6 +191,15 @@ class MarginMovementReport extends FannieReportPage
         $this->add_onload_command("\$('#date-dept-form-left-col').after('$checkbox');\n");
 
         return $form;
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            This movement report includes total costs as well as
+            sales and calculates both margin and contribution to
+            margin.
+            </p>';
     }
 }
 

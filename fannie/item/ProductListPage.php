@@ -3,14 +3,14 @@
 
     Copyright 2013 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -99,10 +99,10 @@ class ProductListPage extends \COREPOS\Fannie\API\FannieReportTool
                 $taxes[strtoupper(substr($w[1],0,1))] = array($w[0], $w[1]);
         }
         $local_opts = array('-'=>array(0,'No'));
-        $p = $dbc->prepare_statement('SELECT originID,shortName FROM originName WHERE local=1 ORDER BY originID');
-        $r = $dbc->exec_statement($p);
-        while($w = $dbc->fetch_row($r)){
-            $local_opts[substr($w['shortName'],0,1)] = array($w['originID'],$w['shortName']);
+        $origins = new OriginsModel($dbc);
+        $local_origins = $origins->getLocalOrigins();
+        foreach ($local_origins as $originID => $shortName) {
+            $local_opts[substr($shortName,0,1)] = array($originID,$shortName);
         }
         if (count($local_opts) == 1) $local_opts['X'] = array(1,'Yes'); // generic local if no origins defined
         $vendors = array('', 'DIRECT');
@@ -117,6 +117,10 @@ class ProductListPage extends \COREPOS\Fannie\API\FannieReportTool
         var localObj = <?php echo json_encode($local_opts); ?>;
         var vendorObj = <?php echo json_encode($vendors); ?>;
         function edit(upc){
+            var brand = $('tr#'+upc+' .td_brand').html();
+            var content = "<input type=text class=\"in_brand form-control input-sm\" size=8 value=\""+brand+"\" />";   
+            $('tr#'+upc+' .td_brand').html(content);
+
             var desc = $('tr#'+upc+' .td_desc').html();
             var content = "<input type=text class=\"in_desc form-control input-sm\" size=10 value=\""+desc+"\" />";   
             $('tr#'+upc+' .td_desc').html(content);
@@ -196,6 +200,9 @@ class ProductListPage extends \COREPOS\Fannie\API\FannieReportTool
             });
         }
         function save(upc){
+            var brand = $('tr#'+upc+' .in_brand').val();
+            $('tr#'+upc+' .td_brand').html(brand);
+
             var desc = $('tr#'+upc+' .in_desc').val();
             $('tr#'+upc+' .td_desc').html(desc);
         
@@ -234,6 +241,7 @@ class ProductListPage extends \COREPOS\Fannie\API\FannieReportTool
 
             var dstr = 'ajax=save&upc='+upc+'&desc='+desc+'&dept='+dept+'&price='+price+'&cost='+cost;
             dstr += '&tax='+tax[1]+'&fs='+fs+'&disc='+disc+'&wgt='+wgt+'&supplier='+supplier+'&local='+local[1];
+            dstr += '&brand='+encodeURIComponent(brand);
             $.ajax({
             url: 'ProductListPage.php',
             data: dstr,
@@ -318,13 +326,15 @@ class ProductListPage extends \COREPOS\Fannie\API\FannieReportTool
         function filterSubs()
         {
             var range = [ $('#deptStart').val(), $('#deptEnd').val() ];
+            var sID = $('#super-id').val();
             var req = {
                 jsonrpc: '2.0',
                 method: '\\COREPOS\\Fannie\\API\\webservices\\FannieDeptLookup',
                 id: new Date().getTime(),
                 params: {
                     'type' : 'children',
-                    'dept_no' : range
+                    'dept_no' : range,
+                    'superID' : sID
                 }
             };
             $.ajax({
@@ -379,6 +389,10 @@ class ProductListPage extends \COREPOS\Fannie\API\FannieReportTool
             $values = array();
             $model = new ProductsModel($dbc);
             $model->upc($upc);
+            $brand = FormLib::get('brand');
+            if ($brand !== '') {
+                $model->brand($brand);
+            }
             $desc = FormLib::get_form_value('desc');
             if ($desc !== '') {
                 $model->description($desc);
@@ -436,15 +450,15 @@ class ProductListPage extends \COREPOS\Fannie\API\FannieReportTool
             $chkP = $dbc->prepare('SELECT upc FROM prodExtra WHERE upc=?');
             $chkR = $dbc->execute($chkP, array($upc));
             if ($dbc->num_rows($chkR) > 0) {
-                $extraP = $dbc->prepare_statement('UPDATE prodExtra SET distributor=? WHERE upc=?');
-                $dbc->exec_statement($extraP, array($supplier,$upc));
+                $extraP = $dbc->prepare_statement('UPDATE prodExtra SET manufacturer=?, distributor=? WHERE upc=?');
+                $dbc->exec_statement($extraP, array($brand, $supplier,$upc));
             } else {
                 $extraP = $dbc->prepare('INSERT INTO prodExtra
-                                (upc, variable_pricing, margin, distributor)
+                                (upc, variable_pricing, margin, manufacturer, distributor)
                                 VALUES
-                                (?, 0, 0, ?)');
+                                (?, 0, 0, ?, ?)');
 
-                $dbc->execute($extraP, array($upc, $supplier));
+                $dbc->execute($extraP, array($upc, $brand, $supplier));
             }
 
             if ($vendorID !== '') {
@@ -586,6 +600,7 @@ class ProductListPage extends \COREPOS\Fannie\API\FannieReportTool
         $query = "
             SELECT i.upc,
                 i.description,
+                i.brand,
                 d.dept_name as department,
                 i.normal_price,
                 (CASE WHEN i.tax = 1 THEN 'X' WHEN i.tax=0 THEN '-' ELSE LEFT(t.description,1) END) as Tax,              
@@ -601,7 +616,7 @@ class ProductListPage extends \COREPOS\Fannie\API\FannieReportTool
                 LEFT JOIN taxrates AS t ON t.id = i.tax
                 LEFT JOIN prodExtra as x on i.upc = x.upc
                 LEFT JOIN vendors AS v ON i.default_vendor_id=v.vendorID
-                LEFT JOIN originName AS o ON i.local=o.originID";
+                LEFT JOIN origins AS o ON i.local=o.originID";
         /** add extra joins if this lookup requires them **/
         if ($supertype == 'dept' && $super != 0) {
             $query .= ' LEFT JOIN superdepts AS s ON i.department=s.dept_ID ';                
@@ -668,10 +683,10 @@ class ProductListPage extends \COREPOS\Fannie\API\FannieReportTool
             return 'No data found!';
         }
 
-        $ret .= '<table class="table table-striped table-bordered tablesorter">
+        $ret .= '<table class="table table-striped table-bordered tablesorter small">
             <thead>
             <tr>';
-        $ret .= "<th>UPC</th><th>Description</th><th>Dept</th><th>" . _('Vendor') . "</th><th>Cost</th><th>Price</th>";
+        $ret .= "<th>UPC</th><th>Brand</th><th>Description</th><th>Dept</th><th>" . _('Vendor') . "</th><th>Cost</th><th>Price</th>";
         $ret .= "<th>Tax</th><th>FS</th><th>Disc</th><th>Wg'd</th><th>Local</th>";
         if (!$this->excel && $this->canEditItems !== false) {
             $ret .= '<th>&nbsp;</th>';
@@ -692,16 +707,17 @@ class ProductListPage extends \COREPOS\Fannie\API\FannieReportTool
             } else {
                 $ret .= "<td align=center>$row[0]</td>";
             }
+            $ret .= "<td align=center class=\"td_brand clickable\">{$row['brand']}</td>";
             $ret .= "<td align=center class=\"td_desc clickable\">{$row['description']}</td>";
             $ret .= "<td align=center class=\"td_dept clickable\">{$row['department']}</td>";
             $ret .= "<td align=center class=\"td_supplier clickable\">{$row['distributor']}</td>";
             $ret .= "<td align=center class=\"td_cost clickable\">".sprintf('%.2f',$row['cost'])."</td>";
             $ret .= "<td align=center class=\"td_price clickable\">{$row['normal_price']}</td>";
-            $ret .= "<td align=center class=td_tax>$row[4]</td>";
-            $ret .= "<td align=center class=td_fs>$row[5]</td>";
-            $ret .= "<td align=center class=td_disc>$row[6]</td>";
-            $ret .= "<td align=center class=td_wgt>$row[7]</td>";
-            $ret .= "<td align=center class=td_local>$row[8]</td>";
+            $ret .= "<td align=center class=td_tax>{$row['Tax']}</td>";
+            $ret .= "<td align=center class=td_fs>{$row['FS']}</td>";
+            $ret .= "<td align=center class=td_disc>{$row['DISC']}</td>";
+            $ret .= "<td align=center class=td_wgt>{$row['WGHd']}</td>";
+            $ret .= "<td align=center class=td_local>{$row['local']}</td>";
             if (!$this->excel && $this->canEditItems !== False){
                 $ret .= "<td align=center class=td_cmd><a href=\"\" 
                     class=\"edit-link\"
@@ -778,7 +794,7 @@ class ProductListPage extends \COREPOS\Fannie\API\FannieReportTool
                 <div class="row form-group form-horizontal">
                     <label class="control-label col-sm-2">SuperDept (Buyer)</label>
                     <div class="col-sm-6">
-                        <select name=deptSub class="form-control" onchange="chainSuper(this.value);">
+                        <select name=deptSub id="super-id" class="form-control" onchange="chainSuper(this.value);">
                             <option value=0></option>
                             <?php
                             foreach($supers as $id => $name)

@@ -3,7 +3,7 @@
 
     Copyright 2013 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -30,6 +30,9 @@ class UploadPluMapPage extends \COREPOS\Fannie\API\FannieUploadPage {
 
     public $title = "Fannie - Load Vendor SKU/PLU mapping";
     public $header = "Upload Vendor SKU/PLU file";
+
+    protected $must_authenticate = true;
+    protected $auth_classes = array('pricechange');
 
     public $description = '[Vendor PLU Map] loads a list of vendor SKUs and the corresponding
     POS UPC used to sell the item. Typically these are things like bulk PLUs but any UPC is

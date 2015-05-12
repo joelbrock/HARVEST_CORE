@@ -3,7 +3,7 @@
 
     Copyright 2013 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -32,7 +32,7 @@ class AutoCouponsModel extends BasicModel
     protected $columns = array(
     'coupID' => array('type'=>'INT', 'primary_key'=>true),
     'description' => array('type'=>'VARCHAR(30)'),
-	);
+    );
 
     protected $preferred_db = 'op';
 

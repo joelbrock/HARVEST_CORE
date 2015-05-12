@@ -3,7 +3,7 @@
 
     Copyright 2014 Whole Foods Co-op, Duluth, MN
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -590,6 +590,18 @@ class OriginEditor extends FannieRESTfulPage
             $origin->shortName($shortName);
             $origin->save();
         }
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            Origins are where products come from. In many situations
+            this may be overkill from a labor/maintenance standpoint,
+            but origins can be defined in three tiers: countries,
+            states/provinces, and custom regions. Custom regions may
+            be smaller or larger than countries and/or states depending
+            what is being tracked and measured.
+            </p>';
     }
 }
 

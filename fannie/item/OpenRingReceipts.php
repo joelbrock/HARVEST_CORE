@@ -3,14 +3,14 @@
 
     Copyright 2015 Whole Foods Community Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -272,6 +272,17 @@ class OpenRingReceipts extends FannieRESTfulPage
                 ' . FormLib::dateRangePicker() . '
             </div>
             </form>';
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            Locate receipts in a given date range that
+            include open rings. Optionally filter to only
+            those receipts that also include UPCs that did
+            not scan. Typically this combination indicates
+            a product has not been entered into POS.
+            </p>';
     }
 }
 

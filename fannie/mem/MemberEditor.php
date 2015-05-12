@@ -3,7 +3,7 @@
 
     Copyright 2010,2013 Whole Foods Co-op, Duluth, MN
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -38,19 +38,20 @@ class MemberEditor extends FanniePage {
     public $description = '[Member Editor] is the primary tool for viewing and editing member accounts.';
     public $themed = true;
 
+    protected $must_authenticate = true;
+    protected $auth_classes = array('editmembers');
+
     private $country;
     private $memNum;
 
     private $msgs = '';
 
-    /*
-    */
     public function __construct(){
         global $FANNIE_COOP_ID;
         parent::__construct();
         // If saving, set higher priv: members_edit_full
-        $this->auth_classes = array('members_edit_full');
         if (isset($FANNIE_COOP_ID) && $FANNIE_COOP_ID == 'WEFC_Toronto') {
+            $this->auth_classes = array('members_edit_full');
             $this->auth_classes[] = 'editmembers';
         }
     }
@@ -66,57 +67,8 @@ class MemberEditor extends FanniePage {
             $this->header .= $this->memNum;
 
             /* start building prev/next links */
-            $prev = ''; $prevLink='';
-            $next = ''; $nextLink='';
             $list = FormLib::get_form_value('l');
-            if (is_array($list)){
-                // list mode
-                for($i=0;$i<count($list);$i++){
-                    if ($list[$i] == $this->memNum){
-                        if (isset($list[$i-1]))
-                            $prev = $list[$i-1];
-                        if (isset($list[$i+1]))
-                            $next = $list[$i+1];
-                    }
-                }
-            } else {
-                $dbc = FannieDB::get($FANNIE_OP_DB);
-                $prevP = $dbc->prepare_statement('SELECT MAX(CardNo) AS prev
-                                                  FROM custdata 
-                                                  WHERE CardNo < ?');
-                $prevR = $dbc->exec_statement($prevP,array($this->memNum));
-                if ($dbc->num_rows($prevR) > 0) {
-                    $prevW = $dbc->fetch_row($prevR);
-                    $prev = $prevW['prev'];
-                }
-                $nextP = $dbc->prepare_statement('SELECT MIN(CardNo) AS next 
-                                                  FROM custdata 
-                                                  WHERE CardNo > ?');
-                $nextR = $dbc->exec_statement($nextP,array($this->memNum));
-                if ($dbc->num_rows($nextR) > 0) {
-                    $nextW = $dbc->fetch_row($nextR);
-                    $next = $nextW['next'];
-                }
-            }
-
-            if ($prev != ''){
-                $prevLink = '<a id="prevLink" href="MemberEditor.php?memNum='.$prev;
-                if (is_array($list)){
-                    foreach($list as $l) $prevLink .= '&l[]='.$l;   
-                }
-                $prevLink .= '">';
-                $prevLink .= (is_array($list)) ? 'Prev Match' : 'Prev';
-                $prevLink .= '</a>';
-            }
-            if ($next != ''){
-                $nextLink = '<a id="nextLink" href="MemberEditor.php?memNum='.$next;
-                if (is_array($list)){
-                    foreach($list as $l) $nextLink .= '&l[]='.$l;
-                }
-                $nextLink .= '">';
-                $nextLink .= (is_array($list)) ? 'Next Match' : 'Next';
-                $nextLink .= '</a>';
-            }
+            list($prevLink, $nextLink) = self::memLinksPrevNext($this->memNum, $list);
 
             if (!empty($prevLink))
                 $this->header .= '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'.$prevLink;
@@ -159,8 +111,9 @@ class MemberEditor extends FanniePage {
                     $loc = 'MemberSearchPage.php?review='.$this->memNum;
                     if($whichBtn == 'Save & Next' && !empty($next)){
                         $loc = 'MemberEditor.php?memNum='.$next;
-                        foreach($list as $l)
-                            $loc .= '&l[]='.$l;
+                    }
+                    if (is_array($list)) {
+                        $loc .= array_reduce($list, function($c,$i){ return $c.'&l[]='.$i; }, '');
                     }
                     header('Location: '.$loc);
                     return False;
@@ -178,6 +131,72 @@ class MemberEditor extends FanniePage {
         return true;
 
     // preprocess()
+    }
+
+    public static function memLinksPrevNext($card_no, $list=array())
+    {
+        $prev = false;
+        $next = false;
+        if (is_array($list) && count($list) > 0) {
+            for ($i=0; $i<count($list); $i++) {
+                if ($list[$i] == $card_no) {
+                    if (isset($list[$i-1])) {
+                        $prev = $list[$i-1];
+                    }
+                    if (isset($list[$i+1])) {
+                        $next = $list[$i+1];
+                    }
+                    break;
+                }
+            }
+            $ret = array('', '');
+            if ($prev != false) {
+                $ret[0] = sprintf('<a id="prevLink" href="MemberEditor.php?memNum=%d%s">Prev Match</a>',
+                    $prev, array_reduce($list, function($c,$i){ return $c . '&l[]=' . $i; }, '')
+                );
+            }
+            if ($next != false) {
+                $ret[1] = sprintf('<a id="nextLink" href="MemberEditor.php?memNum=%d%s">Next Match</a>',
+                    $next, array_reduce($list, function($c,$i){ return $c . '&l[]=' . $i; }, '')
+                );
+            }
+
+            return $ret;
+        } else {
+            $dbc = FannieDB::get(FannieConfig::config('OP_DB'));
+            $prevP = $dbc->prepare('
+                SELECT MAX(CardNo) AS prev
+                FROM custdata 
+                WHERE CardNo < ?');
+            $prevR = $dbc->execute($prevP,array($card_no));
+            if ($dbc->numRows($prevR) > 0) {
+                $prevW = $dbc->fetchRow($prevR);
+                $prev = $prevW['prev'];
+            }
+            $nextP = $dbc->prepare('
+                SELECT MIN(CardNo) AS next 
+                FROM custdata 
+                WHERE CardNo > ?');
+            $nextR = $dbc->execute($nextP,array($card_no));
+            if ($dbc->numRows($nextR) > 0) {
+                $nextW = $dbc->fetchRow($nextR);
+                $next = $nextW['next'];
+            }
+            
+            $ret = array('', '');
+            if ($prev != false) {
+                $ret[0] = sprintf('<a id="prevLink" href="MemberEditor.php?memNum=%d">Prev</a>',
+                    $prev
+                );
+            }
+            if ($next != false) {
+                $ret[1] = sprintf('<a id="nextLink" href="MemberEditor.php?memNum=%d">Next</a>',
+                    $next
+                );
+            }
+            
+            return $ret;
+        }
     }
 
     function body_content()

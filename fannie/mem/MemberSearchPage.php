@@ -3,7 +3,7 @@
 
     Copyright 2010 Whole Foods Co-op, Duluth, MN
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -32,18 +32,12 @@ class MemberSearchPage extends FanniePage {
     public $description = '[Member Search] finds a member account by name, number, or contact info.';
     public $themed = true;
 
+    protected $must_authenticate = true;
+    protected $auth_classes = array('editmembers');
+
     private $mode = 'search';
     private $country;
     private $results = array();
-
-    public function __construct()
-    {
-        global $FANNIE_COOP_ID;
-        parent::__construct();
-        if (isset($FANNIE_COOP_ID) && $FANNIE_COOP_ID == 'WEFC_Toronto') {
-            $this->auth_classes = array('editmembers');
-        }
-    }
 
     function preprocess()
     {
@@ -130,6 +124,17 @@ class MemberSearchPage extends FanniePage {
             }
             $ret .= ')';
             $ret .= '<br /><a href="MemberEditor.php?memNum='.$review.'">Edit Again</a>';
+            $list = FormLib::get('l');
+            if (!class_exists('MemberEditor')) {
+                include(dirname(__FILE__) . '/MemberEditor.php');
+            }
+            $links = MemberEditor::memLinksPrevNext($review, $list);
+            if (!empty($links[0])) {
+                $ret .= '&nbsp;&nbsp;&nbsp;' . $links[0];
+            }
+            if (!empty($links[1])) {
+                $ret .= '&nbsp;&nbsp;&nbsp;' . $links[1];
+            }
             $ret .= '</fieldset>';
         }
 
