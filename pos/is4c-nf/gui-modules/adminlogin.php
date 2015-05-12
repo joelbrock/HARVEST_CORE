@@ -113,7 +113,7 @@ class adminlogin extends NoInputPage {
 						'num_flag' => $row['emp_no']
 					));
           if (CoreLocal::get('LoudLogins') == 1) {
-              UdpComm::udpSend('twoPairs');
+              UdpComm::udpSend('goodBeep');
           }
 					$result = $class::adminLoginCallback(True);
 					if ($result === True)

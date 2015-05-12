@@ -21,7 +21,7 @@
 
 *********************************************************************************/
 
-class UPC extends Parser 
+class UPC extends Parser
 {
     /**
       Defines how the UPC was entered.
@@ -47,13 +47,13 @@ class UPC extends Parser
     /**
       The default case is pretty simple. A numeric string
       is checked as a UPC.
-      
+
       The 0XA prefix indicates a scanned value from the scale.
       This prefix was selected because PHP's validation still
       considers the whole string a [hex] number. That helps with
       overall input validation. A complex entry like:
           5*0XA001234567890
-      Is handled correctly because there's a "number" on both 
+      Is handled correctly because there's a "number" on both
       sides of asterisk. The prefix is then stripped off by
       this parser to get the actual UPC value.
 
@@ -105,14 +105,14 @@ class UPC extends Parser
         return $this->upcscanned($str);
     }
 
-    function upcscanned($entered) 
+    function upcscanned($entered)
     {
         $my_url = MiscLib::base_url();
         $ret = $this->default_json();
 
         /* force cashiers to enter a comment on refunds */
         if (CoreLocal::get("refund")==1 && CoreLocal::get("refundComment") == ""){
-            $ret['udpmsg'] = 'twoPairs';
+            // $ret['udpmsg'] = 'twoPairs';
             if (CoreLocal::get("SecurityRefund") > 20){
                 $ret['main_frame'] = $my_url."gui-modules/adminlogin.php?class=RefundAdminLogin";
             }
@@ -172,7 +172,7 @@ class UPC extends Parser
         /* make sure upc length is 13 */
         $upc = "";
         if (CoreLocal::get('EanIncludeCheckDigits') != 1) {
-            /** 
+            /**
               If EANs do not include check digits, the value is 13 digits long,
               and the value does not begin with a zero, it most likely
               represented a hand-keyed EAN13 value w/ check digit. In this configuration
@@ -185,8 +185,8 @@ class UPC extends Parser
         // pad value to 13 digits
         $upc = substr("0000000000000".$entered, -13);
 
-        /* extract scale-sticker prices 
-           Mixed check digit settings do not work here. 
+        /* extract scale-sticker prices
+           Mixed check digit settings do not work here.
            Scale UPCs and EANs must uniformly start w/
            002 or 02.
         */
@@ -261,7 +261,7 @@ class UPC extends Parser
                 }
             }
             // no match; not a product, not special
-            
+
             $handler = CoreLocal::get('ItemNotFound');
             if ($handler === '' || !class_exists($handler)) {
                 $handler = 'ItemNotFound';
@@ -324,12 +324,12 @@ class UPC extends Parser
           item. This can indicate a stuck scale.
           The giant if determines whether the item is scalable, that we
           know the weight, and that we know the previous weight (lastWeight)
-        
+
           Pre-weighed items (upc starts with 002) are ignored because they're not
           weighed here. Scalable items that cost one cent are ignored as a special
           case; they're normally entered by keying a quantity multiplier
         */
-        if ($num_rows > 0 && $row['scale'] == 1 
+        if ($num_rows > 0 && $row['scale'] == 1
             && CoreLocal::get("lastWeight") > 0 && CoreLocal::get("weight") > 0
             && abs(CoreLocal::get("weight") - CoreLocal::get("lastWeight")) < 0.0005
             && !$scaleStickerItem && abs($row['normal_price']) > 0.01){
@@ -355,7 +355,7 @@ class UPC extends Parser
                   ( (restrict_start IS NULL AND restrict_end IS NULL) OR
                     ".$db->curtime()." BETWEEN restrict_start AND restrict_end
                   )
-                 ) OR 
+                 ) OR
                 ( dept_ID='{$row['department']}' AND
                   ( ".$db->datediff($db->now(),'restrict_date')."=0 OR
                     ".$db->dayofweek($db->now())."=restrict_dow
@@ -408,7 +408,7 @@ class UPC extends Parser
             CoreLocal::set('tarezero', False);
         }
 
-        /* sanity check - ridiculous price 
+        /* sanity check - ridiculous price
            (can break db column if it doesn't fit
         */
         if (strlen($row["normal_price"]) > 8){
@@ -423,9 +423,9 @@ class UPC extends Parser
 
         $scale = ($row["scale"] == 0) ? 0 : 1;
         $qttyEnforced = $row["qttyEnforced"];
-        /* use scaleprice bit column to indicate 
-           whether values should be interpretted as 
-           UPC or EAN */ 
+        /* use scaleprice bit column to indicate
+           whether values should be interpretted as
+           UPC or EAN */
         $scaleprice = ($row['scaleprice'] == 0) ? $scalepriceUPC : $scalepriceEAN;
 
         /* need a weight with this item
@@ -441,25 +441,25 @@ class UPC extends Parser
                 true,
                 DisplayLib::standardClearButton()
             );
-            
+
             return $ret;
         }
 
         /* quantity required for this item. Send to
            entry page if one wasn't provided */
         if (($qttyEnforced == 1) && (CoreLocal::get("multiple") == 0) && (CoreLocal::get("msgrepeat" == 0) || CoreLocal::get('qttyvalid') == 0)) {
-            $ret['main_frame'] = 
+            $ret['main_frame'] =
                     $my_url . 'gui-modules/QuantityEntryPage.php'
                     . '?entered-item=' . CoreLocal::get('strEntered')
                     . '&qty-mode=' . $scale;
             return $ret;
-        } 
+        }
 
         /* got a scale weight, make sure the tare
            is valid */
         if ($scale != 0 && !$scaleStickerItem) {
             $quantity = CoreLocal::get("weight") - CoreLocal::get("tare");
-            if (CoreLocal::get("quantity") != 0) 
+            if (CoreLocal::get("quantity") != 0)
                 $quantity = CoreLocal::get("quantity") - CoreLocal::get("tare");
 
             if ($quantity <= 0) {
@@ -474,7 +474,7 @@ class UPC extends Parser
             CoreLocal::set("tare",0);
         }
 
-        /* non-scale items need integer quantities */    
+        /* non-scale items need integer quantities */
         if ($row["scale"] == 0 && (int) CoreLocal::get("quantity") != CoreLocal::get("quantity") ) {
             $ret['output'] = DisplayLib::boxMsg(
                 _("fractional quantity cannot be accepted for this item"),
@@ -519,7 +519,7 @@ class UPC extends Parser
 
         /*
            END error checking round #1
-        */    
+        */
 
         // wfc uses deposit field to link another upc
         if (isset($row["deposit"]) && $row["deposit"] > 0){
@@ -585,15 +585,15 @@ class UPC extends Parser
             BEGIN: figure out discounts by type
         */
 
-        /* get discount object 
+        /* get discount object
 
-           CORE reserves values 0 through 63 in 
+           CORE reserves values 0 through 63 in
            DiscountType::$MAP for default options.
 
            Additional discounts provided by plugins
            can use values 64 through 127. Because
            the DiscountTypeClasses array is zero-indexed,
-           subtract 64 as an offset  
+           subtract 64 as an offset
         */
         $discounttype = MiscLib::nullwrap($row["discounttype"]);
         $DiscountObject = null;
@@ -612,7 +612,7 @@ class UPC extends Parser
         }
 
         /* add in sticker price and calculate a quantity
-           if the item is stickered, scaled, and on sale. 
+           if the item is stickered, scaled, and on sale.
 
            otherwise, if the item is sticked, scaled, and
            not on sale but has a non-zero price attempt
@@ -636,7 +636,7 @@ class UPC extends Parser
                 if (round($scaleprice, 2) != round($quantity * $row['normal_price'], 2)) {
                     $quantity = 1.0;
                     $row['normal_price'] = $scaleprice;
-                } 
+                }
             } else {
                 $row['normal_price'] = $scaleprice;
             }
@@ -647,14 +647,14 @@ class UPC extends Parser
         */
 
         /* get price method object  & add item
-        
-           CORE reserves values 0 through 99 in 
+
+           CORE reserves values 0 through 99 in
            PriceMethod::$MAP for default methods.
 
            Additional methods provided by plugins
            can use values 100 and up. Because
            the PriceMethodClasses array is zero-indexed,
-           subtract 100 as an offset  
+           subtract 100 as an offset
         */
         $pricemethod = MiscLib::nullwrap($row["pricemethod"]);
         if ($DiscountObject->isSale())
@@ -685,7 +685,7 @@ class UPC extends Parser
         } else {
             $PriceMethodObject = new BasicPM();
         }
-        // prefetch: otherwise object members 
+        // prefetch: otherwise object members
         // pass out of scope in addItem()
         $prefetch = $DiscountObject->priceInfo($row,$quantity);
         $added = $PriceMethodObject->addItem($row, $quantity, $DiscountObject);
@@ -744,7 +744,7 @@ class UPC extends Parser
         if ($db->num_rows($result) <= 0) return;
 
         $row = $db->fetch_array($result);
-        
+
         $description = $row["description"];
         $description = str_replace("'", "", $description);
         $description = str_replace(",", "", $description);
@@ -762,7 +762,7 @@ class UPC extends Parser
             $tax = 1;
             CoreLocal::set("toggletax",0);
         }
-                        
+
         $foodstamp = 0;
         if ($row["foodstamp"] != 0 && CoreLocal::get("togglefoodstamp") == 0) {
             $foodstamp = 1;
@@ -818,10 +818,10 @@ class UPC extends Parser
         // ignore any other fields for now
         if (substr($str,0,1) == "10")
             return substr($str,2,13);
-        
+
         // application identifier not recognized
         // will likely cause no such item error
-        return $str; 
+        return $str;
     }
 
     public static $requestInfoHeader = 'customer age';

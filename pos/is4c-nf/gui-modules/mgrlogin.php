@@ -35,7 +35,7 @@ class mgrlogin extends NoInputPage {
             if (CoreLocal::get('LoudLogins') == 1) {
                 UdpComm::udpSend('twoPairs');
             }
-        } 
+        }
         return True;
     }
 
@@ -97,9 +97,9 @@ class mgrlogin extends NoInputPage {
         <span class="larger">
         <?php echo _("confirm cancellation"); ?>
         </span><br />
-        <form name="form" id="formlocal" method="post" 
+        <form name="form" id="formlocal" method="post"
             autocomplete="off" onsubmit="return submitWrapper();">
-        <input type="password" name="userPassword" tabindex="0" 
+        <input type="password" name="userPassword" tabindex="0"
             onblur="$('#userPassword').focus();" id="userPassword" />
         <input type="hidden" name="reginput" id="reginput" value="" />
         </form>
@@ -132,11 +132,11 @@ class mgrlogin extends NoInputPage {
         $priv = sprintf("%d",CoreLocal::get("SecurityCancel"));
         $args = array($priv, $password, $password);
         $query = '
-            SELECT emp_no, 
-                FirstName, 
-                LastName 
-            FROM employees 
-            WHERE EmpActive = 1 
+            SELECT emp_no,
+                FirstName,
+                LastName
+            FROM employees
+            WHERE EmpActive = 1
                 AND frontendsecurity >= ?
                 AND (CashierPassword = ? OR AdminPassword = ?)';
         $prep = $db->prepare($query);
@@ -153,7 +153,7 @@ class mgrlogin extends NoInputPage {
             TransRecord::finalizeTransaction(true);
 
             if (CoreLocal::get('LoudLogins') == 1) {
-                UdpComm::udpSend('twoPairs');
+                UdpComm::udpSend('goodBeep');
             }
         } else {
             if (CoreLocal::get('LoudLogins') == 1) {
@@ -164,7 +164,7 @@ class mgrlogin extends NoInputPage {
         return $ret;
     }
 
-    function cancelorder() 
+    function cancelorder()
     {
         CoreLocal::set("plainmsg",_("transaction cancelled"));
         UdpComm::udpSend("rePoll");
