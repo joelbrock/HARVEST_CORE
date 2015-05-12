@@ -3,7 +3,7 @@
 
     Copyright 2014 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -32,7 +32,7 @@ class SpecialDeptMapModel extends BasicModel
     protected $columns = array(
     'specialDeptModuleName' => array('type'=>'VARCHAR(100)', 'primary_key'=>true),
     'dept_no' => array('type'=>'INT', 'primary_key'=>true),
-	);
+    );
 
     public function buildMap()
     {

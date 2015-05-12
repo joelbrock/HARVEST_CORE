@@ -3,7 +3,7 @@
 
     Copyright 2011 Whole Foods Co-op, Duluth, MN
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -171,6 +171,19 @@ class AddPatronageEntryPage extends FannieRESTfulPage
             </form>';
 
         return $ret;
+    }
+
+    public function helpContent()
+    {
+        return '
+            <p>
+            Create a patronage entry for an member who
+            was not originally issued one. The working
+            copy calculation data must still exist in the
+            system. This will only work for the fiscal
+            year most recently calculated via CORE
+            patronage tools.
+            </p>';
     }
 }
 

@@ -3,7 +3,7 @@
 
     Copyright 2013 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -26,7 +26,7 @@ class FannieDispatch
 
     private static $logger;
 
-    static private function setLogger($l)
+    static public function setLogger($l)
     {
         self::$logger = $l;
     }
@@ -69,6 +69,16 @@ class FannieDispatch
         $error = error_get_last();
         if ($error["type"] == E_ERROR) {
             self::errorHandler($error["type"], $error["message"], $error["file"], $error["line"]);
+            /**
+              Put fatals in the error log as well as the debug log
+              For good measure, put them in STDERR too. Try to
+              ensure somebody notices.
+            */
+            $msg = $error['message']
+                . ' Line ' . $error['line']
+                . ', File ' . $error['file'];
+            self::$logger->error($msg);
+            file_put_contents('php://stderr', $msg, FILE_APPEND);
         }
     }
 
@@ -142,6 +152,13 @@ class FannieDispatch
         if (count($bt) == 1) {
             $config = FannieConfig::factory();
             $logger = new FannieLogger();
+            if ($config->get('SYSLOG_SERVER')) {
+                $logger->setRemoteSyslog(
+                    $config->get('SYSLOG_SERVER'),
+                    $config->get('SYSLOG_PORT'),
+                    $config->get('SYSLOG_PROTOCOL')
+                );
+            }
             $op_db = $config->get('OP_DB');
             $dbc = FannieDB::get($op_db);
             self::setLogger($logger);

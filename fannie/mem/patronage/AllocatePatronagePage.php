@@ -3,7 +3,7 @@
 
     Copyright 2011 Whole Foods Co-op, Duluth, MN
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -29,6 +29,8 @@ class AllocatePatronagePage extends FannieRESTfulPage
 {
     protected $title = "Fannie :: Patronage Tools";
     protected $header = "Fannie :: Patronage Tools";
+    public $description = '[Allocate Patronage] divies up calculated patronage amounts amongst
+        qualifiying members';
     public $themed = true;
 
     public function helpContent()

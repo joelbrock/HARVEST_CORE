@@ -3,14 +3,14 @@
 
     Copyright 2011 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -188,6 +188,19 @@ open in a separate tab or window as a reference for Manufacturers and Vendors (D
         } else {
             return 0;
         }
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            <em>This page is generated automatically</em>.
+            </p>
+            <p>
+            These are almost all the reports currently available in the
+            system. Reports can be marked as not automatically
+            discoverable but that is fairly uncommon and mostly in
+            plugins.
+            </p>';
     }
 
 }

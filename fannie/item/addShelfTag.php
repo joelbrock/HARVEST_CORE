@@ -3,14 +3,14 @@
 
     Copyright 2009 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -44,64 +44,24 @@ if (basename(__FILE__) != basename($_SERVER['PHP_SELF'])) {
 $dbc = FannieDB::get($FANNIE_OP_DB);
 
 $upc = BarcodeLib::padUPC(FormLib::get('upc'));
-
-// EL 16Mar13 Get vendorItem and vendor data for the item being edited or that was just created.
-// This favours UNFI which traditionally has vendorID 1.
-//was: $unfiQ = "SELECT DISTINCT * FROM vendorItems WHERE upc = '$upc' ORDER BY vendorID";
-$vendiQ = $dbc->prepare_statement("SELECT DISTINCT i.*,v.vendorName FROM vendorItems AS i
-            LEFT JOIN vendors AS v ON i.vendorID=v.vendorID
-            where upc = ? ORDER BY i.vendorID");
-
-$vendiR = $dbc->exec_statement($vendiQ,array($upc));
-$vendiN = $dbc->num_rows($vendiR);
+$product = new ProductsModel($dbc);
+$product->upc($upc);
+$tagData = $product->getTagData();
 
 $prodQ = $dbc->prepare_statement("SELECT p.*,s.superID FROM products AS p
     LEFT JOIN MasterSuperDepts AS s ON p.department=s.dept_ID
     where upc=?");
 $prodR = $dbc->exec_statement($prodQ,array($upc));
-
-$prodW = $dbc->fetch_array($prodR);
-$price = $prodW['normal_price'];
-$desc = $prodW['description'];
-$brand = '';
-$size = '';
-$units = '';
-$sku = '';
-$vendor = '';
-$ppo = '';
 $superID = $prodW['superID'];
 
-if($vendiN > 0){
- // Use only the first hit.
- $vendiW = $dbc->fetch_array($vendiR);
- // Composed: "200 g"
- $size = $vendiW['size'];
- $brand = $vendiW['brand'];
- $units = $vendiW['units'];
- $sku = $vendiW['sku'];
- if ( $vendiW['vendorName'] != "" ) {
-     $vendor = $vendiW['vendorName'];
- } else if ($dbc->table_exists('prodExtra')) {
-    $prodExtraQ = $dbc->prepare_statement("select distributor from prodExtra where upc=?");
-    $prodExtraR = $dbc->exec_statement($prodExtraQ, array($upc));
-    $prodExtraN = $dbc->num_rows($prodExtraR);
-    if ($prodExtraN > 0){
-        $prodExtraW = $dbc->fetch_array($prodExtraR);
-        $vendor = $prodExtraW['distributor'];
-    }
- }
- $ppo = \COREPOS\Fannie\API\lib\PriceLib::pricePerUnit($price,$size);
-}
-else if ($dbc->table_exists('prodExtra')) {
-$prodExtraQ = $dbc->prepare_statement("select manufacturer,distributor from prodExtra where upc=?");
-$prodExtraR = $dbc->exec_statement($prodExtraQ,array($upc));
-$prodExtraN = $dbc->num_rows($prodExtraR);
-    if ($prodExtraN == 1){
-        $prodExtraW = $dbc->fetch_array($prodExtraR);
-        $brand = $prodExtraW['manufacturer'];
-        $vendor = $prodExtraW['distributor'];
-    }
-}
+$price = $tagData['normal_price'];
+$desc = $tagData['description'];
+$brand = $tagData['brand'];
+$size = $tagData['size'];
+$units = $tagData['units'];
+$sku = $tagData['sku'];
+$vendor = $tagData['vendor'];
+$ppo = $tagData['pricePerUnit'];
 
 ?>
 <!doctype html>
@@ -112,8 +72,13 @@ $prodExtraN = $dbc->num_rows($prodExtraR);
         <link rel="stylesheet" type="text/css" href="../src/javascript/bootstrap/css/bootstrap.min.css">
         <link rel="stylesheet" type="text/css" href="../src/javascript/bootstrap-default/css/bootstrap.min.css">
         <link rel="stylesheet" type="text/css" href="../src/javascript/bootstrap-default/css/bootstrap-theme.min.css">
-        <script type="text/javascript" src="../src/javascript/jquery/jquery.min.js"></script>
+        <script type="text/javascript" src="../src/javascript/jquery.js"></script>
         <script type="text/javascript" src="../src/javascript/bootstrap/js/bootstrap.min.js"></script>
+        <script type="text/javascript">
+        $(document).ready(function(){
+            $('input.focus').focus();
+        });
+        </script>
     </head>
 <body>
 <div class="container-fluid">
@@ -122,7 +87,7 @@ $prodExtraN = $dbc->num_rows($prodExtraR);
 <div class="form-group form-inline">
     <label>Description</label>
     <input type='text' name='description' maxlength=30
-        class="form-control"
+        class="form-control focus"
 <?php
 echo "value='".strtoupper($desc)."'";
 ?>
@@ -189,13 +154,8 @@ echo "value='".$sku."'";
 <label>Barcode page</label>
 <select name=subID class="form-control">
 <?php
-$subsQ = $dbc->prepare_statement("SELECT superID,super_name FROM superDeptNames");
-$subsR = $dbc->exec_statement($subsQ);
-while($subsW = $dbc->fetch_row($subsR)){
-    if ($subsW[0] == 0) $subsW[1] = 'All';
-    $checked = ($subsW[0]==$superID)?'selected':'';
-    echo "<option value=\"$subsW[0]\" $checked>$subsW[1]</option>";
-}
+$qm = new ShelfTagQueuesModel($dbc);
+echo $qm->toOptions($superID);
 ?>
 </select>
 </div>

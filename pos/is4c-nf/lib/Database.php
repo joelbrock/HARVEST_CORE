@@ -23,6 +23,7 @@
 
 /* --COMMENTS - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
+    *  3Feb2015 Eric Lee New function logger(), anticipate change to uploadCC().
     * 27Feb2013 Andy Theuninck singleton connection for local databases
     * 13Jan2013 Eric Lee Added changeLttTaxCode(From, To);
 
@@ -172,7 +173,7 @@ static public function getsubtotals()
     CoreLocal::set("memSpecial", (!$row || !isset($row['memSpecial'])) ? 0 : (double)$row["memSpecial"] );
     // staffSpecial => SUM(localtemptrans.total) where discounttype=4
     CoreLocal::set("staffSpecial", (!$row || !isset($row['staffSpecial'])) ? 0 : (double)$row["staffSpecial"] );
-	if (CoreLocal::get('member_subtotal') !== 0 && CoreLocal::get('member_subtotal') !== '0') {
+    if (CoreLocal::get('member_subtotal') !== 0 && CoreLocal::get('member_subtotal') !== '0') {
         // percentDiscount => MAX(localtemptrans.percentDiscount)
         CoreLocal::set("percentDiscount", (!$row || !isset($row['percentDiscount'])) ? 0 : (double)$row["percentDiscount"] );
     }
@@ -314,7 +315,7 @@ static public function LineItemTaxes()
     // loop through line items and deal with
     // foodstamp tax exemptions
     for($i=0;$i<count($taxRows);$i++) {
-        if($fsTenderTTL <= 0.005) {
+        if (abs($fsTenderTTL) <= 0.005) {
             continue;
         }
         
@@ -340,7 +341,7 @@ static public function LineItemTaxes()
             //    Decrement line item tax proprotionally to foodstamp tender available
             //    No FS tender left, so exemption ends
             $percentageApplied = $fsTenderTTL / $taxRows[$i]['fsTaxable'];
-            $exemption = $taxRows[$i]['fsTaxTotal'] * $percentageApplied;
+            $exemption = MiscLib::truncate2($taxRows[$i]['fsTaxTotal'] * $percentageApplied);
             $taxRows[$i]['taxTotal'] = MiscLib::truncate2($taxRows[$i]['taxTotal'] - $exemption);
             $taxRows[$i]['fsExempt'] = $exemption;
             $fsTenderTTL = 0;
@@ -503,6 +504,20 @@ static public function uploadtoServer()
 */
 static public function getMatchingColumns($connection,$table_name,$table2="")
 {
+    /**
+      Cache column information by table in the session
+      In standalone mode, a transfer query likely failed
+      and the cache may be wrong so always requery in
+      that case.
+    */
+    $cache = CoreLocal::get('MatchingColumnCache');
+    if (!is_array($cache)) {
+        $cache = array();
+    }
+    if (isset($cache[$table_name]) && CoreLocal::get('standalone') == 0) {
+        return $cache[$table_name];
+    }
+
     $local_poll = $connection->table_definition($table_name,CoreLocal::get("tDatabase"));
     if ($local_poll === false) {
         return '';
@@ -527,8 +542,11 @@ static public function getMatchingColumns($connection,$table_name,$table2="")
     foreach($matching_cols as $col) {
         $ret .= $col.",";
     }
+    $ret = rtrim($ret,",");
+    $cache[$table_name] = $ret;
+    CoreLocal::set('MatchingColumnCache', $cache);
 
-    return rtrim($ret,",");
+    return $ret;
 }
 
 /** Get a list of columns in both tables.
@@ -569,7 +587,7 @@ static public function localMatchingColumns($connection,$table1,$table2)
 */
 static public function uploadCCdata()
 {
-	if (!in_array("Paycards",CoreLocal::get("PluginList"))) {
+    if (!in_array("Paycards",CoreLocal::get("PluginList"))) {
         // plugin not enabled; nothing to upload
         return true;
     }
@@ -921,6 +939,23 @@ static public function clearTempTables()
     $connection->query($query2);
 
     return ($ret) ? true : false;
+}
+
+/**
+  Log a message to the lane log
+  @param $msg A string containing the message to log.
+  @return True on success, False on failure 
+ */
+static public function logger($msg="")
+{
+    $connection = Database::tDataConnect();
+
+    if (method_exists($connection, 'logger')) {
+        $ret = $connection->logger($msg);
+    } else {
+        $ret = False;
+    }
+    return $ret;
 }
 
 } // end Database class

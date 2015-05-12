@@ -3,14 +3,14 @@
 
     Copyright 2011 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -196,14 +196,14 @@ $r = $dbc->exec_statement($q);
 $header="";
 $i=1;
 while($w = $dbc->fetch_row($r)){
-	if ($header != $w['type']){
-		echo '<h3>'.$TRANSLATE[$w['type']].'</h3>';
-		$header = $w['type'];	
-		$i=1;
-	}
-	printf('<p>%d:<input type="text" size="55" maxlength="55" name="old_content[]" value="%s" />
-		<input type="hidden" name="old_type[]" value="%s" /></p>',
-		$i++,$w['text'],$w['type']);
+    if ($header != $w['type']){
+        echo '<h3>'.$TRANSLATE[$w['type']].'</h3>';
+        $header = $w['type'];    
+        $i=1;
+    }
+    printf('<p>%d:<input type="text" size="55" maxlength="55" name="old_content[]" value="%s" />
+        <input type="hidden" name="old_type[]" value="%s" /></p>',
+        $i++,$w['text'],$w['type']);
 }
 ?>
 <input type="submit" name="old_submit" value="Save Changes" />

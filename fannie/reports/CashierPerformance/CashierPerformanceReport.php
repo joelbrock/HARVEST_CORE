@@ -3,14 +3,14 @@
 
     Copyright 2012 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -40,6 +40,7 @@ class CashierPerformanceReport extends FannieReportPage
 
     public $description = '[Cashier Performance] lists cashier scan metrics over a given date range.';
     public $themed = true;
+    public $report_set = 'Cashiering';
 
     function fetch_report_data()
     {
@@ -194,6 +195,30 @@ class CashierPerformanceReport extends FannieReportPage
 </div>
 </form>
 <?php
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            This report displays information about one or many
+            cashiers during the time period. The base unit of 
+            measurement is rings. Each ring is one item passing
+            through the scanner-scale. Refunds, voids, and cancels
+            are shown as both totals and percentages of total
+            rings. In this context, "void" means reversing a single
+            line item in a transaction and "cancel" means abandoning
+            an in-progress transaction completely.
+            </p>
+            <p>
+            The last three columns, #Trans, Minutes, and Rings/Minute
+            are only valid for the past 90 days or so. Calculating
+            the time spent ringing items on the fly is not feasible so
+            that data must be prebuilt. Minutes is measured from the
+            first <strong>item</strong> entered into the transaction
+            to the last <strong>item</strong> entered into the
+            transaction. Time spent entering member numbers, dealing
+            with tenders, or between transactions is not included. 
+            </p>';
     }
 }
 

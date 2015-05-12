@@ -3,14 +3,14 @@
 
     Copyright 2011 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -123,13 +123,15 @@ class InstallIndexPage extends \COREPOS\Fannie\API\InstallPage {
         $self = basename($_SERVER['PHP_SELF']);
 
         echo "<form action='$self' method='post'>";
-        echo "<h1 class='install'>{$this->header}</h1>";
+        if (!$this->themed) {
+            echo "<h1 class='install'>{$this->header}</h1>";
+        }
 
         // Path detection: Establish ../../
         $FILEPATH = rtrim(__FILE__,"$self");
-	if (DIRECTORY_SEPARATOR == '\\') {
-	    $FILEPATH = str_replace(DIRECTORY_SEPARATOR, '/', $FILEPATH);
-	}
+        if (DIRECTORY_SEPARATOR == '\\') {
+            $FILEPATH = str_replace(DIRECTORY_SEPARATOR, '/', $FILEPATH);
+        }
         $URL = rtrim($_SERVER['SCRIPT_NAME'],"$self");
         $FILEPATH = rtrim($FILEPATH, '/');
         $URL = rtrim($URL,'/');
@@ -451,15 +453,16 @@ class InstallIndexPage extends \COREPOS\Fannie\API\InstallPage {
             </ul>  
         </ul>
         <?php
-        echo '<table>';
 
-        echo '<tr><td align="right">Color-Highlighted Logs</td>'
-            . '<td>' . installSelectField('FANNIE_PRETTY_LOGS', $FANNIE_PRETTY_LOGS, array('true'=>'Yes', 'false'=>'No'), false, false)
-            . '</td></tr>';
+        echo '<div class="row form-group">
+              <label class="control-label col-sm-2">Color-Highlighted Logs</label>
+              <div class="col-sm-3">' . installSelectField('FANNIE_PRETTY_LOGS', $FANNIE_PRETTY_LOGS, array('true'=>'Yes', 'false'=>'No'), false, false)
+            . '</div></div>';
 
-        echo '<tr><td align="right">Log Rotation Count</td>'
-            . '<td>' . installTextField('FANNIE_LOG_COUNT', $FANNIE_LOG_COUNT, 5, false)
-            . '</td></tr>';
+        echo '<div class="row form-group">
+                <label class="control-label col-sm-2">Log Rotation Count</label>
+                <div class="col-sm-3">' . installTextField('FANNIE_LOG_COUNT', $FANNIE_LOG_COUNT, 5, false)
+            . '</div></div>';
 
         $errorOpts = array(
             1 => 'Yes',
@@ -468,9 +471,10 @@ class InstallIndexPage extends \COREPOS\Fannie\API\InstallPage {
         if ($FANNIE_CUSTOM_ERRORS > 1) {
             $FANNIE_CUSTOM_ERRORS = 1;
         }
-        echo '<tr><td align="right">Verbose Debug Messages</td>'
-            . '<td>' . installSelectField('FANNIE_CUSTOM_ERRORS', $FANNIE_CUSTOM_ERRORS, $errorOpts, false, false)
-            . '</td></tr>';
+        echo '<div class="row form-group">
+                <label class="control-label col-sm-2">Verbose Debug Messages</label>
+                <div class="col-sm-3">' . installSelectField('FANNIE_CUSTOM_ERRORS', $FANNIE_CUSTOM_ERRORS, $errorOpts, false, false)
+            . '</div></div>';
 
         $taskOpts = array(
             99 => 'Never email on error',
@@ -484,11 +488,28 @@ class InstallIndexPage extends \COREPOS\Fannie\API\InstallPage {
             7  => 'Debug',
         );
 
-        echo '<tr><td>Task Error Severity resulting in emails</td>'
-            . '<td>' . installSelectField('FANNIE_TASK_THRESHOLD', $FANNIE_TASK_THRESHOLD, $taskOpts, 99, false)
-            . '</td></tr>';
+        echo '<div class="row form-group">
+                <label class="control-label col-sm-2">Task Error Severity resulting in emails</label>
+                <div class="col-sm-3">' . installSelectField('FANNIE_TASK_THRESHOLD', $FANNIE_TASK_THRESHOLD, $taskOpts, 99, false)
+            . '</div></div>';
 
-        echo '</table>';
+        echo '<p>
+            CORE can send logs to a remote syslog server if a host name or IP
+            is provided.
+            </p>';
+
+        echo '<div class="row form-group">
+            <label class="control-label col-sm-2">Remote Syslog Host</label>
+            <div class="col-sm-3">' . installTextField('FANNIE_SYSLOG_SERVER', $FANNIE_SYSLOG_SERVER) . '</div>
+            </div>';
+        echo '<div class="row form-group">
+            <label class="control-label col-sm-2">Remote Syslog Port</label>
+            <div class="col-sm-3">' . installTextField('FANNIE_SYSLOG_PORT', $FANNIE_SYSLOG_PORT, 514) . '</div>
+            </div>';
+        echo '<div class="row form-group">
+            <label class="control-label col-sm-2">Remote Syslog Protocol</label>
+            <div class="col-sm-3">' . installSelectField('FANNIE_SYSLOG_PROTOCOL', $FANNIE_SYSLOG_PROTOCOL, array('tcp', 'udp'), 'udp') . '</div>
+            </div>';
 
         ?>
         <hr />
@@ -621,6 +642,7 @@ class InstallIndexPage extends \COREPOS\Fannie\API\InstallPage {
             'ProdPhysicalLocationModel',
             'ProdUpdateModel',
             'ProdDepartmentHistoryModel',
+            'ProdCostHistoryModel',
             'ProdPriceHistoryModel',
             'PurchaseOrderModel',
             'PurchaseOrderItemsModel',
@@ -630,6 +652,7 @@ class InstallIndexPage extends \COREPOS\Fannie\API\InstallPage {
             'ServiceScalesModel',
             'ServiceScaleItemMapModel',
             'ShelftagsModel',
+            'ShelfTagQueuesModel',
             'ShrinkReasonsModel',
             'SpecialDeptMapModel',
             'SubDeptsModel',

@@ -3,7 +3,7 @@
 
     Copyright 2012 Whole Foods Co-op, Duluth, MN
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -28,9 +28,9 @@ if (!class_exists('FannieAPI')) {
 class MemStatusEditor extends FanniePage {
     protected $header = "Customer Status";
     protected $title = "Fannie :: Customer Status";
-    protected $must_authenticate = True;
     public $description = '[Member Status] alters an account\'s active status.';
     public $themed = true;
+    protected $must_authenticate = true;
     protected $auth_classes =  array('editmembers');
 
     private $cardno;
@@ -279,6 +279,21 @@ class MemStatusEditor extends FanniePage {
                 }
             }
         }
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            Change a member\'s status to inactive or
+            terminated. Inactive accounts are considered
+            temporarily suspended but may be reactivated later.
+            Terminated accounts are permanently closed.
+            </p>
+            <p>
+            To deactivate a member, choose Inactive/Termed
+            and check one or more reasons. To reactivate an account,
+            simply clear all the reason checkboxes.
+            </p>';
     }
 }
 

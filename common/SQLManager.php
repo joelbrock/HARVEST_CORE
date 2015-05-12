@@ -53,6 +53,9 @@ class SQLManager
     /** throw exception on failed query **/
     protected $throw_on_fail = false;
 
+    /** cache information about table existence & definition **/
+    protected $structure_cache = array();
+
     /** Constructor
         @param $server Database server host
         @param $type Database type. Most supported are
@@ -203,10 +206,17 @@ class SQLManager
 
         $this->default_db = $db_name;
         if ($this->isConnected()) {
-            $this->query('use ' . $db_name, $db_name);
-            $this->connections[$db_name]->database = $db_name;
-
-            return true;
+            $selected = $this->query('USE ' . $this->identifierEscape($db_name), $db_name);
+            if (!$selected) {
+                $this->query('CREATE DATABASE ' . $this->identifierEscape($db_name), $db_name);
+                $selected = $this->query('USE ' . $this->identifierEscape($db_name), $db_name);
+            }
+            if ($selected) {
+                $this->connections[$db_name]->database = $db_name;
+                return true;
+            } else {
+                return false;
+            }
         } else {
             return false;
         }
@@ -252,7 +262,7 @@ class SQLManager
     */
     public function query($query_text,$which_connection='',$params=false)
     {
-        if ($this->test_mode && substr($query_text, 0, 4) != 'use ') {
+        if ($this->test_mode && substr($query_text, 0, 4) != 'USE ') {
             // called when 
             $this->test_mode = false;
         }
@@ -271,12 +281,15 @@ class SQLManager
 
             $errorMsg = $this->error($which_connection);
             $logMsg = 'Failed Query on ' . $_SERVER['PHP_SELF'] . "\n"
-                    . $query_text . "\n"
-                    . $errorMsg . "\n";
+                    . $query_text . "\n";
+            if (is_array($params)) {
+                $logMsg .= 'Parameters: ' . implode("\n", $params);
+            }
+            $logMsg .= $errorMsg . "\n";
             $this->logger($logMsg);
 
             if ($this->throw_on_fail) {
-                throw new Exception($errorMsg);
+                throw new \Exception($errorMsg);
             }
         }
 
@@ -871,6 +884,9 @@ class SQLManager
         if (!$result) {
             return false;
         }
+        if ($this->numRows($result) == 0) {
+            return true;
+        }
 
         $num_fields = $this->num_fields($result,$source_db);
 
@@ -879,10 +895,15 @@ class SQLManager
         $strings = array("varchar"=>1,"nvarchar"=>1,"string"=>1,
             "char"=>1, 'var_string'=>1);
         $dates = array("datetime"=>1);
-        $queries = array();
+        $prep = $insert_query . ' VALUES(';
+        $arg_sets = array();
+        $big_query = $insert_query . ' VALUES ';
+        $big_values = '';
+        $big_args = array();
 
-        while($row = $this->fetch_array($result,$source_db)) {
-            $full_query = $insert_query." VALUES (";
+        while ($row = $this->fetch_array($result,$source_db)) {
+            $big_values .= '(';
+            $args = array();
             for ($i=0; $i<$num_fields; $i++) {
                 $type = strtolower($this->fieldType($result,$i,$source_db));
                 if ($row[$i] == "" && strstr(strtoupper($type),"INT")) {
@@ -895,21 +916,41 @@ class SQLManager
                 } elseif (isset($strings[$type])) {
                     $row[$i] = str_replace("'","''",$row[$i]);
                 }
-                if (isset($unquoted[$type])) {
-                    $full_query .= $row[$i].",";
-                } else {
-                    $full_query .= "'".$row[$i]."',";
+                $args[] = $row[$i];
+                if (count($arg_sets) == 0) {
+                    $prep .= '?,';
                 }
+                $big_args[] = $row[$i];
+                $big_values .= '?,';
             }
-            $full_query = substr($full_query,0,strlen($full_query)-1).")";
-            array_push($queries,$full_query);
+            if (count($arg_sets) == 0) {
+                $prep = substr($prep, 0, strlen($prep)-1) . ')';
+            }
+            $arg_sets[] = $args;
+            $big_values = substr($big_values, 0, strlen($big_values)-1) . '),';
+        }
+        $big_values = substr($big_values, 0, strlen($big_values)-1);
+
+        /**
+          Sending all records as a single query for large
+          record sets may present problems depending on
+          underlying DBMS and/or configuration limits.
+          MySQL max_allowed_packet is probably the most
+          common one.
+        */
+        if (count($arg_sets) < 500) {
+            $big_prep = $this->prepare($big_query . $big_values, $dest_db);
+            $bigR = $this->execute($big_prep, $big_args, $dest_db);
+            return ($bigR) ? true : false;
         }
 
         $ret = true;
         $this->startTransaction($dest_db);
-        foreach ($queries as $q) {
-            if(!$this->query($q,$dest_db)) {
+        $statement = $this->prepare($prep, $dest_db);
+        foreach ($arg_sets as $args) {
+            if (!$this->execute($statement, $args, $dest_db)) {
                 $ret = false;
+                break;
             }
         }
         if ($ret === true) {
@@ -1095,9 +1136,19 @@ class SQLManager
         if ($which_connection == '') {
             $which_connection=$this->default_db;
         }
+
+        /**
+          Check whether the definition is in cache
+        */
+        if (isset($this->structure_cache[$which_connection]) && isset($this->structure_cache[$which_connection][$table_name])) {
+            return true;
+        }
+
         $conn = $this->connections[$which_connection];
         $cols = $conn->MetaColumns($table_name);
-        if ($cols === false) return false;
+        if ($cols === false) {
+            return false;
+        }
 
         return true;
     }
@@ -1119,7 +1170,13 @@ class SQLManager
 
         $conn = $this->connections[$which_connection];
         $views = $conn->MetaTables('VIEW');
-        if (in_array($table_name, $views)) {
+        $lc_views = array();
+        $lc_name = strtolower($table_name);
+        foreach ($views as $view) {
+            $lc_views[] = strtolower($view);
+        }
+
+        if (in_array($table_name, $views) || in_array($lc_name, $lc_views)) {
             return true;
         } else {
             return false;
@@ -1141,6 +1198,14 @@ class SQLManager
         if ($which_connection == '') {
             $which_connection=$this->default_db;
         }
+
+        /**
+          Check whether the definition is in cache
+        */
+        if (isset($this->structure_cache[$which_connection]) && isset($this->structure_cache[$which_connection][$table_name])) {
+            return $this->structure_cache[$which_connection][$table_name];
+        }
+
         $conn = $this->connections[$which_connection];
         $cols = $conn->MetaColumns($table_name);
 
@@ -1462,16 +1527,10 @@ class SQLManager
             $which_connection=$this->default_db;
         }
 
-        $exists = $this->tableExists($table_name,$which_connection);
-
-        if (!$exists) {
+        $t_def = $this->tableDefinition($table_name, $which_connection);
+        if ($t_def === false) {
             return false;
         }
-        if ($exists === -1) {
-            return -1;
-        }
-
-        $t_def = $this->tableDefinition($table_name,$which_connection);
 
         $cols = "(";
         $vals = "(";
@@ -1524,16 +1583,10 @@ class SQLManager
             $which_connection=$this->default_db;
         }
 
-        $exists = $this->tableExists($table_name,$which_connection);
-
-        if (!$exists) {
+        $t_def = $this->tableDefinition($table_name, $which_connection);
+        if ($t_def === false) {
             return false;
         }
-        if ($exists === -1) {
-            return -1;
-        }
-
-        $t_def = $this->tableDefinition($table_name,$which_connection);
 
         $sets = "";
         $args = array();
@@ -1681,9 +1734,9 @@ class SQLManager
 
             return true;
         } elseif (is_string($this->QUERY_LOG)) {
-            $fp = @fopen($str, 'a');
+            $fp = @fopen($this->QUERY_LOG, 'a');
             if ($fp) {
-                fwrite($fp, $str);
+                fwrite($fp, date('r') . ': ' . $str);
                 fclose($fp);
 
                 return true;
@@ -1825,6 +1878,35 @@ class SQLManager
             $this->test_mode = false; // no more test data
             return false;
         }
+    }
+
+    /**
+      Cache a table definition to avoid future lookups
+    */
+    public function cacheTableDefinition($table, $definition, $which_connection='')
+    {
+        if ($which_connection == '') {
+            $which_connection=$this->default_db;
+        }
+        if (!isset($this->structure_cache[$which_connection])) {
+            $this->structure_cache[$which_connection] = array();
+        }
+        $this->structure_cache[$which_connection][$table] = $definition;
+
+        return true;
+    }
+
+    /**
+      Clear cached table definitions
+    */
+    public function clearTableCache($which_connection='')
+    {
+        if ($which_connection == '') {
+            $which_connection=$this->default_db;
+        }
+        $this->structure_cache[$which_connection] = array();
+
+        return true;
     }
 }
 

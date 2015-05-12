@@ -3,14 +3,14 @@
 
     Copyright 2013 Whole Foods Community Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -111,31 +111,13 @@ class BatchFromSearch extends FannieRESTfulPage
         $tagset = FormLib::get('tagset');
         if ($discounttype == 0 && $tagset !== '') {
             $vendorID = FormLib::get('preferredVendor', 0);
-            $lookup = $dbc->prepare('
-                SELECT p.description, 
-                    v.brand, 
-                    v.sku, 
-                    v.size, 
-                    v.units, 
-                    n.vendorName
-                FROM products AS p 
-                    LEFT JOIN vendorItems AS v ON p.upc=v.upc
-                    LEFT JOIN vendors AS n ON v.vendorID=n.vendorID
-                WHERE p.upc=? 
-                ORDER BY CASE WHEN v.vendorID=? THEN -999 ELSE v.vendorID END'
-            );
             $tag = new ShelftagsModel($dbc);
+            $product = new ProductsModel($dbc);
             for($i=0; $i<count($upcs);$i++) {
                 $upc = $upcs[$i];
                 $price = isset($prices[$i]) ? $prices[$i] : 0.00;
-                $info = array('description'=>'', 'brand'=>'', 'sku'=>'', 'size'=>'', 'units'=>1,
-                            'vendorName'=>'');
-                $lookupR = $dbc->execute($lookup, array($upc, $vendorID));
-                if ($dbc->num_rows($lookupR) > 0) {
-                    $info = $dbc->fetch_row($lookupR);
-                }
-                $ppo = ($info['size'] !== '') ? \COREPOS\Fannie\API\lib\PriceLib::pricePerUnit($price, $info['size']) : '';
-
+                $product->upc($upc);
+                $info = $product->getTagData($price);
                 $tag->id($tagset);
                 $tag->upc($upc);
                 $tag->description($info['description']);
@@ -144,8 +126,8 @@ class BatchFromSearch extends FannieRESTfulPage
                 $tag->sku($info['sku']);
                 $tag->size($info['size']);
                 $tag->units($info['units']);
-                $tag->vendor($info['vendorName']);
-                $tag->pricePerUnit($ppo);
+                $tag->vendor($info['vendor']);
+                $tag->pricePerUnit($info['pricePerUnit']);
                 $tag->save();
             }
         }
@@ -170,7 +152,7 @@ class BatchFromSearch extends FannieRESTfulPage
             SELECT p.upc,
                 CASE WHEN v.srp IS NULL THEN 0 ELSE v.srp END as newSRP
             FROM products AS p
-                LEFT JOIN vendorSRPs AS v ON p.upc=v.upc
+                LEFT JOIN vendorItems AS v ON p.upc=v.upc 
             WHERE p.upc IN (' . $params['in'] . ')
             ORDER BY p.upc,
                 CASE WHEN v.vendorID=? THEN -999 ELSE v.vendorID END';
@@ -275,8 +257,8 @@ class BatchFromSearch extends FannieRESTfulPage
         $query = 'SELECT p.upc, p.description, p.normal_price, m.superID,
                 MAX(CASE WHEN v.srp IS NULL THEN 0.00 ELSE v.srp END) as srp
                 FROM products AS p
-                LEFT JOIN vendorSRPs AS v ON p.upc=v.upc
-                LEFT JOIN MasterSuperDepts AS m ON p.department=m.dept_ID
+                    LEFT JOIN vendorItems AS v ON p.upc=v.upc AND p.default_vendor_id=v.vendorID
+                    LEFT JOIN MasterSuperDepts AS m ON p.department=m.dept_ID
                 WHERE p.upc IN ( ' . $info['in'] . ')
                 GROUP BY p.upc, p.description, p.normal_price, m.superID
                 ORDER BY p.upc';
@@ -319,10 +301,8 @@ class BatchFromSearch extends FannieRESTfulPage
                 <button type="submit" class="btn btn-default" onclick="markUp($(\'#muPercent\').val()); return false">Go</button>';
         $ret .= '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;';
         $ret .= '<label>Tags</label> <select name="tagset" class="form-control" id="tagset"><option value="">No Tags</option>';
-        $supers = $dbc->query('SELECT superID, super_name FROM MasterSuperDepts GROUP BY superID, super_name ORDER BY superID');
-        while($row = $dbc->fetch_row($supers)) {
-            $ret .= sprintf('<option value="%d">%s</option>', $row['superID'], $row['super_name']);
-        }
+        $qm = new ShelfTagQueuesModel($dbc);
+        $ret .= $qm->toOptions();
         $ret .= '</select>';
         $ret .= '</div>';
 
@@ -474,6 +454,37 @@ function noEnter(e) {
         return array('in'=>$str, 'args'=>$args);
     }
 
+    public function helpContent()
+    {
+        return '<p>
+            This tool creates a sale or price change batch
+            for a set of advanced search results. The top
+            fields control the batch type, name, dates, and
+            owner. The middle section contains different tools
+            for calculating prices depending on whether the
+            batch type selected is a sale or a price change.
+            <p>
+            For sales, two markdown options are available. The
+            percentage will create sale prices that are X% off
+            from the regular retial price. The dollar amount will
+            create sale prices that are $X.XX less than the
+            regular retial price.
+            </p>
+            <p>
+            Price changes include a larger list of options.
+            The Use Vendor SRPs button will calculate new
+            retail pricing based on vendor-specific margin
+            rules. The Auto Choose Vendor option will simply
+            use whichever vendor is assigned as the default
+            for a given product. Choosing a specific vendor instead
+            will use that vendor\'s pricing rules for all 
+            products in the list. The markup percentage is
+            an alternative to vendor-based pricing and will
+            create new prices that are X% above current retail.
+            New shelftags are allocated and the Tags dropdown
+            controls which set they land in.
+            </p>';
+    }
 }
 
 FannieDispatch::conditionalExec();

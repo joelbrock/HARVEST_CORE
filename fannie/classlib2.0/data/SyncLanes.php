@@ -3,7 +3,7 @@
 
     Copyright 2013 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -75,9 +75,9 @@ class SyncLanes
             $ret['sending'] = False;
             $ret['messages'] = 'Error: No table given';
             return $ret;
-        } elseif (!preg_match('/^[A-Za-z0-9_]$/',$table)) {
+        } elseif (!preg_match('/^[A-Za-z0-9_]+$/',$table)) {
             $ret['sending'] = False;
-            $ret['messages'] = 'Error: Illegal table name: '.$table;
+            $ret['messages'] = 'Error: Illegal table name: \'' . $table . '\'';
             return $ret;
         }
 

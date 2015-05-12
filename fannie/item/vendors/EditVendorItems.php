@@ -3,14 +3,14 @@
 
     Copyright 2009 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -34,6 +34,9 @@ class EditVendorItems extends FannieRESTfulPage
     public $description = '[Edit Vendor Items] edits items in the vendor\'s catalog. Must be
     accessed via the Vendor Editor.';
     public $themed = true;
+
+    protected $must_authenticate = true;
+    protected $auth_classes = array('pricechange');
 
     public function preprocess()
     {
@@ -264,6 +267,17 @@ function itemEditing()
 }
         <?php
         return ob_get_clean();
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            Edit invidual records in the vendor item catalog
+            in a grid layout. Saving is instantanoues on each
+            field and includes a small popup notification. The
+            editor only works with catalogs containing less than
+            a thousand items.
+            </p>';
     }
 }
 

@@ -3,14 +3,14 @@
 
     Copyright 2014 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -32,6 +32,9 @@ class CpwInvoiceImport extends FannieRESTfulPage
     public $themed = true;
     protected $header = 'Import CPW Invoice';
     protected $title = 'Import CPW Invoice';
+
+    public $description = '[CPW Invoice Import] is a specialized tool for importing CPW invoices';
+    public $page_set = 'Purchasing';
 
     private $filedata;
 
@@ -353,6 +356,16 @@ class CpwInvoiceImport extends FannieRESTfulPage
             <button type="submit" class="btn btn-default">Upload File</button>
             </p>
             </form>';
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            Upload a CPW invoice file. Review the information
+            extracted from the file and make any necessary
+            adjustments. Finally, import the amended information
+            as a new invoice.
+            </p>';
     }
 
 }

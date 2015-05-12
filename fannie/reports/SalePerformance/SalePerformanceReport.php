@@ -3,14 +3,14 @@
 
     Copyright 2013 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -30,6 +30,7 @@ class SalePerformanceReport extends FannieReportPage
 {
     public $description = '[Batch Performance] lists weekly sales totals for a batch.';
     public $themed = true;
+    public $report_set = 'Batches';
 
     protected $title = "Fannie : Sale Performance";
     protected $header = "Sale Performance";
@@ -196,6 +197,16 @@ for ($i=1;$i<=12;$i++) {
         $this->add_onload_command('lookupSales();');
 
         return ob_get_clean();
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            List weekly sales totals for a given sale (promotion)
+            batch or batches. Only one month of batches is listed
+            at a time. Use the month, year, and Lookup Sales to
+            show batches from different months.
+            </p>';
     }
 
 }

@@ -3,7 +3,7 @@
 
     Copyright 2012 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -151,6 +151,8 @@ class FanniePage
         ob_start();
         $page_title = $this->title;
         $header = $this->header;
+        $headerConfig = $this->config;
+        $BACKEND_NAME = $this->config->get('BACKEND_NAME', 'Fannie');
         if ($this->themed) {
             include(dirname(__FILE__) . '/../src/header.bootstrap.html');
             $this->addJQuery();
@@ -408,7 +410,7 @@ function enableLinea(selector, callback)
     */
     public function loginRedirect()
     {
-        $redirect = $_SERVER['REQUEST_URI'];
+        $redirect = isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '';
         $url = $this->config->get('URL') . 'auth/ui/loginform.php';
         header('Location: '.$url.'?redirect='.$redirect);
     }
@@ -441,7 +443,7 @@ function enableLinea(selector, callback)
             return true;
         }
 
-        return False;
+        return false;
     }
 
     public function check_auth()
@@ -525,20 +527,28 @@ function enableLinea(selector, callback)
         if (!$help) {
             return false;
         }
+        $BACKEND_NAME = $this->config->get('BACKEND_NAME', 'Fannie');
+        $this->addOnloadCommand("\$('.modal').draggable({handle:'.modal-header'});\n");
 
         return '
             <div class="modal" id="help-modal" role="modal">
                 <div class="modal-dialog modal-lg">
                     <div class="modal-content">
                         <div class="modal-header">
-                            <button type="button" class="close" data-dismiss="modal">
+                            <button type="button" class="close close-btn" data-dismiss="modal">
                                 <span aria-hidden="true">&times;</span><span class="sr-only">Close</span>
                             </button>
-                            <h4>' . $this->title . '</h4>
+                            <h4>' . 
+                                preg_replace('/^Fannie(.*)$/', $BACKEND_NAME . '$1', $this->title) . '
+                            </h4>
                         </div>
                         <div class="modal-body">' . $help . '</div>
                         <div class="modal-footer">
-                            <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                            <button type="button" class="btn btn-default" data-dismiss="modal"
+                                onclick="var helpWindow=window.open(\''. $this->config->URL . 'admin/HelpPopup.php\',
+                                \'CORE Help\', \'height=500,width=300,scrollbars=1,resizable=1\');"
+                                id="popout-btn">Pop Out</button>
+                            <button type="button" class="btn btn-default close-btn" data-dismiss="modal">Close</button>
                         </div>
                     </div>
                 </div>
@@ -552,7 +562,9 @@ function enableLinea(selector, callback)
     */
     public function helpContent()
     {
-        return false;
+        return '<!-- need doc -->
+            <h3>Oh no!</h3>
+            <p>This page hasn\'t been documented</p>';
     }
 
     public function unitTest($phpunit)
@@ -637,13 +649,15 @@ function showBootstrapPopover(element, original_value, error_message)
         element.val(original_value);
         timeout = 3000;
     }
+    var t = element.attr('title');
+    element.attr('title', '');
     element.popover({
         html: true,
         content: error_message,
         placement: 'auto bottom'
     });
     element.popover('show');
-    setTimeout(function(){element.popover('destroy');}, timeout);
+    setTimeout(function(){element.popover('destroy');element.attr('title', t);}, timeout);
 }
 function mathField(elem)
 {

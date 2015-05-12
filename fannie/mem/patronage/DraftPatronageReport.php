@@ -3,7 +3,7 @@
 
     Copyright 2011 Whole Foods Co-op, Duluth, MN
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -82,6 +82,14 @@ class DraftPatronageReport extends FannieReportPage
         }
 
         return $data;
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            Show the in-progress data used for calculating
+            patronage rebate info for a given year.
+            </p>';
     }
 
 }

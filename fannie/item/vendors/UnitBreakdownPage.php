@@ -3,14 +3,14 @@
 
     Copyright 2014 Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -30,6 +30,9 @@ class UnitBreakdownPage extends FannieRESTfulPage
 {
     protected $title = "Fannie : Vendor Case Breakdowns";
     protected $header = "Vendor Case Breakdowns";
+
+    protected $must_authenticate = true;
+    protected $auth_classes = array('pricechange');
 
     public $description = '[Vendor Case Breakdowns] manages items where the splits a package
         and sells items individually';
@@ -64,6 +67,8 @@ class UnitBreakdownPage extends FannieRESTfulPage
             } elseif (preg_match('/(\d+)\s*\\/\s*(.+)/', $original->size(), $matches)) {
                 $split_factor = $matches[1];
                 $unit_size = $matches[2];
+            } elseif (preg_match('/(\d+)\s*CT/', $original->size(), $matches)) {
+                $split_factor = $matches[1];
             }
             if (!$split_factor) {
                 $this->addOnloadCommand("showBootstrapAlert('#alert-area', 'danger', 'Vendor SKU #" . $original->size() . " cannot be broken down');\n");
@@ -87,6 +92,8 @@ class UnitBreakdownPage extends FannieRESTfulPage
                 if ($product->load() && $product->default_vendor_id() == $this->id) {
                     $product->cost($original->cost());
                     $product->save();
+                    $original->description($product->description());
+                    $original->save();
                 }
             } else {
                 $this->addOnloadCommand("showBootstrapAlert('#alert-area', 'success', 'Error saving vendor SKU #" . $obj->sku() . "');\n");
@@ -211,6 +218,8 @@ class UnitBreakdownPage extends FannieRESTfulPage
             <input type="hidden" name="id" value="' . $this->id . '" />
             &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
             <a href="?id=' . $this->id . '&break=1" class="btn btn-default">Run Breakdowns</a>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+            <a href="VendorIndexPage.php?vid=' . $this->id . '" class="btn btn-default">Home</a>
             </div>
             </form>';
 
@@ -266,6 +275,20 @@ class UnitBreakdownPage extends FannieRESTfulPage
                     cursor: pointer;
                 }
             ';
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            Breakdowns are individual item entries in
+            a vendor catalog that turn into multiple products
+            that the store sells. The cannonical example is a
+            soda purchased in a 6-pack from the vendor but sold
+            as both 6-packs as well as singles. Running breakdowns
+            will generate additional products from vendor items
+            and calculate their costs based on the original
+            items\' unit size.
+            </p>';
     }
 }
 

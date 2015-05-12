@@ -3,14 +3,14 @@
 
     Copyright 2014 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -49,6 +49,10 @@ class SiteMap extends FannieRESTfulPage
             'plugin' => 0,
             'plugin_done' => 0,
         );
+        $help = array(
+            'done' => 0,
+            'total' => 0,
+        );
         foreach ($pages as $p) {
             $obj = new $p();
             if (!$obj->discoverable) {
@@ -62,7 +66,7 @@ class SiteMap extends FannieRESTfulPage
             $sets[$obj->page_set][$p] = array(
                'url' => $url,
                'info' => $obj->description, 
-               'class' => $obj->themed ? 'alert-success' : 'alert-danger',
+               'themed' => $obj->themed ? 'alert-success' : 'alert-danger',
             );
             $theme_stats['total']++;
             if ($obj->themed) {
@@ -74,6 +78,13 @@ class SiteMap extends FannieRESTfulPage
                     $theme_stats['plugin_done']++;
                 }
             }
+            $help['total']++;
+            if ($obj->helpContent() && substr($obj->helpContent(),0,17) != '<!-- need doc -->') {
+                $help['done']++;
+                $sets[$obj->page_set][$p]['help'] = 'alert-success';
+            } else {
+                $sets[$obj->page_set][$p]['help'] = 'alert-danger';
+            }
         }
 
         $ret = '';
@@ -82,6 +93,8 @@ class SiteMap extends FannieRESTfulPage
             ((float)$theme_stats['done']) / $theme_stats['total'] * 100);
         $ret .= sprintf('Excluding plugins: <strong>%.2f%%</strong><br />', 
             ((float)($theme_stats['done']-$theme_stats['plugin_done'])) / ($theme_stats['total'] - $theme_stats['plugin']) * 100);
+        $ret .= sprintf('New UI help content percent: <strong>%.2f%%</strong><br />', 
+            ((float)$help['done']) / $help['total'] * 100);
         $ret .= '</div>';
 
         $keys = array_keys($sets);
@@ -99,8 +112,10 @@ class SiteMap extends FannieRESTfulPage
                 if ($linked === $description) {
                     $linked .= ' (<a href="' . $url . '">Link</a>)';
                 }
-                $ret .= '<li class="' . $sets[$set_name][$page_key]['class'] . '">' 
-                    . $linked . '</li>';
+                $ret .= sprintf('<li>%s <span class="%s">Themed</span> <span class="%s">Help</span></li>',
+                    $linked,
+                    $sets[$set_name][$page_key]['themed'],
+                    $sets[$set_name][$page_key]['help']);
             }
             $ret .= '</ul>';
             $ret .= '</li>';

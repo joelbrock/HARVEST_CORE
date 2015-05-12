@@ -3,14 +3,14 @@
 
     Copyright 2013 Whole Foods Community Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -336,8 +336,29 @@ class ItemEditorPage extends FanniePage
         $ws = $FANNIE_URL . 'ws/';
 
         $authorized = false;
+        $super_dept_limit = false;
         if (FannieAuth::validateUserQuiet('pricechange') || FannieAuth::validateUserQuiet('audited_pricechange')) {
             $authorized = true;
+        } elseif (($range=FannieAuth::validateUserLimited('pricechange')) !== false) {
+            /**
+              Check if user is authorized to edit a subset of items
+            */
+            if ($isNew) {
+                $authorized = true;
+            } else {
+                $this->connection->selectDB($this->config->OP_DB);
+                $prep = $this->connection->prepare("
+                    SELECT upc
+                    FROM products AS p
+                        INNER JOIN superdepts AS s ON p.department=s.dept_ID
+                    WHERE p.upc=?
+                        AND s.superID BETWEEN ? AND ?");
+                $args = array(BarcodeLib::padUPC($upc), $range[0], $range[1]);
+                $result = $this->connection->execute($prep, $args);
+                if ($result && $this->connection->numRows($result) > 0) {
+                    $authorized = true;
+                }
+            }
         }
 
         // remove action so form cannot be submitted by pressing enter
@@ -418,6 +439,8 @@ class ItemEditorPage extends FanniePage
         if (isset($shown['BaseItemModule'])) {
             $this->add_onload_command("bindAutoComplete('#brand-field', '$ws', 'brand');\n");
             $this->add_onload_command("bindAutoComplete('#vendor_field', '$ws', 'vendor');\n");
+            $this->add_onload_command("bindAutoComplete('#unit-of-measure', '$ws', 'unit');\n");
+            $this->add_onload_command("\$('#unit-of-measure').autocomplete('option', 'minLength', 1);\n");
             $this->add_onload_command("addVendorDialog();\n");
         }
 
@@ -443,7 +466,7 @@ class ItemEditorPage extends FanniePage
             $ret .= "\n</script>\n";
         }
 
-        $this->add_onload_command('$(\'.fancyboxLink\').fancybox({\'width\':\'85%;\'});');
+        $this->add_onload_command('$(\'.fancyboxLink\').fancybox({\'width\':\'85%;\',\'titlePosition\':\'inside\'});');
         $this->add_onload_command('$(\'#price\').focus();');
         
         return $ret;
@@ -463,16 +486,22 @@ class ItemEditorPage extends FanniePage
         $audited = false;
         if (FannieAuth::validateUserQuiet('pricechange')) { 
             // validated; nothing to do
-        } else if (FannieAuth::validateUserQuiet('audited_pricechange')) {
+        } elseif (FannieAuth::validateUserQuiet('audited_pricechange')) {
             $audited = true;
+        } elseif (($range=FannieAuth::validateUserLimited('pricechange')) !== false) {
+            // validated for certain departments; nothing to do
         } else {
             // not authorized to make edits
             return '<span style="color:red;">Error: Log in to edit</span>';
         }
 
         uasort($FANNIE_PRODUCT_MODULES, array('ItemEditorPage', 'sortModules'));
+        $form = new \COREPOS\common\mvc\FormValueContainer();
         foreach ($FANNIE_PRODUCT_MODULES as $class => $params) {
             $mod = new $class();
+            $mod->setConnection($this->connection);
+            $mod->setConfig($this->config);
+            $mod->setForm($form);
             $mod->SaveFormData($upc);
         }
 

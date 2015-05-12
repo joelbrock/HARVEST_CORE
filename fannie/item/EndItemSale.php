@@ -3,7 +3,7 @@
 
     Copyright 2013 Whole Foods Co-op, Duluth, MN
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -98,6 +98,16 @@ class EndItemSale extends FannieRESTfulPage {
         $ret .= '</p>';
 
         return $ret;
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            Immediately take an item off sale. Changes will
+            be pushed out to the lanes. If CORE can determine
+            which sale batch the item is in, it will also be
+            removed from that batch.
+            </p>';
     }
 
 }

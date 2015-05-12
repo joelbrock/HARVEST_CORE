@@ -3,14 +3,14 @@
 
     Copyright 2013 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -31,6 +31,7 @@ class DeptTransactionsReport extends FannieReportPage
     public $description = '[Department Transactions] lists the number of transactions in a department
         or departments over a given date range.';
     public $themed = true;
+    public $report_set = 'Transaction Reports';
 
     protected $report_headers = array('Date', '# Matching Trans', '# Total Trans', '%');
 
@@ -121,6 +122,14 @@ class DeptTransactionsReport extends FannieReportPage
         $form = FormLib::dateAndDepartmentForm($d_list, $s_list);
 
         return $form;
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            Lists number of transactions in a department or set of
+            departments over a given date range.
+            </p>';
     }
 }
 

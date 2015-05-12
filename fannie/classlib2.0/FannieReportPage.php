@@ -3,7 +3,7 @@
 
     Copyright 2012 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -200,6 +200,29 @@ class FannieReportPage extends FanniePage
 
     function bodyContent()
     {
+        $plugins = $this->config->get('PLUGIN_LIST');
+        if (is_array($plugins) && in_array('CoreWarehouse', $plugins)) {
+            $reflector = new ReflectionClass($this);
+            $source = \COREPOS\Fannie\Plugin\CoreWarehouse\CwReportDataSource::getDataSource($reflector->getName());
+            if ($source !== false) {
+                $source_select = '
+                    <div class="col-sm-12" id="data-source-fields">
+                        <div class="form-group">
+                            <label>Data Source</label> <select name="data-source" class="form-control" id="select-data-source">
+                                <option>Standard</option>
+                                <option>CoreWarehouse</option>
+                            </select>
+                        </div>';
+                foreach ($source->additionalFields($reflector->getName()) as $field) {
+                    $source_select .= '<div class="form-group">' . $field->toHTML() . '</div>';
+                }
+                $source_select .= '</div>';
+                $source_select = preg_replace('/\s\s+/', '', $source_select);
+                $this->addOnloadCommand("\$('#primary-content form').prepend('$source_select');\n");
+                $this->addOnloadCommand("\$('#primary-content .cw-field').attr('disabled', true);\n");
+                $this->addOnloadCommand("\$('#select-data-source').change(function(){ if ($(this).val()=='CoreWarehouse') { $('#primary-content .cw-field').attr('disabled', false); } else { $('#primary-content .cw-field').attr('disabled', true); } });\n");
+            }
+        }
         return $this->form_content();
     }
 
@@ -234,7 +257,27 @@ class FannieReportPage extends FanniePage
                 $this->freshenCache($data);
             }
         } else {
-            $data = $this->fetch_report_data();
+            /**
+              Use CoreWarehouse data source if requested & available
+              Fail back to FannieReportPage::fetch_report_data()
+              if a data source cannot be found or data source fails
+              to handle the request
+            */
+            $plugins = $this->config->get('PLUGIN_LIST');
+            if (FormLib::get('data-source') === 'CoreWarehouse' && is_array($plugins) && in_array('CoreWarehouse', $plugins)) {
+                $reflector = new ReflectionClass($this);
+                $source = \COREPOS\Fannie\Plugin\CoreWarehouse\CwReportDataSource::getDataSource($reflector->getName());
+                if ($source != false) {
+                    $data = $source->fetchReportData($reflector->getName(), $this->config, $this->connection);
+                    if ($data === false) {
+                        $data = $this->fetch_report_data();
+                    }
+                } else {
+                    $data = $this->fetch_report_data();
+                }
+            } else {
+                $data = $this->fetch_report_data();
+            }
             $this->freshenCache($data);
         }
         $output = '';
@@ -410,6 +453,9 @@ class FannieReportPage extends FanniePage
     */
     protected function checkDataCache()
     {
+        if (isset($_REQUEST['no-cache']) && $_REQUEST['no-cache'] === '1') {
+            return false;
+        }
         $archive_db = $this->config->get('ARCHIVE_DB');
         $dbc = FannieDB::get($archive_db);
         if ($this->report_cache != 'day' && $this->report_cache != 'month') {
@@ -447,8 +493,12 @@ class FannieReportPage extends FanniePage
         }
         $table = $archive_db . $dbc->sep() . "reportDataCache";
         $hash = $_SERVER['REQUEST_URI'];
-        $hash = str_replace("&excel=xls","",$hash);
-        $hash = str_replace("&excel=csv","",$hash);
+        $hash = str_replace("excel=xls","",$hash);
+        $hash = str_replace("excel=csv","",$hash);
+        $hash = str_replace("no-cache=1","",$hash);
+        if (substr($hash, -1) == '?') {
+            $hash = substr($hash, 0, strlen($hash)-1);
+        }
         $hash = md5($hash);
         $expires = '';
         if ($this->report_cache == 'day') {
@@ -560,6 +610,7 @@ class FannieReportPage extends FanniePage
                             'content="text/html; charset=iso-8859-1">' .
                         '</head><body>';
                     }
+                    $ret .= '<div id="pre-report-content">';
                     /**
                       Detect PEAR and only offer XLS if
                       the system is capable.
@@ -590,12 +641,13 @@ class FannieReportPage extends FanniePage
                     foreach ($this->report_description_content() as $line) {
                         $ret .= (substr($line,0,1)=='<'?'':'<br />').$line;
                     }
+                    $ret .= '</div>';
                 }
                 if ($this->sortable || $this->no_sort_but_style) {
                     $ret .= '<table class="mySortableTable tablesorter">';
                 } else {
                     $ret .= '<table class="mySortableTable" cellspacing="0" 
-                        cellpadding="4" border="0">' . "\n";
+                        cellpadding="4" border="1">' . "\n";
                 }
                 break;
             case 'csv':
@@ -807,15 +859,6 @@ class FannieReportPage extends FanniePage
                 $row[] = null;
             }
         }
-        if (($meta & self::META_REPEAT_HEADERS) != 0) {
-            $ret = "</tbody>\n<tbody>\n\t<tr>\n";
-            $tag = 'th';
-            $row = array();
-            $header1 = $this->select_headers(True);
-            foreach($header1 as $h) {
-                $row[] = $h;
-            }
-        }
         $color_styles = '';
         if (($meta & self::META_COLOR) != 0) {
             if (isset($row['meta_background'])) {
@@ -825,6 +868,15 @@ class FannieReportPage extends FanniePage
             if (isset($row['meta_foreground'])) {
                 $color_styles .= 'color:' . $row['meta_foreground'] . ';';
                 unset($row['meta_foreground']);
+            }
+        }
+        if (($meta & self::META_REPEAT_HEADERS) != 0) {
+            $ret = "</tbody>\n<tbody>\n\t<tr>\n";
+            $tag = 'th';
+            $row = array();
+            $header1 = $this->select_headers(True);
+            foreach($header1 as $h) {
+                $row[] = $h;
             }
         }
 

@@ -3,7 +3,7 @@
 
     Copyright 2010,2013 Whole Foods Co-op, Duluth, MN
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -30,6 +30,9 @@ class PatronageTransferTool extends FanniePage {
 
     protected $title='Fannie - Member Management Module';
     protected $header='Transfer Patronage';
+
+    protected $must_authenticate = true;
+    protected $auth_classes =  array('editmembers');
 
     public $description = '[Transfer Patronage] shifts an entire transaction from one member
     to another.';
@@ -112,12 +115,14 @@ class PatronageTransferTool extends FanniePage {
                     ."<a href=\"\" onclick=\"back(); return false;\">Back</a>";
                 return True;
             }
-            $this->cn1 = array_pop($dbc->fetch_row($r));
+            $w = $dbc->fetchRow($r);
+            $this->cn1 = is_array($w) ? $w[0] : 0;
 
             $q = $dbc->prepare_statement("SELECT SUM(CASE WHEN trans_type in ('I','M','D') then total else 0 END)
                 FROM $dlog WHERE trans_num=? AND tdate BETWEEN ? AND ?");
             $r = $dbc->exec_statement($q,array($this->tn,$this->date.' 00:00:00',$this->date.' 23:59:59'));
-            $this->amt = array_pop($dbc->fetch_row($r));
+            $w = $dbc->fetchRow($r);
+            $this->amt = is_array($w) ? $w[0] : 0;
         }
 
         return True;
@@ -144,6 +149,12 @@ class PatronageTransferTool extends FanniePage {
         $ret .= sprintf("\$%.2f will be moved from %d to %d (%s)",
             $this->amt,$this->cn1,$this->cn2,$this->name2);
         $ret .= "</div><p>";
+        $ret .= sprintf('<div class="form-group">
+            <label>Comment</label>
+            <input type="text" class="form-control" 
+                name="correction-comment" value="PAT XFER %d TO %d" />
+            </div>',
+            $this->cn1, $this->cn2);
         $ret .= "<input type=\"hidden\" name=\"date\" value=\"{$this->date}\" />";
         $ret .= "<input type=\"hidden\" name=\"trans_num\" value=\"{$this->tn}\" />";
         $ret .= "<input type=\"hidden\" name=\"memTo\" value=\"{$this->cn2}\" />";
@@ -166,12 +177,21 @@ class PatronageTransferTool extends FanniePage {
         $dtrans['trans_no'] = $this->getTransNo($this->CORRECTION_CASHIER,$this->CORRECTION_LANE);
         $dtrans['trans_id'] = 1;
         $this->doInsert($dtrans,-1*$this->amt,$this->CORRECTION_DEPT,$this->cn1);
+        $comment = FormLib::get('correction-comment');
+        if (!empty($comment)) {
+            $dtrans['trans_id'] = 2;
+            $this->doComment($dtrans, $comment, $this->cn1);
+        }
 
         $ret .= sprintf("Receipt #1: %s",$this->CORRECTION_CASHIER.'-'.$this->CORRECTION_LANE.'-'.$dtrans['trans_no']);
 
         $dtrans['trans_no'] = $this->getTransNo($this->CORRECTION_CASHIER,$this->CORRECTION_LANE);
         $dtrans['trans_id'] = 1;
         $this->doInsert($dtrans,$this->amt,$this->CORRECTION_DEPT,$this->cn2);
+        if (!empty($comment)) {
+            $dtrans['trans_id'] = 2;
+            $this->doComment($dtrans, $comment, $this->cn2);
+        }
 
         $ret .= "<br /><br />";
         $ret .= sprintf("Receipt #2: %s",$this->CORRECTION_CASHIER.'-'.$this->CORRECTION_LANE.'-'.$dtrans['trans_no']);
@@ -220,8 +240,8 @@ class PatronageTransferTool extends FanniePage {
         $dbc = FannieDB::get($FANNIE_TRANS_DB);
         $q = $dbc->prepare_statement("SELECT max(trans_no) FROM dtransactions WHERE register_no=? AND emp_no=?");
         $r = $dbc->exec_statement($q,array($register,$emp));
-        $n = array_pop($dbc->fetch_row($r));
-        return (empty($n)?1:$n+1);  
+        $w = $dbc->fetchRow($r);
+        return is_array($w) ? $w[0]+1 : 1;
     }
 
     function doInsert($dtrans,$amount,$department,$cardno){
@@ -309,6 +329,88 @@ class PatronageTransferTool extends FanniePage {
         $values = substr($values,0,strlen($values)-1);
         $prep = $dbc->prepare_statement("INSERT INTO dtransactions ($columns) VALUES ($values)");
         $dbc->exec_statement($prep, $args);
+    }
+
+    private function doComment($dtrans, $comment, $cardno)
+    {
+        global $FANNIE_OP_DB, $FANNIE_TRANS_DB;
+        $dbc = FannieDB::get($FANNIE_TRANS_DB);
+        $OP = $FANNIE_OP_DB.$dbc->sep();
+
+        $defaults = array(
+            'register_no'=>$this->CORRECTION_LANE,
+            'emp_no'=>$this->CORRECTION_CASHIER,
+            'trans_no'=>$dtrans['trans_no'],
+            'upc'=>'0',
+            'description'=>$comment,
+            'trans_type'=>'C',
+            'trans_subtype'=>'CM',
+            'trans_status'=>'',
+            'department'=>'',
+            'quantity'=>0,
+            'scale'=>0,
+            'cost'=>0,
+            'unitPrice'=>'',
+            'total'=>'',
+            'regPrice'=>'',
+            'tax'=>0,
+            'foodstamp'=>0,
+            'discount'=>0,
+            'memDiscount'=>0,
+            'discountable'=>0,
+            'discounttype'=>0,
+            'voided'=>0,
+            'percentDiscount'=>0,
+            'ItemQtty'=>0,
+            'volDiscType'=>0,
+            'volume'=>0,
+            'volSpecial'=>0,
+            'mixMatch'=>'',
+            'matched'=>0,
+            'memType'=>'',
+            'staff'=>'',
+            'numflag'=>0,
+            'charflag'=>'',
+            'card_no'=>$cardno,
+            'trans_id'=>$dtrans['trans_id']
+        );
+
+        $q = $dbc->prepare_statement("SELECT memType,Staff FROM {$OP}custdata WHERE CardNo=?");
+        $r = $dbc->exec_statement($q,array($cardno));
+        $w = $dbc->fetch_row($r);
+        $defaults['memType'] = $w[0];
+        $defaults['staff'] = $w[1];
+
+        $columns = 'datetime,';
+        $values = $dbc->now().',';
+        $args = array();
+        foreach($defaults as $k=>$v){
+            $columns .= $k.',';
+            $values .= '?,';
+            $args[] = $v;
+        }
+        $columns = substr($columns,0,strlen($columns)-1);
+        $values = substr($values,0,strlen($values)-1);
+        $prep = $dbc->prepare_statement("INSERT INTO dtransactions ($columns) VALUES ($values)");
+        $dbc->exec_statement($prep, $args);
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            Transfer patronage from one member to another. This
+            is for corrections where the wrong member number was
+            applied to a given transaction. The transfer happens
+            as a lump sum rather than shifting invidual receipt lines
+            from one member to another. Generally this is fine
+            but transactions including equity or AR activity need
+            additional corrections to account for those specific
+            receipt lines.
+            </p>
+            <p>
+            The amount transferred does not include taxes or discounts;
+            just the total of the products on the receipt.
+            </p>';
     }
 }
 

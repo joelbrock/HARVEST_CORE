@@ -3,14 +3,14 @@
 
     Copyright 2009,2013 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -40,6 +40,9 @@ class VendorIndexPage extends FanniePage {
     protected $title = "Fannie : Manage Vendors";
     protected $header = "Manage Vendors";
 
+    protected $must_authenticate = true;
+    protected $auth_classes = array('pricechange');
+
     public $themed = true;
 
     public $description = '[Vendor Editor] creates or update information about vendors.';
@@ -68,7 +71,7 @@ class VendorIndexPage extends FanniePage {
     function ajax_callbacks($action)
     {
         global $FANNIE_OP_DB;
-        switch($action){
+        switch ($action) {
         case 'vendorDisplay':
             $this->getVendorInfo(FormLib::get_form_value('vid',0)); 
             break;
@@ -118,7 +121,6 @@ class VendorIndexPage extends FanniePage {
             $dbc = FannieDB::get($FANNIE_OP_DB);
             $vModel = new VendorsModel($dbc);
             $vModel->vendorID($id);
-            $vModel->shippingMarkup(FormLib::get('shipping', 0) / 100.00);
             $vModel->phone(FormLib::get_form_value('phone'));
             $vModel->fax(FormLib::get_form_value('fax'));
             $vModel->email(FormLib::get_form_value('email'));
@@ -141,6 +143,39 @@ class VendorIndexPage extends FanniePage {
             } else {
                 $ret['msg'] = 'Error saving vendor information';
                 $ret['error'] = 1;
+            }
+            echo json_encode($ret);
+            break;
+        case 'saveShipping':
+            $id = FormLib::get('id','');
+            $ret = array('error'=>0);
+            if ($id === ''){
+                $ret['error'] = 'Bad request';
+            } else {
+                $dbc = FannieDB::get($FANNIE_OP_DB);
+                $vModel = new VendorsModel($dbc);
+                $vModel->vendorID($id);
+                $vModel->shippingMarkup(FormLib::get('shipping') / 100.00);
+                if (!$vModel->save()) {
+                    $ret['error'] = 'Save failed!';
+                }
+            }
+            echo json_encode($ret);
+            break;
+        case 'saveDiscountRate':
+            $id = FormLib::get('id','');
+            $ret = array('error'=>0);
+            if ($id === ''){
+                $ret['error'] = 'Bad request';
+            } else {
+                $dbc = $this->connection;
+                $dbc->setDefaultDB($this->config->OP_DB);
+                $vModel = new VendorsModel($dbc);
+                $vModel->vendorID($id);
+                $vModel->discountRate(FormLib::get('rate') / 100.00);
+                if (!$vModel->save()) {
+                    $ret['error'] = 'Save failed!';
+                }
             }
             echo json_encode($ret);
             break;
@@ -213,12 +248,17 @@ class VendorIndexPage extends FanniePage {
         if ($itemR && $row = $dbc->fetch_row($itemR)) {
             $num = $row[0];
         }
-        $ret .= '<p>';
-        if ($num == 0)
-            $ret .= "This vendor contains 0 items";
-        else {
-            $ret .= "This vendor contains $num items";
-            $ret .= "<br />";
+
+        $ret .= '
+            <div class="row">
+                <div class="container-fluid col-sm-3">';
+
+        $ret .= '
+            <div class="panel panel-default">
+                <div class="panel-heading">Catalog</div>
+                <div class="panel-body">
+                This vendor contains ' . $num . ' items<br />';
+        if ($num > 0) {
             $ret .= "<a href=\"BrowseVendorItems.php?vid=$id\">Browse vendor catalog</a>";  
             if ($num <= 750) {
                 $ret .= "<br />";
@@ -229,68 +269,97 @@ class VendorIndexPage extends FanniePage {
         $ret .= "<a href=\"DefaultUploadPage.php?vid=$id\">Upload new vendor catalog</a>";
         $ret .= "<br />";
         $ret .= "<a href=\"VendorIndexPage.php?vid=$id&autoAdd=1\">Add existing items to catalog</a>";
-        $ret .= "<br />";
+        $ret .= '</div></div>';
+
+        $ret .= '</div><div class="container-fluid col-sm-3">';
+
+        $ret .= '
+            <div class="panel panel-default">
+                <div class="panel-heading">Mappings</div>
+                <div class="panel-body">';
         $ret .= "<a href=\"UploadPluMapPage.php?vid=$id\">Upload PLU/SKU mapping</a>";
         $ret .= "<br />";
         $ret .= "<a href=\"SkuMapPage.php?id=$id\">View or Edit PLU/SKU mapping</a>";
         $ret .= "<br />";
         $ret .= "<a href=\"UnitBreakdownPage.php?id=$id\">View or Edit Breakdown mapping</a>";
-        $ret .= "</p>";
+        $ret .= '</div></div>';
 
-        $itemQ = $dbc->prepare_statement("SELECT COUNT(*) FROM vendorDepartments WHERE vendorID=?");
-        $itemR = $dbc->exec_statement($itemQ,array($id));
+        $ret .= '</div><div class="container-fluid col-sm-3">';
+
+        $ret .= '
+            <div class="panel panel-default">
+                <div class="panel-heading">Margin</div>
+                <div class="panel-body">';
+
+        $itemQ = $dbc->prepare("SELECT COUNT(*) FROM vendorDepartments WHERE vendorID=?");
+        $itemR = $dbc->execute($itemQ,array($id));
         $num = 0;
         if ($itemR && $row = $dbc->fetch_row($itemR)) {
             $num = $row[0];
         }
         $ret .= '<p>';
-        if ($num == 0)
+        if ($num == 0) {
             $ret .= "<a href=\"VendorDepartmentEditor.php?vid=$id\">This vendor's items are not yet arranged into departments</a>";
-        else {
+        } else {
             $ret .= "This vendor's items are divided into ";
             $ret .= $num." departments";
             $ret .= "<br />";
-            $ret .= "<a href=\"VendorDepartmentEditor.php?vid=$id\">Display/Edit vendor departments</a>";
+            $ret .= "<a href=\"VendorDepartmentEditor.php?vid=$id\">View or Edit vendor-specific margin(s)</a>";
         }
         $ret .= '</p>';
-
-        $vcModel = new VendorContactModel($dbc);
-        $vcModel->vendorID($id);
-        $vcModel->load();
-        $ret .= '<p><div class="form-alerts"></div>';
-        $ret .= '<form role="form" class="form-horizontal" onsubmit="saveVC(' . $id . '); return false;" id="vcForm">';
-        $ret .= '<div class="form-group">
-            <label for="vc-shipping" class="control-label col-sm-1">Shipping Markup</label>
-            <div class="col-sm-10">
+        $ret .= '
+            <div class="form-group">
                 <div class="input-group">
+                    <span class="input-group-addon">Shipping</span>
                     <input type="text" id="vc-shipping" name="shipping" 
+                        onchange="saveShipping(this.value);"
+                        title="Markup percentage to account for shipping fees"
                         class="form-control" value="' . $model->shippingMarkup() * 100 . '" />
                     <span class="input-group-addon">%</span>
                 </div>
             </div>
-        </div>';
+            <div class="form-group">
+                <div class="input-group">
+                    <span class="input-group-addon">Discount Rate</span>
+                    <input type="text" id="vc-discount" name="discount-rate" 
+                        title="Markdown percentage from catalog list costs"
+                        onchange="saveDiscountRate(this.value);"
+                        class="form-control" value="' . $model->discountRate() * 100 . '" />
+                    <span class="input-group-addon">%</span>
+                </div>
+            </div>';
+        $ret .= '</div></div>';
+
+        $ret .= '</div></div>';
+
+        $ret .= '
+            <div class="panel panel-default">
+                <div class="panel-heading">Contact Info</div>
+                <div class="panel-body">
+                    <div class="form-alerts"></div>';
+        $ret .= '<form role="form" class="form-horizontal" onsubmit="saveVC(' . $id . '); return false;" id="vcForm">';
         $ret .= '<div class="form-group">
             <label for="vcPhone" class="control-label col-sm-1">Phone</label>
             <div class="col-sm-10">
-            <input type="tel" class="form-control" id="vcPhone" name="phone" value="' . $vcModel->phone() . '" />
+            <input type="tel" class="form-control" id="vcPhone" name="phone" value="' . $model->phone() . '" />
             </div>
             </div>';
         $ret .= '<div class="form-group">
             <label for="vcFax" class="control-label col-sm-1">Fax</label>
             <div class="col-sm-10">
-            <input type="text" id="vcFax" class="form-control" name="fax" value="' . $vcModel->fax() . '" />
+            <input type="text" id="vcFax" class="form-control" name="fax" value="' . $model->fax() . '" />
             </div>
             </div>';
         $ret .= '<div class="form-group">
             <label for="vcEmail" class="control-label col-sm-1">Email</label>
             <div class="col-sm-10">
-            <input type="text" class="form-control" id="vcEmail" name="email" value="' . $vcModel->email() . '" />
+            <input type="text" class="form-control" id="vcEmail" name="email" value="' . $model->email() . '" />
             </div>
             </div>';
         $ret .= '<div class="form-group">
             <label for="vcWebsite" class="control-label col-sm-1">Website</label>
             <div class="col-sm-10">
-            <input type="text" class="form-control" id="vcWebsite" name="website" value="' . $vcModel->website() . '" />
+            <input type="text" class="form-control" id="vcWebsite" name="website" value="' . $model->website() . '" />
             </div>
             </div>';
         $ret .= '<div class="form-group">
@@ -311,11 +380,12 @@ class VendorIndexPage extends FanniePage {
         $ret .= '<div class="form-group">
             <label for="vcNotes" class="control-label col-sm-1">Ordering Notes</label>
             <div class="col-sm-10">
-            <textarea class="form-control" rows="5" id="vcNotes">' . $vcModel->notes() . '</textarea>
+            <textarea class="form-control" rows="5" id="vcNotes">' . $model->notes() . '</textarea>
             </div>
             </div>';
-        $ret .= '<button type="submit" class="btn btn-default">Save Vendor Info</button>';
-        $ret .= '</form></p>';
+        $ret .= '<button type="submit" class="btn btn-default">Save Vendor Contact Info</button>';
+        $ret .= '</form>';
+        $ret .= '</div></div>';
 
         $delivery = new VendorDeliveriesModel($dbc);
         $delivery->vendorID($id);
@@ -359,6 +429,7 @@ class VendorIndexPage extends FanniePage {
         $model = new VendorsModel($dbc);
         $model->vendorID($id);
         $model->vendorName($name);
+        $model->vendorAbbreviation(substr($name, 0, 10));
         $model->save();
 
         echo $id;
@@ -382,16 +453,16 @@ class VendorIndexPage extends FanniePage {
         ob_start();
         ?>
         <p id="vendorarea">
-        <select onchange="vendorchange();" id=vendorselect class="form-control">
+        <select onchange="location='?vid='+this.value;" id=vendorselect class="form-control">
         <?php echo $vendors; ?>
         </select>
         </p>
         <p id="contentarea">
+        <?php if ($vid) { echo $this->getVendorInfo($vid); } ?>
         </p>
         <?php
 
         $this->add_script('index.js');
-        $this->add_onload_command('vendorchange();');
 
         return ob_get_clean();
     }

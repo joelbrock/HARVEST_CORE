@@ -3,7 +3,7 @@
 
     Copyright 2010 Whole Foods Co-op, Duluth, MN
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -279,7 +279,6 @@ class ContactInfo extends \COREPOS\Fannie\API\member\MemberModule {
 
         $ret = array();
         if (!empty($where)){
-            echo $where;
             $q = $dbc->prepare_statement("SELECT CardNo,FirstName,LastName FROM
                 custdata as c LEFT JOIN meminfo AS m
                 ON c.CardNo = m.card_no

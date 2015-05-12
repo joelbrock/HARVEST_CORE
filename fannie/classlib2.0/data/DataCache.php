@@ -3,7 +3,7 @@
 
     Copyright 2013 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -46,6 +46,7 @@ class DataCache
         $hash = isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : $_SERVER['PHP_SELF'];
         $hash = str_replace("&excel=xls", "", $hash);
         $hash = str_replace("&excel=csv", "", $hash);
+        $hash = str_replace("&no-cache=1", "", $hash);
         $hash = md5($hash);
 
         return $hash;

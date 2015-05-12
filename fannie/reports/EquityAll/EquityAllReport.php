@@ -3,14 +3,14 @@
 
     Copyright 2013 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -130,6 +130,15 @@ class EquityAllReport extends FannieReportPage
         <?php
         return ob_get_clean();
 
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            List equity balances for members or a subset of members.
+            Pulling live data is a bit slower than pulling
+            as-of-yesterday data.
+            </p>';
     }
 
 }

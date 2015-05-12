@@ -3,14 +3,14 @@
 
     Copyright 2014 Whole Foods Community Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -51,17 +51,7 @@ class ItemStatusPage extends FannieRESTfulPage
         $product = new ProductsModel($dbc);
         $product->upc($upc);
         $product->load();
-
-        $vendor = new VendorsModel($dbc);
-        $vendor->vendorID($product->default_vendor_id());
-        $vendor->load();
-
-        $vitem = new VendorItemsModel($dbc);
-        $vitem->upc($upc);
-        $vitem->vendorID($vendor->vendorID());
-        if (count($vitem->find()) > 0) {
-            $vitem = array_pop($vitem->find());
-        }
+        $info = $product->getTagData();
 
         $tag = new ShelftagsModel($dbc);
         $tag->upc($this->upc);
@@ -72,20 +62,14 @@ class ItemStatusPage extends FannieRESTfulPage
         }
 
         $tag->id($this->ID);
-        $tag->description($product->description());
-        $tag->brand($product->brand());
-        $tag->normal_price($product->normal_price());
-        $tag->sku($vitem->sku());
-        $size = $vitem->size();
-        if ($size == '' && $product->size() != '') {
-            $size = $product->size();
-            if ($product->unitofmeasure() != '') {
-                $size .= ' ' . $product->unitofmeasure();
-            }
-        }
-        $tag->units($vitem->units());
-        $tag->vendor($vendor->vendorName());
-        $tag->pricePerUnit(\COREPOS\Fannie\API\lib\PriceLib::pricePerUnit($product->normal_price(), $size));
+        $tag->description($info['description']);
+        $tag->brand($info['brand']);
+        $tag->normal_price($info['normal_price']);
+        $tag->sku($info['sku']);
+        $tag->size($info['size']);
+        $tag->units($info['units']);
+        $tag->vendor($info['vendor']);
+        $tag->pricePerUnit($info['pricePerUnit']);
         $tag->save();
 
         header('Location: ' . $_SERVER['PHP_SELF'] . '?id=' . $this->upc);
@@ -180,12 +164,16 @@ class ItemStatusPage extends FannieRESTfulPage
         $tags = new ShelftagsModel($dbc);
         $tags->upc($upc);
         $queued = $tags->find('id');
-        $masters = new SuperDeptNamesModel($dbc);
+        $queues = new ShelfTagQueuesModel($dbc);
         $verb = 'Queue';
         if (count($queued) > 0) {
-            $masters->superID($queued[0]->id());
-            $masters->load();
-            $ret .= 'Tags queued for ' . $masters->super_name();
+            if ($tags->id() == 0) {
+                $ret .= 'Tags queued for Default';
+            } else {
+                $queues->shelfTagQueueID($tags->id());
+                $queues->load();
+                $ret .= 'Tags queued for ' . $queues->description();
+            }
             $verb = 'Requeue';
         } else {
             $ret .= 'No tags queued';
@@ -193,12 +181,7 @@ class ItemStatusPage extends FannieRESTfulPage
         $ret .= '<input type="hidden" name="upc" value="' . $upc . '" />
             <button class="btn btn-default" type="submit">' . $verb . ' Tags</button>
             for <select name="tagID" class="form-control">';
-        $masters->reset();
-        foreach ($masters->find('super_name') as $m) {
-            $ret .= sprintf('<option %s value="%d">%s</option>',
-                ($m->superID() == $master ? 'selected' : ''),
-                $m->superID(), $m->super_name());
-        }
+        $ret .= $queues->toOptions($master);
         $ret .= '</select></form></p>';
 
         if (FannieAuth::validateUserQuiet('pricechange') || FannieAuth::validateUserQuiet('audited_pricechange')) {
@@ -223,6 +206,18 @@ class ItemStatusPage extends FannieRESTfulPage
                 <button type="submit" class="btn btn-default">Check Item</button>
             </div>
             </form>';
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            The status check shows a brief summary of
+            a product\'s information in POS. It can be used
+            to verify pricing and queue up new shelf tags.
+            This particular page should scale to a mobile
+            device where as the full item editor often
+            does not fit well on small screens.
+            </p>';
     }
 }
 

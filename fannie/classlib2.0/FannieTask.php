@@ -3,7 +3,7 @@
 
     Copyright 2013 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
     IT CORE is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -182,6 +182,8 @@ if (php_sapi_name() === 'cli' && basename($_SERVER['PHP_SELF']) == basename(__FI
 
     $config = FannieConfig::factory();
     $logger = new FannieLogger();
+    FannieDispatch::setLogger($logger);
+    FannieDispatch::setErrorHandlers();
 
     // prepopulate autoloader
     $preload = FannieAPI::listModules('FannieTask');

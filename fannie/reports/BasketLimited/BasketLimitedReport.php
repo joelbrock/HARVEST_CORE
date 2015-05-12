@@ -3,14 +3,14 @@
 
     Copyright 2013 Whole Foods Co-op
 
-    This file is part of Fannie.
+    This file is part of CORE-POS.
 
-    Fannie is free software; you can redistribute it and/or modify
+    CORE-POS is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
 
-    Fannie is distributed in the hope that it will be useful,
+    CORE-POS is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
@@ -32,6 +32,7 @@ class BasketLimitedReport extends FannieReportPage
     public $description = '[Small Basket Report] lists sales for transactions containing a limited
     number of items - i.e., what do people buy when they\'re only purchasing one or two things?';
     public $themed = true;
+    public $report_set = 'Transaction Reports';
 
     protected $report_headers = array('UPC', 'Description', '# Trans', 'Qty', '$');
     protected $sort_column = 2;
@@ -146,6 +147,16 @@ class BasketLimitedReport extends FannieReportPage
 <?php
 
         return ob_get_clean();
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            This report shows per-item sales for transactions
+            containing a specific number of items or fewer.
+            Canonically, if customers are buying just a single item,
+            which item(s) are they buying most often?
+            </p>';
     }
 }
 

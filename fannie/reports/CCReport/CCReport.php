@@ -8,6 +8,7 @@ class CCReport extends FannieReportPage
 {
     public $description = '[Integrated Card Detail] lists integrated transactions for a day.';
     public $themed = true;
+    public $report_set = 'Tenders';
     protected $title = 'Integrated Transactions';
     protected $header = 'Integrated Transactions';
     protected $report_headers = array('Date &amp; Time', 'Card', 'Amount', 'Response', 'POS Receipt');
@@ -94,6 +95,16 @@ class CCReport extends FannieReportPage
         }
 
         return $data;
+    }
+
+    public function helpContent()
+    {
+        return '<p>
+            Lists information about integrated card transactions
+            for a given date range. The <strong>Integrated Card
+            Report</strong> is newer and probably better but
+            this has not been retired yet.
+            </p>';
     }
 }
 
