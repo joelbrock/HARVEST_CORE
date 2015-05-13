@@ -25,7 +25,7 @@ if (!class_exists('AutoLoader')) {
     include_once(dirname(__FILE__).'/../lib/AutoLoader.php');
 }
 
-class InstallUtilities extends LibraryClass 
+class InstallUtilities extends LibraryClass
 {
 
     const INI_SETTING   = 1;
@@ -284,7 +284,7 @@ class InstallUtilities extends LibraryClass
         if (file_exists($ini_json)) {
             $save_json = self::jsonConfRemove($key);
         }
-        
+
         if ($save_php === false || $save_json === false) {
             // error occurred saving
             return false;
@@ -368,7 +368,7 @@ class InstallUtilities extends LibraryClass
     /**
       Save value to the parameters table.
     */
-    static public function paramSave($key, $value) 
+    static public function paramSave($key, $value)
     {
         $sql = self::dbTestConnect(
                 CoreLocal::get('localhost'),
@@ -390,7 +390,7 @@ class InstallUtilities extends LibraryClass
             // array with meaningful keys
             $tmp = '';
             foreach($value as $k => $v) {
-                $tmp .= $k.'=>'.$v.','; 
+                $tmp .= $k.'=>'.$v.',';
             }
             $value = substr($tmp, 0, strlen($tmp)-1);
             $save_as_array = 1;
@@ -455,7 +455,7 @@ class InstallUtilities extends LibraryClass
     */
     static public function loadSampleData($sql, $table, $quiet=false)
     {
-        $success = true; 
+        $success = true;
         $loaded = 0;
         ob_start();
         echo "Loading `$table` ";
@@ -721,9 +721,9 @@ class InstallUtilities extends LibraryClass
             */
             if (is_array($default_value)) {
                 if ($quoted) {
-                    $current_value = preg_split('/[\s,;]+/', $current_value); 
+                    $current_value = preg_split('/[\s,;]+/', $current_value);
                 } else {
-                    $current_value = preg_split('/\D+/', $current_value); 
+                    $current_value = preg_split('/\D+/', $current_value);
                 }
             }
         }
@@ -771,7 +771,7 @@ class InstallUtilities extends LibraryClass
         if (is_array($current_value)) {
             $current_value = implode(', ', $current_value);
         }
-        
+
         if ($storage == self::INI_SETTING) {
             $attributes['title'] = 'Stored in ini.php';
         } elseif (self::confExists($name)) {
@@ -800,7 +800,7 @@ class InstallUtilities extends LibraryClass
       Render configuration variable as an <select> tag
       Process any form submissions
       Write configuration variable to config.php
-      
+
       @param $name [string] name of the variable
       @param $options [array] list of options
         This can be a keyed array in which case the keys
@@ -854,7 +854,7 @@ class InstallUtilities extends LibraryClass
         } else if ($is_array && !is_array($current_value)) {
             $current_value = $default_value;
         }
-        
+
         CoreLocal::set($name, $current_value);
         if ($storage == self::INI_SETTING) {
             if (!is_numeric($current_value) && strtolower($current_value) !== 'true' && strtolower($current_value !== 'false')) {
@@ -961,7 +961,7 @@ class InstallUtilities extends LibraryClass
 
         return $ret;
     }
-    
+
     public static function validateConfiguration()
     {
         global $CORE_LOCAL;
@@ -1024,7 +1024,7 @@ class InstallUtilities extends LibraryClass
                 continue;
             }
             if ($p_value !== $i_value) {
-                printf('<p>Setting mismatch for 
+                printf('<p>Setting mismatch for
                     <a href="" onclick=$(this).next.toggle();return false;">%s</a>
                     <span style="display:none;"> parameters says %s, ini.php says %s</span></p>',
                     $param->param_key(), print_r($p_value, true), print_r($i_value, true)
@@ -1096,7 +1096,7 @@ class InstallUtilities extends LibraryClass
             $obj = new $class($db);
             $errors[] = $obj->createIfNeeded($name);
         }
-        
+
         $sample_data = array(
             'couponcodes',
             'globalvalues',
@@ -1127,7 +1127,7 @@ class InstallUtilities extends LibraryClass
         }
 
         CoreState::loadParams();
-        
+
         return $errors;
     }
 
@@ -1193,16 +1193,16 @@ class InstallUtilities extends LibraryClass
             $obj = new $class($db);
             $errors[] = $obj->createIfNeeded($name);
         }
-        
+
         /**
           Not using models for receipt views. Hopefully many of these
           can go away as deprecated.
         */
-        $lttR = "CREATE view ltt_receipt as 
+        $lttR = "CREATE view ltt_receipt as
             select
             l.description as description,
-            case 
-                when voided = 5 
+            case
+                when voided = 5
                     then 'Discount'
                 when trans_status = 'M'
                     then 'Mbr special'
@@ -1210,7 +1210,7 @@ class InstallUtilities extends LibraryClass
                     then 'Staff special'
                 when unitPrice = 0.01
                     then ''
-                when scale <> 0 and quantity <> 0 
+                when scale <> 0 and quantity <> 0
                     then ".$db->concat('quantity', "' @ '", 'unitPrice','')."
                 when abs(itemQtty) > 1 and abs(itemQtty) > abs(quantity) and discounttype <> 3 and quantity = 1
                     then ".$db->concat('volume', "' / '", 'unitPrice','')."
@@ -1226,15 +1226,15 @@ class InstallUtilities extends LibraryClass
             end
             as comment,
             total,
-            case 
-                when trans_status = 'V' 
+            case
+                when trans_status = 'V'
                     then 'VD'
                 when trans_status = 'R'
                     then 'RF'
                 when tax = 1 and foodstamp <> 0
                     then 'TF'
                 when tax = 1 and foodstamp = 0
-                    then 'T' 
+                    then 'T'
                 when tax = 0 and foodstamp <> 0
                     then 'F'
                 WHEN (tax > 1 and foodstamp <> 0)
@@ -1242,17 +1242,17 @@ class InstallUtilities extends LibraryClass
                 WHEN (tax > 1 and foodstamp = 0)
                     THEN SUBSTR(t.description,1,1)
                 when tax = 0 and foodstamp = 0
-                    then '' 
+                    then ''
             end
             as Status,
             trans_type,
             unitPrice,
             voided,
-            CASE 
+            CASE
                 WHEN upc = 'DISCOUNT' THEN (
                 SELECT MAX(trans_id) FROM localtemptrans WHERE voided=3
                 )-1
-                WHEN trans_type = 'T' THEN trans_id+99999    
+                WHEN trans_type = 'T' THEN trans_id+99999
                 ELSE trans_id
             END AS trans_id
             from localtemptrans as l
@@ -1261,11 +1261,11 @@ class InstallUtilities extends LibraryClass
             where voided <> 5 and UPC <> 'TAX'
             AND trans_type <> 'L'";
         if($type == 'mssql'){
-            $lttR = "CREATE view ltt_receipt as 
+            $lttR = "CREATE view ltt_receipt as
                 select
                 l.description,
-                case 
-                    when voided = 5 
+                case
+                    when voided = 5
                         then 'Discount'
                     when trans_status = 'M'
                         then 'Mbr special'
@@ -1273,7 +1273,7 @@ class InstallUtilities extends LibraryClass
                         then 'Staff special'
                     when unitPrice = 0.01
                         then ''
-                    when scale <> 0 and quantity <> 0 
+                    when scale <> 0 and quantity <> 0
                         then quantity+ ' @ '+ unitPrice
                     when abs(itemQtty) > 1 and abs(itemQtty) > abs(quantity) and discounttype <> 3 and quantity = 1
                         then volume+ ' /'+ unitPrice
@@ -1289,15 +1289,15 @@ class InstallUtilities extends LibraryClass
                 end
                 as comment,
                 total,
-                case 
-                    when trans_status = 'V' 
+                case
+                    when trans_status = 'V'
                         then 'VD'
                     when trans_status = 'R'
                         then 'RF'
                     when tax = 1 and foodstamp <> 0
                         then 'TF'
                     when tax = 1 and foodstamp = 0
-                        then 'T' 
+                        then 'T'
                     WHEN (tax > 1 and foodstamp <> 0)
                         THEN LEFT(t.description,1)+'F'
                     WHEN (tax > 1 and foodstamp = 0)
@@ -1305,17 +1305,17 @@ class InstallUtilities extends LibraryClass
                     when tax = 0 and foodstamp <> 0
                         then 'F'
                     when tax = 0 and foodstamp = 0
-                        then '' 
+                        then ''
                 end
                 as Status,
                 trans_type,
                 unitPrice,
                 trans_id
-                CASE 
+                CASE
                     WHEN upc = 'DISCOUNT' THEN (
                     SELECT MAX(trans_id) FROM localtemptrans WHERE voided=3
                     )-1
-                    WHEN trans_type = 'T' THEN trans_id+99999    
+                    WHEN trans_type = 'T' THEN trans_id+99999
                     ELSE trans_id
                 END AS trans_id
                 from localtemptrans as l
@@ -1332,12 +1332,12 @@ class InstallUtilities extends LibraryClass
 
         $rV = "CREATE view receipt as
             select
-            case 
+            case
                 when trans_type = 'T'
-                    then     ".$db->concat( "SUBSTR(".$db->concat('UPPER(TRIM(description))','space(44)','').", 1, 44)" 
-                        , "right(".$db->concat( 'space(8)', 'FORMAT(-1 * total, 2)','').", 8)" 
+                    then     ".$db->concat( "SUBSTR(".$db->concat('UPPER(TRIM(description))','space(44)','').", 1, 44)"
+                        , "right(".$db->concat( 'space(8)', 'FORMAT(-1 * total, 2)','').", 8)"
                         , "right(".$db->concat( 'space(4)', 'status','').", 4)",'')."
-                when voided = 3 
+                when voided = 3
                     then     ".$db->concat("SUBSTR(".$db->concat('description', 'space(30)','').", 1, 30)"
                         , 'space(9)'
                         , "'TOTAL'"
@@ -1355,7 +1355,7 @@ class InstallUtilities extends LibraryClass
                         , 'right('.$db->concat( 'space(4)', 'status','').', 4)','')."
                 else
                     ".$db->concat("SUBSTR(".$db->concat('description', 'space(30)','').", 1, 30)"
-                    , "' '" 
+                    , "' '"
                     , "SUBSTR(".$db->concat('comment', 'space(13)','').", 1, 13)"
                     , 'right('.$db->concat('space(8)', 'FORMAT(total, 2)','').', 8)'
                     , 'right('.$db->concat('space(4)', 'status','').', 4)','')."
@@ -1366,15 +1366,15 @@ class InstallUtilities extends LibraryClass
         if($type == 'mssql'){
             $rV = "CREATE  view receipt as
             select top 100 percent
-            case 
+            case
                 when trans_type = 'T'
-                    then     right((space(44) + upper(rtrim(Description))), 44) 
-                        + right((space(8) + convert(varchar, (-1 * Total))), 8) 
+                    then     right((space(44) + upper(rtrim(Description))), 44)
+                        + right((space(8) + convert(varchar, (-1 * Total))), 8)
                         + right((space(4) + status), 4)
-                when voided = 3 
-                    then     left(Description + space(30), 30) 
-                        + space(9) 
-                        + 'TOTAL' 
+                when voided = 3
+                    then     left(Description + space(30), 30)
+                        + space(9)
+                        + 'TOTAL'
                         + right(space(8) + convert(varchar, UnitPrice), 8)
                 when voided = 2
                     then     description
@@ -1383,17 +1383,17 @@ class InstallUtilities extends LibraryClass
                 when voided = 6
                     then     description
                 when voided = 7 or voided = 17
-                    then     left(Description + space(30), 30) 
-                        + space(14) 
-                        + right(space(8) + convert(varchar, UnitPrice), 8) 
+                    then     left(Description + space(30), 30)
+                        + space(14)
+                        + right(space(8) + convert(varchar, UnitPrice), 8)
                         + right(space(4) + status, 4)
                 when sequence < 1000
                     then     description
                 else
                     left(Description + space(30), 30)
-                    + ' ' 
-                    + left(Comment + space(13), 13) 
-                    + right(space(8) + convert(varchar, Total), 8) 
+                    + ' '
+                    + left(Comment + space(13), 13)
+                    + right(space(8) + convert(varchar, Total), 8)
                     + right(space(4) + status, 4)
             end
             as linetoprint,
@@ -1410,14 +1410,14 @@ class InstallUtilities extends LibraryClass
             self::dbStructureModify($db,'receipt',$rV,$errors);
         }
 
-        $rplttR = "CREATE view rp_ltt_receipt as 
+        $rplttR = "CREATE view rp_ltt_receipt as
             select
             register_no,
             emp_no,
             trans_no,
             l.description as description,
-            case 
-                when voided = 5 
+            case
+                when voided = 5
                     then 'Discount'
                 when trans_status = 'M'
                     then 'Mbr special'
@@ -1425,7 +1425,7 @@ class InstallUtilities extends LibraryClass
                     then 'Staff special'
                 when unitPrice = 0.01
                     then ''
-                when scale <> 0 and quantity <> 0 
+                when scale <> 0 and quantity <> 0
                     then ".$db->concat('quantity', "' @ '", 'unitPrice','')."
                 when abs(itemQtty) > 1 and abs(itemQtty) > abs(quantity) and discounttype <> 3 and quantity = 1
                     then ".$db->concat('volume', "' / '", 'unitPrice','')."
@@ -1441,15 +1441,15 @@ class InstallUtilities extends LibraryClass
             end
             as comment,
             total,
-            case 
-                when trans_status = 'V' 
+            case
+                when trans_status = 'V'
                     then 'VD'
                 when trans_status = 'R'
                     then 'RF'
                 WHEN (tax = 1 and foodstamp <> 0)
                     THEN 'TF'
                 WHEN (tax = 1 and foodstamp = 0)
-                    THEN 'T' 
+                    THEN 'T'
                 WHEN (tax > 1 and foodstamp <> 0)
                     THEN ".$db->concat('SUBSTR(t.description,1,1)',"'F'",'')."
                 WHEN (tax > 1 and foodstamp = 0)
@@ -1457,7 +1457,7 @@ class InstallUtilities extends LibraryClass
                 when tax = 0 and foodstamp <> 0
                     then 'F'
                 when tax = 0 and foodstamp = 0
-                    then '' 
+                    then ''
             end
             as Status,
             trans_type,
@@ -1472,14 +1472,14 @@ class InstallUtilities extends LibraryClass
             AND datetime >= CURRENT_DATE
             order by emp_no, trans_no, trans_id";
         if($type == 'mssql'){
-            $rplttR = "CREATE view rp_ltt_receipt as 
+            $rplttR = "CREATE view rp_ltt_receipt as
                 select
                 register_no,
                 emp_no,
                 trans_no,
                 description,
-                case 
-                    when voided = 5 
+                case
+                    when voided = 5
                         then 'Discount'
                     when trans_status = 'M'
                         then 'Mbr special'
@@ -1487,7 +1487,7 @@ class InstallUtilities extends LibraryClass
                         then 'Staff special'
                     when unitPrice = 0.01
                         then ''
-                    when scale <> 0 and quantity <> 0 
+                    when scale <> 0 and quantity <> 0
                         then quantity+ ' @ '+ unitPrice
                     when abs(itemQtty) > 1 and abs(itemQtty) > abs(quantity) and discounttype <> 3 and quantity = 1
                         then volume+ ' /'+ unitPrice
@@ -1503,15 +1503,15 @@ class InstallUtilities extends LibraryClass
                 end
                 as comment,
                 total,
-                case 
-                    when trans_status = 'V' 
+                case
+                    when trans_status = 'V'
                         then 'VD'
                     when trans_status = 'R'
                         then 'RF'
                     WHEN (tax = 1 and foodstamp <> 0)
                         THEN 'TF'
                     WHEN (tax = 1 and foodstamp = 0)
-                        THEN 'T' 
+                        THEN 'T'
                     WHEN (tax > 1 and foodstamp <> 0)
                         THEN LEFT(t.description,1)+'F'
                     WHEN (tax > 1 and foodstamp = 0)
@@ -1519,7 +1519,7 @@ class InstallUtilities extends LibraryClass
                     when tax = 0 and foodstamp <> 0
                         then 'F'
                     when tax = 0 and foodstamp = 0
-                        then '' 
+                        then ''
                 end
                 as Status,
                 trans_type,
@@ -1544,12 +1544,12 @@ class InstallUtilities extends LibraryClass
             register_no,
             emp_no,
             trans_no,
-            case 
+            case
                 when trans_type = 'T'
-                    then     ".$db->concat( "SUBSTR(".$db->concat('UPPER(TRIM(description))','space(44)','').", 1, 44)" 
-                        , "right(".$db->concat( 'space(8)', 'FORMAT(-1 * total, 2)','').", 8)" 
+                    then     ".$db->concat( "SUBSTR(".$db->concat('UPPER(TRIM(description))','space(44)','').", 1, 44)"
+                        , "right(".$db->concat( 'space(8)', 'FORMAT(-1 * total, 2)','').", 8)"
                         , "right(".$db->concat( 'space(4)', 'status','').", 4)",'')."
-                when voided = 3 
+                when voided = 3
                     then     ".$db->concat("SUBSTR(".$db->concat('description', 'space(30)','').", 1, 30)"
                         , 'space(9)'
                         , "'TOTAL'"
@@ -1567,7 +1567,7 @@ class InstallUtilities extends LibraryClass
                         , 'right('.$db->concat( 'space(4)', 'status','').', 4)','')."
                 else
                     ".$db->concat("SUBSTR(".$db->concat('description', 'space(30)','').", 1, 30)"
-                    , "' '" 
+                    , "' '"
                     , "SUBSTR(".$db->concat('comment', 'space(13)','').", 1, 13)"
                     , 'right('.$db->concat('space(8)', 'FORMAT(total, 2)','').', 8)'
                     , 'right('.$db->concat('space(4)', 'status','').', 4)','')."
@@ -1581,15 +1581,15 @@ class InstallUtilities extends LibraryClass
             register_no,
             emp_no,
             trans_no,
-            case 
+            case
                 when trans_type = 'T'
-                    then     right((space(44) + upper(rtrim(Description))), 44) 
-                        + right((space(8) + convert(varchar, (-1 * Total))), 8) 
+                    then     right((space(44) + upper(rtrim(Description))), 44)
+                        + right((space(8) + convert(varchar, (-1 * Total))), 8)
                         + right((space(4) + status), 4)
-                when voided = 3 
-                    then     left(Description + space(30), 30) 
-                        + space(9) 
-                        + 'TOTAL' 
+                when voided = 3
+                    then     left(Description + space(30), 30)
+                        + space(9)
+                        + 'TOTAL'
                         + right(space(8) + convert(varchar, UnitPrice), 8)
                 when voided = 2
                     then     description
@@ -1598,15 +1598,15 @@ class InstallUtilities extends LibraryClass
                 when voided = 6
                     then     description
                 when voided = 7 or voided = 17
-                    then     left(Description + space(30), 30) 
-                        + space(14) 
-                        + right(space(8) + convert(varchar, UnitPrice), 8) 
+                    then     left(Description + space(30), 30)
+                        + space(14)
+                        + right(space(8) + convert(varchar, UnitPrice), 8)
                         + right(space(4) + status, 4)
                 else
                     left(Description + space(30), 30)
-                    + ' ' 
-                    + left(Comment + space(13), 13) 
-                    + right(space(8) + convert(varchar, Total), 8) 
+                    + ' '
+                    + left(Comment + space(13), 13)
+                    + right(space(8) + convert(varchar, Total), 8)
                     + right(space(4) + status, 4)
             end
             as linetoprint,
@@ -1629,7 +1629,7 @@ class InstallUtilities extends LibraryClass
           Looking up the local DB server setting ensures that CORE
           still abides by local preferences when explicitly requesting
           a specific collation. None of this should be necessary
-          but finding the bug or undocumented "feature" of MySQL 
+          but finding the bug or undocumented "feature" of MySQL
           causing this is a waste of time.
         */
         $mysql_collation = $db->query('SELECT @@collation_database', $name);
@@ -1644,7 +1644,7 @@ class InstallUtilities extends LibraryClass
             case when voided=1 then 0 else voided end as voided,
             department,sum(quantity) as quantity,matched,min(trans_id) as trans_id,
             scale,
-            sum(unitprice) as unitprice, 
+            sum(unitprice) as unitprice,
             CAST(sum(total) AS decimal(10,2)) as total,
             sum(regPrice) as regPrice,tax,foodstamp,charflag,
             case when trans_status='d' or scale=1 or trans_type='T' then trans_id else scale end as grouper
@@ -1678,9 +1678,9 @@ class InstallUtilities extends LibraryClass
 
         select     upc,
             case when discounttype=1 then
-            ".$db->concat("' > you saved \$'",'CAST(CAST(sum(quantity*regprice-quantity*unitprice) AS decimal(10,2)) AS char(20)) COLLATE ' . $mysql_collation,"'  <'",'')."
+            ".$db->concat("' > item on sale - you saved \$'",'CAST(CAST(sum(quantity*regprice-quantity*unitprice) AS decimal(10,2)) AS char(20)) COLLATE ' . $mysql_collation,"'  <'",'')."
             when discounttype=2 then
-            ".$db->concat("' > you saved \$'",'CAST(CAST(sum(quantity*regprice-quantity*unitprice) AS decimal(10,2)) AS char(20)) COLLATE ' . $mysql_collation,"'  Member Special <'",'')."
+            ".$db->concat("' > item on sale - you saved \$'",'CAST(CAST(sum(quantity*regprice-quantity*unitprice) AS decimal(10,2)) AS char(20)) COLLATE ' . $mysql_collation,"'  Member Special <'",'')."
             end as description,
             trans_type,'0' as trans_subtype,0 as itemQtty,discounttype,volume,
             'D' as trans_status,
@@ -1705,7 +1705,7 @@ class InstallUtilities extends LibraryClass
                 case when voided=1 then 0 else voided end as voided,
                 department,sum(quantity) as quantity,matched,min(trans_id) as trans_id,
                 scale,
-                sum(unitprice) as unitprice, 
+                sum(unitprice) as unitprice,
                 sum(total) as total,
                 sum(regPrice) as regPrice,tax,foodstamp,charflag,
                 case when trans_status='d' or scale=1 or trans_type='T' then trans_id else scale end as grouper
@@ -1765,10 +1765,10 @@ class InstallUtilities extends LibraryClass
         }
 
         $lttreorderG = "CREATE   view ltt_receipt_reorder_g as
-        select 
+        select
         l.description as description,
-        case 
-            when voided = 5 
+        case
+            when voided = 5
                 then 'Discount'
             when trans_status = 'M'
                 then 'Mbr special'
@@ -1778,7 +1778,7 @@ class InstallUtilities extends LibraryClass
                 then ''
             when charflag = 'SO'
                 then ''
-            when scale <> 0 and quantity <> 0 
+            when scale <> 0 and quantity <> 0
                 then ".$db->concat('CAST(quantity AS char)',"' @ '",'CAST(unitPrice AS char)','')."
             when abs(itemQtty) > 1 and abs(itemQtty) > abs(quantity) and discounttype <> 3 and quantity = 1
                 then ".$db->concat('CAST(volume AS char)',"' / '",'CAST(unitPrice AS char)','')."
@@ -1794,15 +1794,15 @@ class InstallUtilities extends LibraryClass
         end
         as comment,
         total,
-        case 
-            when trans_status = 'V' 
+        case
+            when trans_status = 'V'
                 then 'VD'
             when trans_status = 'R'
                 then 'RF'
             when tax = 1 and foodstamp <> 0
                 then 'TF'
             when tax = 1 and foodstamp = 0
-                then 'T' 
+                then 'T'
             WHEN (tax > 1 and foodstamp <> 0)
                 THEN ".$db->concat('SUBSTR(t.description,1,1)',"'F'",'')."
             WHEN (tax > 1 and foodstamp = 0)
@@ -1810,7 +1810,7 @@ class InstallUtilities extends LibraryClass
             when tax = 0 and foodstamp <> 0
                 then 'F'
             when tax = 0 and foodstamp = 0
-                then '' 
+                then ''
         end
         as status,
         case when trans_subtype='CM' or voided in (10,17)
@@ -1849,8 +1849,8 @@ class InstallUtilities extends LibraryClass
             $lttreorderG = "CREATE view ltt_receipt_reorder_g as
             select top 100 percent
             l.description,
-            case 
-                when voided = 5 
+            case
+                when voided = 5
                     then 'Discount'
                 when trans_status = 'M'
                     then 'Mbr special'
@@ -1858,7 +1858,7 @@ class InstallUtilities extends LibraryClass
                     then 'Staff special'
                 when unitPrice = 0.01
                     then ''
-                when scale <> 0 and quantity <> 0 
+                when scale <> 0 and quantity <> 0
                     then convert(varchar, quantity) + ' @ ' + convert(varchar, unitPrice)
                 when abs(itemQtty) > 1 and abs(itemQtty) > abs(quantity) and discounttype <> 3 and quantity = 1
                     then convert(varchar, volume) + ' /' + convert(varchar, unitPrice)
@@ -1867,22 +1867,22 @@ class InstallUtilities extends LibraryClass
                 when abs(itemQtty) > 1 and discounttype = 3
                     then convert(varchar,ItemQtty) + ' /' + convert(varchar, UnitPrice)
                 when abs(itemQtty) > 1
-                    then convert(varchar, quantity) + ' @ ' + convert(varchar, unitPrice)    
+                    then convert(varchar, quantity) + ' @ ' + convert(varchar, unitPrice)
                 when matched > 0
                     then '1 w/ vol adj'
                 else ''
             end
             as comment,
             total,
-            case 
-                when trans_status = 'V' 
+            case
+                when trans_status = 'V'
                     then 'VD'
                 when trans_status = 'R'
                     then 'RF'
                 WHEN (tax = 1 and foodstamp <> 0)
                     THEN 'TF'
                 WHEN (tax = 1 and foodstamp = 0)
-                    THEN 'T' 
+                    THEN 'T'
                 WHEN (tax > 1 and foodstamp <> 0)
                     THEN LEFT(t.description,1)+'F'
                 WHEN (tax > 1 and foodstamp = 0)
@@ -1890,7 +1890,7 @@ class InstallUtilities extends LibraryClass
                 when tax = 0 and foodstamp <> 0
                     then 'F'
                 when tax = 0 and foodstamp = 0
-                    then '' 
+                    then ''
             end
             as Status,
             case when trans_subtype='CM' or voided in (10,17)
@@ -1931,27 +1931,27 @@ class InstallUtilities extends LibraryClass
         }
 
         $reorderG = "CREATE   view receipt_reorder_g as
-            select 
-            case 
-                when trans_type = 'T' 
-                    then     
+            select
+            case
+                when trans_type = 'T'
+                    then
                         case when trans_subtype = 'CP' and upc<>'0'
                         then    ".$db->concat(
                             "SUBSTR(".$db->concat('description','space(30)','').",1,30)",
                             "' '",
                             "SUBSTR(".$db->concat('comment','space(12)','').",1,12)",
                             "right(".$db->concat('space(8)','CAST(total AS char)','').",8)",
-                            "right(".$db->concat('space(4)','status','').",4)",'')." 
-                        else     ".$db->concat( 
-                            "right(".$db->concat('space(44)','upper(description)','').",44)", 
+                            "right(".$db->concat('space(4)','status','').",4)",'')."
+                        else     ".$db->concat(
+                            "right(".$db->concat('space(44)','upper(description)','').",44)",
                             "right(".$db->concat('space(8)','CAST((-1*total) AS char)','').",8)",
-                            "right(".$db->concat('space(4)','status','').",4)",'')." 
-                        end 
-                when voided = 3 
-                    then     ".$db->concat( 
+                            "right(".$db->concat('space(4)','status','').",4)",'')."
+                        end
+                when voided = 3
+                    then     ".$db->concat(
                         "SUBSTR(".$db->concat('description','space(30)','').",1,30)",
-                        "space(9)", 
-                        "'TOTAL'", 
+                        "space(9)",
+                        "'TOTAL'",
                         "right(".$db->concat('space(8)','CAST(unitPrice AS char)','').",8)",'')."
                 when voided = 2
                     then     description
@@ -1962,9 +1962,9 @@ class InstallUtilities extends LibraryClass
                 when voided = 7 or voided = 17
                     then     ".$db->concat(
                         "SUBSTR(".$db->concat('description','space(30)','').",1,30)",
-                        "space(14)", 
+                        "space(14)",
                         "right(".$db->concat('space(8)','CAST(unitPrice AS char)','').",8)",
-                        "right(".$db->concat('space(4)','status','').",4)",'')." 
+                        "right(".$db->concat('space(4)','status','').",4)",'')."
                 when sequence < 1000
                     then     description
                 else
@@ -1973,7 +1973,7 @@ class InstallUtilities extends LibraryClass
                         "' '",
                         "SUBSTR(".$db->concat('comment','space(12)','').",1,12)",
                         "right(".$db->concat('space(8)','CAST(total AS char)','').",8)",
-                        "right(".$db->concat('space(4)','status','').",4)",'')." 
+                        "right(".$db->concat('space(4)','status','').",4)",'')."
                 end as linetoprint,
             sequence,
             department,
@@ -1984,27 +1984,27 @@ class InstallUtilities extends LibraryClass
             left outer join ".CoreLocal::get('pDatabase').".MasterSuperDepts d on r.department=d.dept_ID
             where r.total<>0 or r.unitPrice=0
             order by sequence";
-        
+
         if($type == 'mssql'){
             $reorderG = "CREATE view receipt_reorder_g as
             select top 100 percent
-            case 
-                when trans_type = 'T' 
-                    then     
+            case
+                when trans_type = 'T'
+                    then
                         case when trans_subtype = 'CP' and upc<>'0'
                         then    left(Description + space(30), 30)
-                            + ' ' 
-                            + left(Comment + space(12), 12) 
-                            + right(space(8) + convert(varchar, Total), 8) 
-                            + right(space(4) + status, 4) 
-                        else     right((space(44) + upper(rtrim(Description))), 44) 
-                            + right((space(8) + convert(varchar, (-1 * Total))), 8) 
-                            + right((space(4) + status), 4) 
-                        end 
-                when voided = 3 
-                    then     left(Description + space(30), 30) 
-                        + space(9) 
-                        + 'TOTAL' 
+                            + ' '
+                            + left(Comment + space(12), 12)
+                            + right(space(8) + convert(varchar, Total), 8)
+                            + right(space(4) + status, 4)
+                        else     right((space(44) + upper(rtrim(Description))), 44)
+                            + right((space(8) + convert(varchar, (-1 * Total))), 8)
+                            + right((space(4) + status), 4)
+                        end
+                when voided = 3
+                    then     left(Description + space(30), 30)
+                        + space(9)
+                        + 'TOTAL'
                         + right(space(8) + convert(varchar, UnitPrice), 8)
                 when voided = 2
                     then     description
@@ -2013,17 +2013,17 @@ class InstallUtilities extends LibraryClass
                 when voided = 6
                     then     description
                 when voided = 7 or voided = 17
-                    then     left(Description + space(30), 30) 
-                        + space(14) 
-                        + right(space(8) + convert(varchar, UnitPrice), 8) 
+                    then     left(Description + space(30), 30)
+                        + space(14)
+                        + right(space(8) + convert(varchar, UnitPrice), 8)
                         + right(space(4) + status, 4)
                 when sequence < 1000
                     then     description
                 else
                     left(Description + space(30), 30)
-                    + ' ' 
-                    + left(Comment + space(12), 12) 
-                    + right(space(8) + convert(varchar, Total), 8) 
+                    + ' '
+                    + left(Comment + space(12), 12)
+                    + right(space(8) + convert(varchar, Total), 8)
                     + right(space(4) + status, 4)
                 end
                 as linetoprint,
@@ -2065,7 +2065,7 @@ class InstallUtilities extends LibraryClass
         select
         ".$db->concat(
         "SUBSTR(".$db->concat("'** '","trim(CAST(percentDiscount AS char))","'% Discount Applied **'",'space(30)','').",1,30)",
-        "' '", 
+        "' '",
         "space(13)",
         "right(".$db->concat('space(8)',"CAST((-1*transDiscount) AS char)",'').",8)",
         "space(4)",'')." as linetoprint,
@@ -2082,7 +2082,7 @@ class InstallUtilities extends LibraryClass
 
         union all
 
-        select 
+        select
         ".$db->concat(
         "right(".$db->concat('space(44)',"'SUBTOTAL'",'').",44)",
         "right(".$db->concat('space(8)',"CAST(round(l.runningTotal-s.taxTotal-l.tenderTotal,2) AS char)",'').",8)",
@@ -2091,20 +2091,20 @@ class InstallUtilities extends LibraryClass
 
         union all
 
-        select 
+        select
         ".$db->concat(
         "right(".$db->concat('space(44)',"'TAX'",'').",44)",
-        "right(".$db->concat('space(8)',"CAST(round(taxTotal,2) AS char)",'').",8)", 
+        "right(".$db->concat('space(8)',"CAST(round(taxTotal,2) AS char)",'').",8)",
         "space(4)",'')." as linetoprint,
         2 as sequence,null as dept_name,3 as ordered,'' as upc
         from subtotals
 
         union all
 
-        select 
+        select
         ".$db->concat(
         "right(".$db->concat('space(44)',"'TOTAL'",'').",44)",
-        "right(".$db->concat('space(8)',"CAST(runningTotal-tenderTotal AS char)",'').",8)", 
+        "right(".$db->concat('space(8)',"CAST(runningTotal-tenderTotal AS char)",'').",8)",
         "space(4)",'')." as linetoprint,3 as sequence,null as dept_name,3 as ordered,'' as upc
         from lttsummary
 
@@ -2115,14 +2115,14 @@ class InstallUtilities extends LibraryClass
         where (trans_type='T' and department = 0)
         or (department = 0 and trans_type NOT IN ('CM','I')
         and linetoprint NOT LIKE '** %'
-        and linetoprint NOT LIKE 'Subtotal%') 
+        and linetoprint NOT LIKE 'Subtotal%')
 
         union all
 
-        select 
+        select
         ".$db->concat(
         "right(".$db->concat('space(44)',"'CURRENT AMOUNT DUE'",'').",44)",
-        "right(".$db->concat('space(8)',"CAST(runningTotal-transDiscount AS char)",'').",8)", 
+        "right(".$db->concat('space(8)',"CAST(runningTotal-transDiscount AS char)",'').",8)",
         "space(4)",'')." as linetoprint,
         5 as sequence,
         null as dept_name,
@@ -2148,9 +2148,9 @@ class InstallUtilities extends LibraryClass
 
             select
             left('** '+rtrim(convert(char,percentdiscount))+'% Discount Applied **' + space(30), 30)
-            + ' ' 
-            + left('' + space(13), 13) 
-            + right(space(8) + convert(varchar, (-1*transDiscount)), 8) 
+            + ' '
+            + left('' + space(13), 13)
+            + right(space(8) + convert(varchar, (-1*transDiscount)), 8)
             + right(space(4) + '', 4),
             0 as sequence,null as dept_name,2 as ordered,
             '' as upc
@@ -2165,25 +2165,25 @@ class InstallUtilities extends LibraryClass
 
             union all
 
-            select 
-            right((space(44) + upper(rtrim('SUBTOTAL'))), 44) 
+            select
+            right((space(44) + upper(rtrim('SUBTOTAL'))), 44)
             + right((space(8) + convert(varchar,round(l.runningTotal-s.taxTotal-l.tenderTotal,2))),8)
             + right((space(4) + ''), 4) as linetoprint,1 as sequence,null as dept_name,3 as ordered,'' as upc
             from lttsummary as l, subtotals as s
 
             union all
 
-            select 
-            right((space(44) + upper(rtrim('TAX'))), 44) 
-            + right((space(8) + convert(varchar,round(taxtotal,2))), 8) 
+            select
+            right((space(44) + upper(rtrim('TAX'))), 44)
+            + right((space(8) + convert(varchar,round(taxtotal,2))), 8)
             + right((space(4) + ''), 4) as linetoprint,
             2 as sequence,null as dept_name,3 as ordered,'' as upc
             from subtotals
 
             union all
 
-            select 
-            right((space(44) + upper(rtrim('TOTAL'))), 44) 
+            select
+            right((space(44) + upper(rtrim('TOTAL'))), 44)
             + right((space(8) +convert(varchar,runningtotal-tendertotal)),8)
             + right((space(4) + ''), 4) as linetoprint,3 as sequence,null as dept_name,3 as ordered,'' as upc
             from lttsummary
@@ -2197,8 +2197,8 @@ class InstallUtilities extends LibraryClass
 
             union all
 
-            select 
-            right((space(44) + upper(rtrim('Current Amount Due'))), 44) 
+            select
+            right((space(44) + upper(rtrim('Current Amount Due'))), 44)
             +right((space(8) + convert(varchar,subtotal)),8)
             + right((space(4) + ''), 4) as linetoprint,
             5 as sequence,
@@ -2222,7 +2222,7 @@ class InstallUtilities extends LibraryClass
                 case when voided=1 then 0 else voided end as voided,
                 department,sum(quantity) as quantity,matched,min(trans_id) as trans_id,
                 scale,
-                sum(unitprice) as unitprice, 
+                sum(unitprice) as unitprice,
                 CAST(sum(total) AS decimal(10,2)) as total,
                 sum(regPrice) as regPrice,tax,foodstamp,
                 case when trans_status='d' or scale=1 or trans_type='T' then trans_id else scale end as grouper
@@ -2292,7 +2292,7 @@ class InstallUtilities extends LibraryClass
                 case when voided=1 then 0 else voided end as voided,
                 department,sum(quantity) as quantity,matched,min(trans_id) as trans_id,
                 scale,
-                sum(unitprice) as unitprice, 
+                sum(unitprice) as unitprice,
                 sum(total) as total,
                 sum(regPrice) as regPrice,tax,foodstamp,
                 case when trans_status='d' or scale=1 or trans_type='T' then trans_id else scale end as grouper
@@ -2353,18 +2353,18 @@ class InstallUtilities extends LibraryClass
                 department,scale,matched,
                 case when trans_status='d' or scale=1 then trans_id else scale end
             having convert(money,sum(quantity*regprice-quantity*unitprice))<>0";
-        }    
+        }
         self::dbStructureModify($db,'rp_ltt_grouped','DROP VIEW rp_ltt_grouped',$errors);
         if(!$db->table_exists('rp_ltt_grouped',$name)){
             self::dbStructureModify($db,'rp_ltt_grouped',$rplttG,$errors);
         }
 
         $rpreorderG = "CREATE    view rp_ltt_receipt_reorder_g as
-            select 
+            select
             register_no,emp_no,trans_no,card_no,
             l.description as description,
-            case 
-                when voided = 5 
+            case
+                when voided = 5
                     then 'Discount'
                 when trans_status = 'M'
                     then 'Mbr special'
@@ -2372,7 +2372,7 @@ class InstallUtilities extends LibraryClass
                     then 'Staff special'
                 when unitPrice = 0.01
                     then ''
-                when scale <> 0 and quantity <> 0 
+                when scale <> 0 and quantity <> 0
                     then ".$db->concat('CAST(quantity AS char)',"' @ '",'CAST(unitPrice AS char)','')."
                 when abs(itemQtty) > 1 and abs(itemQtty) > abs(quantity) and discounttype <> 3 and quantity = 1
                     then ".$db->concat('CAST(volume AS char)',"' / '",'CAST(unitPrice AS char)','')."
@@ -2388,15 +2388,15 @@ class InstallUtilities extends LibraryClass
             end
             as comment,
             total,
-            case 
-                when trans_status = 'V' 
+            case
+                when trans_status = 'V'
                     then 'VD'
                 when trans_status = 'R'
                     then 'RF'
                 WHEN (tax = 1 and foodstamp <> 0)
                     THEN 'TF'
                 WHEN (tax = 1 and foodstamp = 0)
-                    THEN 'T' 
+                    THEN 'T'
                 WHEN (tax > 1 and foodstamp <> 0)
                     THEN ".$db->concat('SUBSTR(t.description,1,1)',"'F'",'')."
                 WHEN (tax > 1 and foodstamp = 0)
@@ -2404,7 +2404,7 @@ class InstallUtilities extends LibraryClass
                 when tax = 0 and foodstamp <> 0
                     then 'F'
                 when tax = 0 and foodstamp = 0
-                    then '' 
+                    then ''
             end
             as status,
             trans_type,
@@ -2441,8 +2441,8 @@ class InstallUtilities extends LibraryClass
             select top 100 percent
             register_no,emp_no,trans_no,card_no,
             l.description,
-            case 
-                when voided = 5 
+            case
+                when voided = 5
                     then 'Discount'
                 when trans_status = 'M'
                     then 'Mbr special'
@@ -2450,7 +2450,7 @@ class InstallUtilities extends LibraryClass
                     then 'Staff special'
                 when unitPrice = 0.01
                     then ''
-                when scale <> 0 and quantity <> 0 
+                when scale <> 0 and quantity <> 0
                     then convert(varchar, quantity) + ' @ ' + convert(varchar, unitPrice)
                 when abs(itemQtty) > 1 and abs(itemQtty) > abs(quantity) and discounttype <> 3 and quantity = 1
                     then convert(varchar, volume) + ' /' + convert(varchar, unitPrice)
@@ -2459,22 +2459,22 @@ class InstallUtilities extends LibraryClass
                 when abs(itemQtty) > 1 and discounttype = 3
                     then convert(varchar,ItemQtty) + ' /' + convert(varchar, UnitPrice)
                 when abs(itemQtty) > 1
-                    then convert(varchar, quantity) + ' @ ' + convert(varchar, unitPrice)    
+                    then convert(varchar, quantity) + ' @ ' + convert(varchar, unitPrice)
                 when matched > 0
                     then '1 w/ vol adj'
                 else ''
             end
             as comment,
             total,
-            case 
-                when trans_status = 'V' 
+            case
+                when trans_status = 'V'
                     then 'VD'
                 when trans_status = 'R'
                     then 'RF'
                 WHEN (tax = 1 and foodstamp <> 0)
                     THEN 'TF'
                 WHEN (tax = 1 and foodstamp = 0)
-                    THEN 'T' 
+                    THEN 'T'
                 WHEN (tax > 1 and foodstamp <> 0)
                     THEN LEFT(t.description,1)+'F'
                 WHEN (tax > 1 and foodstamp = 0)
@@ -2482,7 +2482,7 @@ class InstallUtilities extends LibraryClass
                 when tax = 0 and foodstamp <> 0
                     then 'F'
                 when tax = 0 and foodstamp = 0
-                    then '' 
+                    then ''
             end
             as Status,
             trans_type,
@@ -2514,35 +2514,35 @@ class InstallUtilities extends LibraryClass
             '' as department,
             '' as upc,
             '' as trans_subtype";
-        }    
+        }
         self::dbStructureModify($db,'rp_ltt_receipt_reorder_g','DROP VIEW rp_ltt_receipt_reorder_g',$errors);
         if(!$db->table_exists("rp_ltt_receipt_reorder_g",$name)){
             self::dbStructureModify($db,'rp_ltt_receipt_reorder_g',$rpreorderG,$errors);
         }
-        
+
         $rpG = "CREATE    view rp_receipt_reorder_g as
-            select 
+            select
             register_no,emp_no,trans_no,card_no,
-            case 
-                when trans_type = 'T' 
-                    then     
+            case
+                when trans_type = 'T'
+                    then
                         case when trans_subtype = 'CP' and upc<>'0'
                         then    ".$db->concat(
                             "SUBSTR(".$db->concat('description','space(30)','').",1,30)",
                             "' '",
                             "SUBSTR(".$db->concat('comment','space(12)','').",1,12)",
                             "right(".$db->concat('space(8)','CAST(total AS char)','').",8)",
-                            "right(".$db->concat('space(4)','status','').",4)",'')." 
-                        else     ".$db->concat( 
-                            "right(".$db->concat('space(44)','upper(description)','').",44)", 
+                            "right(".$db->concat('space(4)','status','').",4)",'')."
+                        else     ".$db->concat(
+                            "right(".$db->concat('space(44)','upper(description)','').",44)",
                             "right(".$db->concat('space(8)','CAST((-1*total) AS char)','').",8)",
-                            "right(".$db->concat('space(4)','status','').",4)",'')." 
-                        end 
-                when voided = 3 
-                    then     ".$db->concat( 
+                            "right(".$db->concat('space(4)','status','').",4)",'')."
+                        end
+                when voided = 3
+                    then     ".$db->concat(
                         "SUBSTR(".$db->concat('description','space(30)','').",1,30)",
-                        "space(9)", 
-                        "'TOTAL'", 
+                        "space(9)",
+                        "'TOTAL'",
                         "right(".$db->concat('space(8)','CAST(unitPrice AS char)','').",8)",'')."
                 when voided = 2
                     then     description
@@ -2553,9 +2553,9 @@ class InstallUtilities extends LibraryClass
                 when voided = 7 or voided = 17
                     then     ".$db->concat(
                         "SUBSTR(".$db->concat('description','space(30)','').",1,30)",
-                        "space(14)", 
+                        "space(14)",
                         "right(".$db->concat('space(8)','CAST(unitPrice AS char)','').",8)",
-                        "right(".$db->concat('space(4)','status','').",4)",'')." 
+                        "right(".$db->concat('space(4)','status','').",4)",'')."
                 when sequence < 1000
                     then     description
                 else
@@ -2564,7 +2564,7 @@ class InstallUtilities extends LibraryClass
                         "' '",
                         "SUBSTR(".$db->concat('comment','space(12)','').",1,12)",
                         "right(".$db->concat('space(8)','CAST(total AS char)','').",8)",
-                        "right(".$db->concat('space(4)','status','').",4)",'')." 
+                        "right(".$db->concat('space(4)','status','').",4)",'')."
             end
             as linetoprint,
             sequence,
@@ -2577,7 +2577,7 @@ class InstallUtilities extends LibraryClass
             upc
 
             from rp_ltt_receipt_reorder_g r
-            left outer join ".CoreLocal::get('pDatabase').".MasterSuperDepts d 
+            left outer join ".CoreLocal::get('pDatabase').".MasterSuperDepts d
             on r.department=d.dept_ID
             where r.total<>0 or r.unitPrice=0
             order by register_no,emp_no,trans_no,card_no,sequence";
@@ -2585,23 +2585,23 @@ class InstallUtilities extends LibraryClass
             $rpG = "CREATE     view rp_receipt_reorder_g as
             select top 100 percent
             register_no,emp_no,trans_no,card_no,
-            case 
-                when trans_type = 'T' 
-                    then     
+            case
+                when trans_type = 'T'
+                    then
                         case when trans_subtype = 'CP' and upc<>'0'
                         then    left(Description + space(30), 30)
-                            + ' ' 
-                            + left(Comment + space(12), 12) 
-                            + right(space(8) + convert(varchar, Total), 8) 
-                            + right(space(4) + status, 4) 
-                        else     right((space(44) + upper(rtrim(Description))), 44) 
-                            + right((space(8) + convert(varchar, (-1 * Total))), 8) 
-                            + right((space(4) + status), 4) 
-                        end 
-                when voided = 3 
-                    then     left(Description + space(30), 30) 
-                        + space(9) 
-                        + 'TOTAL' 
+                            + ' '
+                            + left(Comment + space(12), 12)
+                            + right(space(8) + convert(varchar, Total), 8)
+                            + right(space(4) + status, 4)
+                        else     right((space(44) + upper(rtrim(Description))), 44)
+                            + right((space(8) + convert(varchar, (-1 * Total))), 8)
+                            + right((space(4) + status), 4)
+                        end
+                when voided = 3
+                    then     left(Description + space(30), 30)
+                        + space(9)
+                        + 'TOTAL'
                         + right(space(8) + convert(varchar, UnitPrice), 8)
                 when voided = 2
                     then     description
@@ -2610,17 +2610,17 @@ class InstallUtilities extends LibraryClass
                 when voided = 6
                     then     description
                 when voided = 7 or voided = 17
-                    then     left(Description + space(30), 30) 
-                        + space(14) 
-                        + right(space(8) + convert(varchar, UnitPrice), 8) 
+                    then     left(Description + space(30), 30)
+                        + space(14)
+                        + right(space(8) + convert(varchar, UnitPrice), 8)
                         + right(space(4) + status, 4)
                 when sequence < 1000
                     then     description
                 else
                     left(Description + space(30), 30)
-                    + ' ' 
-                    + left(Comment + space(12), 12) 
-                    + right(space(8) + convert(varchar, Total), 8) 
+                    + ' '
+                    + left(Comment + space(12), 12)
+                    + right(space(8) + convert(varchar, Total), 8)
                     + right(space(4) + status, 4)
             end
             as linetoprint,
@@ -2634,7 +2634,7 @@ class InstallUtilities extends LibraryClass
             upc
 
             from rp_ltt_receipt_reorder_g r
-            left outer join ".CoreLocal::get('pDatabase').".dbo.MasterSuperDepts d 
+            left outer join ".CoreLocal::get('pDatabase').".dbo.MasterSuperDepts d
             on r.department=d.dept_ID
             where r.total<>0 or r.unitprice=0
             order by register_no,emp_no,trans_no,card_no,sequence";
@@ -2668,7 +2668,7 @@ class InstallUtilities extends LibraryClass
             select
             ".$db->concat(
             "SUBSTR(".$db->concat("'** '","trim(CAST(percentDiscount AS char))","'% Discount Applied **'",'space(30)','').",1,30)",
-            "' '", 
+            "' '",
             "space(13)",
             "right(".$db->concat('space(8)',"CAST((-1*transDiscount) AS char)",'').",8)",
             "space(4)",'')." as linetoprint,
@@ -2688,7 +2688,7 @@ class InstallUtilities extends LibraryClass
 
             union all
 
-            select 
+            select
             ".$db->concat(
             "right(".$db->concat('space(44)',"'SUBTOTAL'",'').",44)",
             "right(".$db->concat('space(8)',"CAST(round(l.runningTotal-s.taxTotal-l.tenderTotal,2) AS char)",'').",8)",
@@ -2702,10 +2702,10 @@ class InstallUtilities extends LibraryClass
 
             union all
 
-            select 
+            select
             ".$db->concat(
             "right(".$db->concat('space(44)',"'TAX'",'').",44)",
-            "right(".$db->concat('space(8)',"CAST(round(taxTotal,2) AS char)",'').",8)", 
+            "right(".$db->concat('space(8)',"CAST(round(taxTotal,2) AS char)",'').",8)",
             "space(4)",'')." as linetoprint,
             emp_no,register_no,trans_no,
             2 as sequence,null as dept_name,3 as ordered,'' as upc
@@ -2713,10 +2713,10 @@ class InstallUtilities extends LibraryClass
 
             union all
 
-            select 
+            select
             ".$db->concat(
             "right(".$db->concat('space(44)',"'TOTAL'",'').",44)",
-            "right(".$db->concat('space(8)',"CAST(runningTotal-tenderTotal AS char)",'').",8)", 
+            "right(".$db->concat('space(8)',"CAST(runningTotal-tenderTotal AS char)",'').",8)",
             'space(4)','')." as linetoprint,
             emp_no,register_no,trans_no,
             3 as sequence,null as dept_name,3 as ordered,'' as upc
@@ -2733,10 +2733,10 @@ class InstallUtilities extends LibraryClass
 
             union all
 
-            select 
+            select
             ".$db->concat(
             "right(".$db->concat('space(44)',"'CURRENT AMOUNT DUE'",'').",44)",
-            "right(".$db->concat('space(8)',"CAST(runningTotal-transDiscount AS char)",'').",8)", 
+            "right(".$db->concat('space(8)',"CAST(runningTotal-transDiscount AS char)",'').",8)",
             "space(4)",'')." as linetoprint,
             emp_no,register_no,trans_no,
             5 as sequence,
@@ -2765,9 +2765,9 @@ class InstallUtilities extends LibraryClass
 
             select
             left('** '+rtrim(convert(char,percentdiscount))+'% Discount Applied **' + space(30), 30)
-            + ' ' 
-            + left('' + space(13), 13) 
-            + right(space(8) + convert(varchar, (-1*transDiscount)), 8) 
+            + ' '
+            + left('' + space(13), 13)
+            + right(space(8) + convert(varchar, (-1*transDiscount)), 8)
             + right(space(4) + '', 4),
             emp_no,register_no,trans_no,
             0 as sequence,null as dept_name,2 as ordered,
@@ -2785,8 +2785,8 @@ class InstallUtilities extends LibraryClass
 
             union all
 
-            select 
-            right((space(44) + upper(rtrim('SUBTOTAL'))), 44) 
+            select
+            right((space(44) + upper(rtrim('SUBTOTAL'))), 44)
             + right((space(8) + convert(varchar,l.runningTotal-s.taxTotal-l.tenderTotal)),8)
             + right((space(4) + ''), 4) as linetoprint,
             l.emp_no,l.register_no,l.trans_no,
@@ -2798,9 +2798,9 @@ class InstallUtilities extends LibraryClass
 
             union all
 
-            select 
-            right((space(44) + upper(rtrim('TAX'))), 44) 
-            + right((space(8) + convert(varchar,taxtotal)), 8) 
+            select
+            right((space(44) + upper(rtrim('TAX'))), 44)
+            + right((space(8) + convert(varchar,taxtotal)), 8)
             + right((space(4) + ''), 4) as linetoprint,
             emp_no,register_no,trans_no,
             2 as sequence,null as dept_name,3 as ordered,'' as upc
@@ -2808,8 +2808,8 @@ class InstallUtilities extends LibraryClass
 
             union all
 
-            select 
-            right((space(44) + upper(rtrim('TOTAL'))), 44) 
+            select
+            right((space(44) + upper(rtrim('TOTAL'))), 44)
             + right((space(8) +convert(varchar,runningtotal-tendertotal)),8)
             + right((space(4) + ''), 4) as linetoprint,
             emp_no,register_no,trans_no,
@@ -2827,15 +2827,15 @@ class InstallUtilities extends LibraryClass
 
             union all
 
-            select 
-            right((space(44) + upper(rtrim('Current Amount Due'))), 44) 
+            select
+            right((space(44) + upper(rtrim('Current Amount Due'))), 44)
             +right((space(8) + convert(varchar,subtotal)),8)
             + right((space(4) + ''), 4) as linetoprint,
             emp_no,register_no,trans_no,
             5 as sequence,
             null as dept_name,
             5 as ordered,'' as upc
-            from rp_subtotals where runningtotal <> 0"; 
+            from rp_subtotals where runningtotal <> 0";
         }
         elseif($type == 'pdolite'){
             $rpunionsG = str_replace('right(','str_right(',$rpunionsG);
@@ -2884,15 +2884,15 @@ class InstallUtilities extends LibraryClass
                 emp_no,
                 trans_no,
                 upc,
-                CASE 
-                    WHEN trans_subtype IN ('CP','IC') OR upc LIKE '%000000052' THEN 'T' 
-                    WHEN upc = 'DISCOUNT' THEN 'S' 
-                    ELSE trans_type 
+                CASE
+                    WHEN trans_subtype IN ('CP','IC') OR upc LIKE '%000000052' THEN 'T'
+                    WHEN upc = 'DISCOUNT' THEN 'S'
+                    ELSE trans_type
                 END AS trans_type,
-                CASE 
-                    WHEN upc = 'MAD Coupon' THEN 'MA' 
-                    WHEN upc LIKE '%00000000052' THEN 'RR' 
-                    ELSE trans_subtype 
+                CASE
+                    WHEN upc = 'MAD Coupon' THEN 'MA'
+                    WHEN upc LIKE '%00000000052' THEN 'RR'
+                    ELSE trans_subtype
                 END AS trans_subtype,
                 trans_status,
                 department,
@@ -2915,7 +2915,7 @@ class InstallUtilities extends LibraryClass
                     '') . " AS trans_num
             FROM dtransactions
             WHERE trans_status NOT IN ('D','X','Z')
-                AND emp_no <> 9999 
+                AND emp_no <> 9999
                 AND register_no <> 99";
         if (!$db->table_exists("dlog",$name)) {
             $errors = InstallUtilities::dbStructureModify($db,'dlog',$dlogQ,$errors);
@@ -2923,16 +2923,16 @@ class InstallUtilities extends LibraryClass
 
         $ttG = "
             CREATE VIEW TenderTapeGeneric AS
-            SELECT tdate, 
-                emp_no, 
+            SELECT tdate,
+                emp_no,
                 register_no,
                 trans_no,
-                CASE 
+                CASE
                     WHEN trans_subtype = 'CP' AND upc LIKE '%MAD%' THEN ''
                     WHEN trans_subtype IN ('EF','EC','TA') THEN 'EF'
                     ELSE trans_subtype
                 END AS trans_subtype,
-                CASE 
+                CASE
                     WHEN trans_subtype = 'ca' THEN
                         CASE WHEN total >= 0 THEN total ELSE 0 END
                     ELSE -1 * total
@@ -2947,4 +2947,3 @@ class InstallUtilities extends LibraryClass
         return $errors;
     }
 }
-

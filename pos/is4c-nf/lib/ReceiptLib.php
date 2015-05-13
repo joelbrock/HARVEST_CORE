@@ -1034,11 +1034,11 @@ static public function printReceipt($arg1, $ref, $second=False, $email=False)
             if (trim(CoreLocal::get("memberID")) != CoreLocal::get("defaultNonMem")) {
                 if (CoreLocal::get("newReceipt")>=1){
                     $receipt['any'] .= self::$PRINT_OBJ->TextStyle(True,False,True);
-                    $receipt['any'] .= self::$PRINT_OBJ->centerString("Thank You - Owner ".$member,True);
+                    $receipt['any'] .= self::$PRINT_OBJ->centerString("Thank You - Member/Owner ".$member,True);
                     $receipt['any'] .= self::$PRINT_OBJ->TextStyle(True);
                     $receipt['any'] .= "\n\n";
                 } else {
-                    $receipt['any'] .= self::$PRINT_OBJ->centerString("Thank You - Member ".$member);
+                    $receipt['any'] .= self::$PRINT_OBJ->centerString("Thank You - Member/Owner ".$member);
                     $receipt['any'] .= "\n";
                 }
             } else {
