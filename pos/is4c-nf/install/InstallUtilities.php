@@ -1678,9 +1678,9 @@ class InstallUtilities extends LibraryClass
 
         select     upc,
             case when discounttype=1 then
-            ".$db->concat("' > item on sale - you saved \$'",'CAST(CAST(sum(quantity*regprice-quantity*unitprice) AS decimal(10,2)) AS char(20)) COLLATE ' . $mysql_collation,"'  <'",'')."
+            ".$db->concat("' > you saved \$'",'CAST(CAST(sum(quantity*regprice-quantity*unitprice) AS decimal(10,2)) AS char(20)) COLLATE ' . $mysql_collation,"'  Item On Sale <'",'')."
             when discounttype=2 then
-            ".$db->concat("' > item on sale - you saved \$'",'CAST(CAST(sum(quantity*regprice-quantity*unitprice) AS decimal(10,2)) AS char(20)) COLLATE ' . $mysql_collation,"'  Member Special <'",'')."
+            ".$db->concat("' > you saved \$'",'CAST(CAST(sum(quantity*regprice-quantity*unitprice) AS decimal(10,2)) AS char(20)) COLLATE ' . $mysql_collation,"'  Member Special <'",'')."
             end as description,
             trans_type,'0' as trans_subtype,0 as itemQtty,discounttype,volume,
             'D' as trans_status,
@@ -1739,7 +1739,7 @@ class InstallUtilities extends LibraryClass
 
             select     upc,
                 case when discounttype=1 then
-                ' > you saved $'+convert(varchar(20),convert(money,sum(quantity*regprice-quantity*unitprice)))+'  <'
+                ' > item on sale - you saved $'+convert(varchar(20),convert(money,sum(quantity*regprice-quantity*unitprice)))+'  Item On Sale <'
                 when discounttype=2 then
                 ' > you saved $'+convert(varchar(20),convert(money,sum(quantity*regprice-quantity*unitprice)))+'  Member Special <'
                 end as description,
@@ -2262,7 +2262,7 @@ class InstallUtilities extends LibraryClass
             select     register_no,emp_no,trans_no,card_no,
                 upc,
                 case when discounttype=1 then
-                ".$db->concat("' > you saved \$'",'CAST(CAST(sum(quantity*regprice-quantity*unitprice) AS decimal(10,2)) AS char(20)) COLLATE ' . $mysql_collation,"'  <'",'')."
+                ".$db->concat("' > you saved \$'",'CAST(CAST(sum(quantity*regprice-quantity*unitprice) AS decimal(10,2)) AS char(20)) COLLATE ' . $mysql_collation,"'  Item On Sale <'",'')."
                 when discounttype=2 then
                 ".$db->concat("' > you saved \$'",'CAST(CAST(sum(quantity*regprice-quantity*unitprice) AS decimal(10,2)) AS char(20)) COLLATE ' . $mysql_collation,"'  Member Special <'",'')."
                 end as description,
@@ -2332,7 +2332,7 @@ class InstallUtilities extends LibraryClass
             select     register_no,emp_no,trans_no,card_no,
                 upc,
                 case when discounttype=1 then
-                ' > YOU SAVED $'+convert(varchar(20),convert(money,sum(quantity*regprice-quantity*unitprice)))+'  <'
+                ' > YOU SAVED $'+convert(varchar(20),convert(money,sum(quantity*regprice-quantity*unitprice)))+'  Item On Sale <'
                 when discounttype=2 then
                 ' > YOU SAVED $'+convert(varchar(20),convert(money,sum(quantity*regprice-quantity*unitprice)))+'  Member Special <'
                 end as description,
