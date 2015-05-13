@@ -1065,7 +1065,7 @@ static public function printReceipt($arg1, $ref, $second=False, $email=False)
             }
 
             /***** CvR add charge total to receipt bottom ****/
-            $receipt['any'] = self::chargeBalance($receipt['any'], $chargeProgram, $ref);
+            // $receipt['any'] = self::chargeBalance($receipt['any'], $chargeProgram, $ref);
             /**** CvR end ****/
 
             // check if message mods have data
