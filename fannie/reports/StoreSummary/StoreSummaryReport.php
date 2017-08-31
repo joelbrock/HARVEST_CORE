@@ -44,7 +44,7 @@ class StoreSummaryReport extends FannieReportPage {
 
     function preprocess()
     {
-
+        parent::preprocess();
         $this->title = "Fannie : Store Summary Report";
         $this->header = "Store Summary Report";
         $this->report_cache = 'none';
@@ -109,15 +109,16 @@ class StoreSummaryReport extends FannieReportPage {
 
     function fetch_report_data(){
         global $FANNIE_OP_DB, $FANNIE_COOP_ID;
-        $d1 = FormLib::get_form_value('date1',date('Y-m-d'));
-        $d2 = FormLib::get_form_value('date2',date('Y-m-d'));
+        $d1 = $this->form->date1;
+        $d2 = $this->form->date2;
         $dept = FormLib::get_form_value('dept',0);
 
-        $dbc = FannieDB::get($FANNIE_OP_DB);
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
 
         // Can dlog views if they include cost.
         $dtrans = DTransactionsModel::select_dtrans($d1,$d2);
-        $datestamp = $dbc->identifier_escape('datetime');
+        $datestamp = $dbc->identifierEscape('datetime');
 
         if ( isset($FANNIE_COOP_ID) && $FANNIE_COOP_ID == 'WEFC_Toronto' )
             $shrinkageUsers = " AND (t.card_no not between 99900 and 99998)";
@@ -128,11 +129,11 @@ class StoreSummaryReport extends FannieReportPage {
         $data = array();
 
         $taxNames = array(0 => '');
-        $tQ = $dbc->prepare_statement("SELECT id, rate, description FROM taxrates WHERE id > 0 ORDER BY id");
-        $tR = $dbc->exec_statement($tQ);
+        $tQ = $dbc->prepare("SELECT id, rate, description FROM taxrates WHERE id > 0 ORDER BY id");
+        $tR = $dbc->execute($tQ);
         // Try generating code in this loop for use in SELECT and reporting.
         //  See SalesAndTaxTodayReport.php
-        while ( $trow = $dbc->fetch_array($tR) ) {
+        while ( $trow = $dbc->fetchRow($tR) ) {
             $taxNames[$trow['id']] = $trow['description'];
         }
 
@@ -238,9 +239,9 @@ class StoreSummaryReport extends FannieReportPage {
                 CASE WHEN s.superID IS NULL THEN r.superID ELSE s.superID end,
                 CASE WHEN e.dept_no IS NULL THEN d.dept_no ELSE e.dept_no end";
         }
-        $costsP = $dbc->prepare_statement($costs);
+        $costsP = $dbc->prepare($costs);
         $costArgs = array($d1.' 00:00:00', $d2.' 23:59:59');
-        $costsR = $dbc->exec_statement($costsP, $costArgs);
+        $costsR = $dbc->execute($costsP, $costArgs);
 
         // Array in which totals used in the report are accumulated.
         $supers = array();
@@ -251,7 +252,7 @@ class StoreSummaryReport extends FannieReportPage {
         $this->grandTax1Total = 0;
         $this->grandTax2Total = 0;
 
-        while($row = $dbc->fetch_array($costsR)){
+        while($row = $dbc->fetchRow($costsR)){
             if ($curSuper != $row['sid']){
                 $curSuper = $row['sid'];
             }
@@ -396,21 +397,22 @@ class StoreSummaryReport extends FannieReportPage {
         // A row for each type of member.
         $dDiscountTotal = 0;
         $dQtyTotal = 0;
-        $discQ = $dbc->prepare_statement("SELECT m.memDesc, SUM(t.total) AS Discount,
+        $discQ = $dbc->prepare("
+                SELECT m.memDesc, 
+                    SUM(t.total) AS Discount,
                     count(*) AS ct
                 FROM $dtrans t
-                INNER JOIN {$FANNIE_OP_DB}.custdata c ON t.card_no = c.CardNo AND c.personNum=1
-                INNER JOIN {$FANNIE_OP_DB}.memtype m ON c.memType = m.memtype
+                    INNER JOIN {$FANNIE_OP_DB}.memtype m ON t.memType = m.memtype
                 WHERE ($datestamp BETWEEN ? AND ?)
                     AND t.upc = 'DISCOUNT'
                     AND t.total <> 0
                     AND t.trans_status not in ('D','X','Z')
                     AND t.emp_no not in (9999){$shrinkageUsers}
                     AND t.register_no != 99
-                    AND t.`trans_subtype` not in ('CP','IC')
+                    AND t.trans_subtype not in ('CP','IC')
                 GROUP BY m.memDesc
                 ORDER BY m.memDesc");
-        $discR = $dbc->exec_statement($discQ,$costArgs);
+        $discR = $dbc->execute($discQ,$costArgs);
         if ($discR === False) {
             $data[] = array("SQL exec on $dtrans failed");
         } else {
@@ -463,8 +465,8 @@ class StoreSummaryReport extends FannieReportPage {
             'Profit',
             '',
             'Margin %',
-            $taxNames['2'],
-            $taxNames['1']
+            isset($taxNames['2']) ? $taxNames['2'] : 'n/a',
+            isset($taxNames['1']) ? $taxNames['1'] : 'n/a',
         );
         $record['meta'] = FannieReportPage::META_BOLD;
         $data[] = $record;
@@ -502,18 +504,10 @@ class StoreSummaryReport extends FannieReportPage {
     // calculate_footers()
     }
 
-    function form_content(){
-        $lastMonday = "";
-        $lastSunday = "";
-
-        $ts = mktime(0,0,0,date("n"),date("j")-1,date("Y"));
-        while($lastMonday == "" || $lastSunday == ""){
-            if (date("w",$ts) == 1 && $lastSunday != "")
-                $lastMonday = date("Y-m-d",$ts);
-            elseif(date("w",$ts) == 0)
-                $lastSunday = date("Y-m-d",$ts);
-            $ts = mktime(0,0,0,date("n",$ts),date("j",$ts)-1,date("Y",$ts));    
-        }
+    function form_content()
+    {
+        list($lastMonday, $lastSunday) = \COREPOS\Fannie\API\lib\Dates::lastWeek();
+        ob_start();
         ?>
         <form action=StoreSummaryReport.php method=get>
         <div class="col-sm-5">
@@ -553,6 +547,7 @@ class StoreSummaryReport extends FannieReportPage {
         </form>
         <?php
 
+        return ob_get_clean();
     // form_content()
     }
 
@@ -570,6 +565,5 @@ class StoreSummaryReport extends FannieReportPage {
 // StoreSummaryReport
 }
 
-FannieDispatch::conditionalExec(false);
+FannieDispatch::conditionalExec();
 
-?>

@@ -450,4 +450,3 @@ function addBackPage($pdf){
     $pdf->SetFont('Arial','',10);
 }
 
-?>

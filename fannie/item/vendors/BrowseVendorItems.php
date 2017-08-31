@@ -33,7 +33,6 @@ class BrowseVendorItems extends FanniePage
 
     public $description = '[Vendor Items] lists items in the vendor\'s catalog. Must be
     accessed via the Vendor Editor.';
-    public $themed = true;
 
     protected $must_authenticate = true;
     protected $auth_classes = array('pricechange');
@@ -85,7 +84,8 @@ class BrowseVendorItems extends FanniePage
         }
     }
 
-    private function getCategoryBrands($vid,$did){
+    private function getCategoryBrands($vid,$did)
+    {
         global $FANNIE_OP_DB;
         $dbc = FannieDB::get($FANNIE_OP_DB);
 
@@ -99,8 +99,8 @@ class BrowseVendorItems extends FanniePage
         }
         $query .= "GROUP BY brand ORDER BY brand";
         $ret = "<option value=\"\">Select a brand...</option>";
-        $p = $dbc->prepare_statement($query);
-        $result = $dbc->exec_statement($p,$args);
+        $p = $dbc->prepare($query);
+        $result = $dbc->execute($p,$args);
         while($row=$dbc->fetch_row($result))
             $ret .= "<option>$row[0]</option>";
 
@@ -155,20 +155,21 @@ class BrowseVendorItems extends FanniePage
         return $defaultSuper;
     }
 
-    private function showCategoryItems($vid,$did,$brand,$ds=-999){
+    private function showCategoryItems($vid,$did,$brand,$ds=-999)
+    {
         global $FANNIE_OP_DB;
         $dbc = FannieDB::get($FANNIE_OP_DB);
 
         $defaultSuper = $ds;
 
         $depts = "";
-        $p = $dbc->prepare_statement("SELECT dept_no,dept_name 
+        $p = $dbc->prepare("SELECT dept_no,dept_name 
                                       FROM departments AS d
                                         LEFT JOIN MasterSuperDepts AS s ON d.dept_no=s.dept_ID
                                       ORDER BY 
                                           CASE WHEN s.superID=? THEN 0 ELSE 1 END,
                                           dept_no");
-        $rp = $dbc->exec_statement($p, array($defaultSuper));
+        $rp = $dbc->execute($p, array($defaultSuper));
         while($rw = $dbc->fetch_row($rp))
             $depts .= "<option value=$rw[0]>$rw[0] $rw[1]</option>";
 
@@ -190,24 +191,47 @@ class BrowseVendorItems extends FanniePage
             $args[] = $did;
         }
         $query .= "ORDER BY v.upc";
-        $posP = $dbc->prepare('SELECT upc FROM products WHERE upc=?');
+        $posP = $dbc->prepare('
+            SELECT upc, 
+                normal_price, 
+                department,
+                d.dept_name
+            FROM products AS p
+                LEFT JOIN departments AS d ON p.department=d.dept_no
+            WHERE upc=?');
         
         $ret = "<table class=\"table table-bordered\">";
         $ret .= "<tr><th>UPC</th><th>Brand</th><th>Description</th>";
         $ret .= "<th>Size</th><th>Cost</th><th>Price</th><th>Dept.</th><th>&nbsp;</th></tr>";
-        $p = $dbc->prepare_statement($query);
-        $result = $dbc->exec_statement($p,$args);
+        $p = $dbc->prepare($query);
+        $result = $dbc->execute($p,$args);
         while ($row = $dbc->fetch_row($result)) {
             $inPOS = $dbc->execute($posP, array($row['upc']));
             if ($inPOS && $dbc->numRows($inPOS) > 0) {
+                $pos = $dbc->fetchRow($inPOS);
                 $ret .= sprintf("<tr class=\"alert-success\">
-                    <td>%s</td><td>%s</td><td>%s</td>
-                    <td>%s</td><td>\$%.2f</td><td colspan=3>&nbsp;
-                    </td></tr>",$row['upc'],$row['brand'],
-                    $row['description'],$row['size'],$row['cost']);
+                    <td><a href=\"../ItemEditorPage.php?searchupc=%s\">%s</a></td>
+                    <td>%s</td>
+                    <td>%s</td>
+                    <td>%s</td>
+                    <td>\$%.2f</td>
+                    <td>\$%.2f</td>
+                    <td>%d %s</td>
+                    <td>&nbsp;</td>
+                    </tr>",
+                    $row['upc'], $row['upc'],
+                    $row['brand'],
+                    $row['description'],
+                    $row['size'],
+                    $row['cost'],
+                    $pos['normal_price'],
+                    $pos['department'], $pos['dept_name']
+                );
             } else {
                 $srp = !empty($row['srp']) ? $row['srp'] : $this->getSRP($row['cost'],$row['margin']);
-                $ret .= sprintf("<tr id=row%s><td>%s</td><td>%s</td><td>%s</td>
+                $ret .= sprintf("<tr id=row%s>
+                    <td><a href=\"../ItemEditorPage.php?searchupc=%s\">%s</a></td>
+                    <td>%s</td><td>%s</td>
                     <td>%s</td><td>\$%.2f</td>
                     <td class=\"col-sm-1\">
                         <div class=\"input-group\">
@@ -219,8 +243,10 @@ class BrowseVendorItems extends FanniePage
                     <td id=button%s>
                     <button type=button value=\"Add to POS\" class=\"btn btn-default\"
                     onclick=\"addToPos('%s');\">Add to POS</button></td>
-                    </tr>",$row['upc'],
-                    $row['upc'],$row['brand'],$row['description'],
+                    </tr>",
+                    $row['upc'],
+                    $row['upc'], $row['upc'],
+                    $row['brand'],$row['description'],
                     $row['size'],$row['cost'],$srp,$row['upc'],
                     $row['upc'],$depts,$row['upc'],$row['upc']);
             }
@@ -235,13 +261,13 @@ class BrowseVendorItems extends FanniePage
         global $FANNIE_OP_DB;
         $dbc = FannieDB::get($FANNIE_OP_DB);
 
-        $p = $dbc->prepare_statement("SELECT i.*,v.vendorName FROM vendorItems AS i
+        $p = $dbc->prepare("SELECT i.*,v.vendorName FROM vendorItems AS i
             LEFT JOIN vendors AS v ON v.vendorID=i.vendorID
             WHERE i.vendorID=? AND upc=?");
-        $vinfo = $dbc->exec_statement($p, array($vid,$upc));
+        $vinfo = $dbc->execute($p, array($vid,$upc));
         $vinfo = $dbc->fetch_row($vinfo);
-        $p = $dbc->prepare_statement("SELECT * FROM departments WHERE dept_no=?");
-        $dinfo = $dbc->exec_statement($p,array($dept));
+        $p = $dbc->prepare("SELECT * FROM departments WHERE dept_no=?");
+        $dinfo = $dbc->execute($p,array($dept));
         $dinfo = $dbc->fetch_row($dinfo);
         
         $model = new ProductsModel($dbc);
@@ -252,35 +278,39 @@ class BrowseVendorItems extends FanniePage
         $model->tax($dinfo['dept_tax']);
         $model->foodstamp($dinfo['dept_fs']);
         $model->cost($vinfo['cost']);
+        $model->default_vendor_id($vid);
+        $model->brand($vinfo['brand']);
+        $model->store_id(1);
         $model->save();
 
-        $xInsQ = $dbc->prepare_statement("INSERT INTO prodExtra (upc,distributor,manufacturer,cost,margin,variable_pricing,location,
+        $xInsQ = $dbc->prepare("INSERT INTO prodExtra (upc,manufacturer,distributor,cost,margin,variable_pricing,location,
                 case_quantity,case_cost,case_info) VALUES
                 (?,?,?,?,0.00,0,'','',0.00,'')");
         $args = array($upc,$vinfo['brand'],
                 $vinfo['vendorName'],$vinfo['cost']);
-        $dbc->exec_statement($xInsQ,$args);
+        $dbc->execute($xInsQ,$args);
 
         if ($tags !== -1) {
             $tag = new ShelftagsModel($dbc);
             $tag->id($tags);
             $tag->upc($upc);
             $info = $model->getTagData();
-            $model->normal_price($info['normal_price']);
-            $model->description($info['description']);
-            $model->brand($info['brand']);
-            $model->vendor($info['vendor']);
-            $model->sku($info['sku']);
-            $model->size($info['size']);
-            $model->units($info['units']);
-            $model->pricePerUnit($info['pricePerUnit']);
-            $model->save();
+            $tag->normal_price($info['normal_price']);
+            $tag->description($info['description']);
+            $tag->brand($info['brand']);
+            $tag->vendor($info['vendor']);
+            $tag->sku($info['sku']);
+            $tag->size($info['size']);
+            $tag->units($info['units']);
+            $tag->pricePerUnit($info['pricePerUnit']);
+            $tag->save();
         }
 
         echo "Item added";
     }
 
-    private function getSRP($cost,$margin){
+    private function getSRP($cost,$margin)
+    {
         $srp = sprintf("%.2f",$cost/(1-$margin));
         while (substr($srp,strlen($srp)-1,strlen($srp)) != "5" &&
                substr($srp,strlen($srp)-1,strlen($srp)) != "9")
@@ -298,14 +328,14 @@ class BrowseVendorItems extends FanniePage
 
         $dbc = FannieDB::get($FANNIE_OP_DB);
         $cats = "";
-        $p = $dbc->prepare_statement("SELECT i.vendorDept, d.name 
+        $p = $dbc->prepare("SELECT i.vendorDept, d.name 
                                       FROM vendorItems AS i
                                         LEFT JOIN vendorDepartments AS d
                                         ON i.vendorID=d.vendorID AND i.vendorDept=d.deptID
                                       WHERE i.vendorID=?
                                       GROUP BY i.vendorDept, d.name
                                       ORDER BY i.vendorDept");
-        $rp = $dbc->exec_statement($p,array($vid));
+        $rp = $dbc->execute($p,array($vid));
         while ($rw = $dbc->fetch_row($rp)) {
             if ($rw['vendorDept'] == 0 && empty($rw['name'])) {
                 continue;
@@ -313,8 +343,12 @@ class BrowseVendorItems extends FanniePage
             $cats .= "<option value=$rw[0]>$rw[0] $rw[1]</option>";
         }
 
-        if ($cats =="") $cats = "<option value=\"\">Select a department...</option><option>All</option>";
-        else $cats = "<option value=\"\">Select a department...</option>".$cats;
+        if ($cats =="") {
+            $cats = "<option value=\"\">Select a subcategory...</option><option selected>All</option>";
+            $this->addOnloadCommand('catchange()');
+        } else {
+            $cats = "<option value=\"\">Select a subcategory...</option>".$cats; 
+        }
 
         ob_start();
         ?>
@@ -324,7 +358,7 @@ class BrowseVendorItems extends FanniePage
         </select>
         &nbsp;&nbsp;&nbsp;
         <select id=brandselect onchange="brandchange();" class="form-control">
-        <option>Select a department first...</option>
+        <option>Select a subcategory first...</option>
         </select>
         &nbsp;&nbsp;&nbsp;
         <select id="shelftags" class="form-control">
@@ -364,7 +398,7 @@ class BrowseVendorItems extends FanniePage
     {
         return '<p>This tool is used to create POS products from
             entries in the vendor\'s catalog of items. Selecting
-            a department and brand first is necessary to keep the
+            a subcategory and brand first is necessary to keep the
             list of available items a manageable size.
             </p>
             <p>Green rows are already in POS as products. Other
@@ -377,8 +411,18 @@ class BrowseVendorItems extends FanniePage
             Again CORE will try to guess the correct set.
             </p>';
     }
+
+    public function unitTest($phpunit)
+    {
+        $phpunit->assertNotEquals(0, strlen($this->body_content()));
+        $phpunit->assertEquals('1.99', $this->getSRP(1.96, 0));
+        $phpunit->assertNotEquals(0, strlen($this->showCategoryItems(1,1,'test')));
+        $guess = is_numeric($this->guessSuper(1, 1, 'test'));
+        ob_start();
+        $this->getCategoryBrands(1, 1);
+        $phpunit->assertNotEquals(0, strlen(ob_get_clean()));
+    }
 }
 
-FannieDispatch::conditionalExec(false);
+FannieDispatch::conditionalExec();
 
-?>

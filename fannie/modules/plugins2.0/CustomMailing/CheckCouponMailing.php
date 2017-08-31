@@ -38,6 +38,8 @@ class CheckCouponMailing extends FannieRESTfulPage
     protected $title = 'Check Coupon Mailing';
     protected $header = 'Check Coupon Mailing';
     public $themed = true;
+    public $description = '[Check Coupon Mailing] generates a custom coupon designed to print
+    on tri-fold check paper.';
 
     public function preprocess()
     {
@@ -77,17 +79,17 @@ class CheckCouponMailing extends FannieRESTfulPage
         $dbc = $this->connection;
         $dbc->setDefaultDB($this->config->get('OP_DB'));
 
-        $custdata = new CustdataModel($dbc);
-        $meminfo = new MeminfoModel($dbc);
         $signage = new COREPOS\Fannie\API\item\FannieSignage(array());
         foreach ($this->id as $card_no) {
             $pdf->AddPage();
-            $custdata->CardNo($card_no);
-            $custdata->personNum(1);
-            $custdata->load();
-
-            $meminfo->card_no($card_no);
-            $meminfo->load();
+            $account = \COREPOS\Fannie\API\member\MemberREST::get($card_no);
+            $primary = array();
+            foreach ($account['customers'] as $c) {
+                if ($c['accountHolder']) {
+                    $primary = $c;
+                    break;
+                }
+            }
 
             $check_number = rand(100000, 999995);
 
@@ -131,12 +133,13 @@ class CheckCouponMailing extends FannieRESTfulPage
                 $pdf->SetTextColor(0, 0, 0);
 
                 $their_address = array(
-                    $custdata->FirstName() . ' ' . $custdata->LastName(),
+                    $primary['firstName'] . ' ' . $primary['lastName'],
                 );
-                foreach (explode("\n", $meminfo->street()) as $s) {
-                    $their_address[] = $s;
+                $their_address[] = $account['addressFirstLine'];
+                if ($account['addressSecondLine']) {
+                    $their_address[] = $account['addressSecondLine'];
                 }
-                $their_address[] = $meminfo->city() . ', ' . $meminfo->state() . ' ' . $meminfo->zip();
+                $their_address[] = $account['city'] . ', ' . $account['state'] . ' ' . $account['zip'];
                 $pdf->SetXY($check_left_x + $envelope_window_tab, $check_top_y + (11*$line_height));
                 $pdf->SetFont('Gill', 'B', 10);
                 foreach($their_address as $line) {
@@ -153,7 +156,7 @@ class CheckCouponMailing extends FannieRESTfulPage
 
                 $pdf->SetXY($check_left_x+145, $check_top_y+(6*$line_height)+1);
                 $pdf->SetFont('Gill', '', 8);
-                $pdf->MultiCell(50, $line_height-2, 'Limit one per purchase. Cannot be applied to previous purchases. No cash value.');
+                $pdf->MultiCell(50, $line_height-2, 'Limit one per day. Cannot be applied to previous purchases. No cash value.');
                 $pdf->SetFont('Gill', '', 10);
 
                 $pdf->SetFillColor(0xCC, 0xCC, 0xCC);

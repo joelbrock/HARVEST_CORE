@@ -31,6 +31,7 @@ class RecallReport extends FannieReportPage
     public $description = '[Recall Report] lists names and contact information for everyone who
         purchased a given product during a date range. Hopefully rarely used.';
     public $themed = true;
+    public $report_set = 'Membership';
 
     protected $report_headers = array('Mem#', 'Name', 'Address', 'City', 'State', 'Zip', 'Phone', 'Alt. Phone', 'Email', 'Qty', 'Amt');
     protected $title = "Fannie : Recall Report";
@@ -41,13 +42,13 @@ class RecallReport extends FannieReportPage
 
     public function report_description_content()
     {
-        global $FANNIE_OP_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
 
         $upc = BarcodeLib::padUPC(FormLib::get('upc'));
 
-        $q = $dbc->prepare_statement("SELECT description FROM products WHERE upc=?");
-        $r = $dbc->exec_statement($q,array($upc));
+        $q = $dbc->prepare("SELECT description FROM products WHERE upc=?");
+        $r = $dbc->execute($q,array($upc));
         $w = $dbc->fetch_row($r);
         $description = $w[0];
 
@@ -56,46 +57,54 @@ class RecallReport extends FannieReportPage
 
     public function fetch_report_data()
     {
-        global $FANNIE_OP_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
 
         $upc = BarcodeLib::padUPC(FormLib::get('upc'));
-        $date1 = FormLib::get_form_value('date1',date('Y-m-d'));
-        $date2 = FormLib::get_form_value('date2',date('Y-m-d'));
+        $date1 = $this->form->date1;
+        $date2 = $this->form->date2;
 
         $dlog = DTransactionsModel::selectDlog($date1,$date2);
 
-        $q = $dbc->prepare_statement("SELECT d.card_no,c.LastName,c.FirstName,m.street,m.city,m.state,
-                m.zip,m.phone,m.email_2,m.email_1,sum(quantity) as qty,
+        $q = $dbc->prepare("
+            SELECT d.card_no,
+                sum(quantity) as qty,
                 sum(total) as amt
-            FROM $dlog AS d LEFT JOIN custdata AS c
-            ON c.CardNo=d.card_no AND c.personNum=1
-            LEFT JOIN meminfo AS m ON m.card_no=c.CardNo
+            FROM $dlog AS d 
             WHERE d.upc=? AND 
-            tdate BETWEEN ? AND ?
-            GROUP BY d.card_no,c.FirstName,c.LastName,m.street,m.city,
-            m.state,m.zip,m.phone,m.email_1,m.email_2
-            ORDER BY c.LastName,c.FirstName");
-        $r = $dbc->exec_statement($q,array($upc,$date1.' 00:00:00',$date2.' 23:59:59'));
+                tdate BETWEEN ? AND ?
+            GROUP BY d.card_no
+            ORDER BY d.card_no");
+        $r = $dbc->execute($q,array($upc,$date1.' 00:00:00',$date2.' 23:59:59'));
 
         $data = array();
         while($w = $dbc->fetch_row($r)) {
+            $account = \COREPOS\Fannie\API\member\MemberREST::get($w['card_no']);
+            if ($account == false) {
+                continue;
+            }
+            $customer = array();
+            foreach ($account['customers'] as $c) {
+                if ($c['accountHolder']) {
+                    $customer = $c;
+                    break;
+                }
+            }
             $record = array(
                     $w['card_no'],
-                    $w['LastName'].', '.$w['FirstName'],
-                    $w['street'],
-                    $w['city'],
-                    $w['state'],
-                    $w['zip'],
-                    $w['phone'],
-                    $w['email_2'],
-                    $w['email_1'],
+                    $customer['lastName'].', '.$customer['firstName'],
+                    $account['addressFirstLine'] . ' ' . $account['addressSecondLine'],
+                    $account['city'],
+                    $account['state'],
+                    $account['zip'],
+                    $customer['phone'],
+                    $customer['altPhone'],
+                    $customer['email'],
                     sprintf('%.2f', $w['qty']),
                     sprintf('%.2f', $w['amt']),
             );
             $data[] = $record;
         }
-
         return $data;
     }
         
@@ -145,4 +154,3 @@ class RecallReport extends FannieReportPage
 
 FannieDispatch::conditionalExec();
 
-?>

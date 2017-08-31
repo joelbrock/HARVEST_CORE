@@ -59,18 +59,18 @@ class FileData
     */
     public static function csvToArray($filename, $limit=0)
     {
-        $fp = fopen($filename,'r');
-        if (!$fp) {
+        $fptr = fopen($filename,'r');
+        if (!$fptr) {
             return array();
         }
         $ret = array();
-        while (!feof($fp)) {
-            $ret[] = fgetcsv($fp);
+        while (!feof($fptr)) {
+            $ret[] = fgetcsv($fptr);
             if ($limit != 0 && count($ret) >= $limit) {
                 break;
             }
         }
-        fclose($fp);
+        fclose($fptr);
 
         return $ret;
     }
@@ -80,6 +80,14 @@ class FileData
     */
     public static function xlsToArray($filename, $limit)
     {
+        /** 
+          PHPExcel can read both file variants just fine if it's
+          available.
+        */
+        if (class_exists('\\PHPExcel_IOFactory')) {
+            return self::xlsxToArray($filename, $limit);
+        }
+
         if (!class_exists('Spreadsheet_Excel_Reader')) {
             include_once(dirname(__FILE__).'/../../src/Excel/xls_read/reader.php');
         }
@@ -115,8 +123,8 @@ class FileData
     */
     public static function xlsxToArray($filename, $limit)
     {
-        if (!class_exists('PHPExcel_IOFactory')) {
-            include_once(dirname(__FILE__).'/../../src/Excel/xlsx_read/Classes/PHPExcel.php');
+        if (!class_exists('\\PHPExcel_IOFactory')) {
+            return false;
         }
 
         $objPHPExcel = \PHPExcel_IOFactory::load($filename);
@@ -125,10 +133,9 @@ class FileData
         $cols = \PHPExcel_Cell::columnIndexFromString($sheet->getHighestColumn());
         $ret = array();
         for ($i=1; $i<=$rows; $i++) {
-            $new = array();
-            for($j=0; $j<=$cols; $j++) {
-                $new[] = $sheet->getCellByColumnAndRow($j,$i)->getValue();
-            }
+            $new = array_map(function ($j) use ($i, &$sheet) {
+                return $sheet->getCellByColumnAndRow($j, $i)->getValue();
+            }, range(0, $cols));
             $ret[] = $new;
             if ($limit != 0 && count($ret) >= $limit) {
                 break;

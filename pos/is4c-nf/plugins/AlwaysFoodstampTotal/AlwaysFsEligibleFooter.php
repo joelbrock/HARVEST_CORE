@@ -21,13 +21,16 @@
 
 *********************************************************************************/
 
+use COREPOS\pos\lib\Database;
+use COREPOS\pos\lib\FooterBoxes\FooterBox;
+
 class AlwaysFsEligibleFooter extends FooterBox 
 {
 
     public $header_css_class = 'fsLine';
     public $display_css_class = 'fsLine';
 
-    function AlwaysFsEligibleFooter() 
+    function __construct() 
     {
         if (CoreLocal::get('fntlflag') == 0 && CoreLocal::get('End') != 1){
             CoreLocal::set("fntlflag",1);

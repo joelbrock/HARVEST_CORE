@@ -21,8 +21,10 @@
 
 *********************************************************************************/
 
-namespace COREPOS\Fannie\API\webservices 
-{
+namespace COREPOS\Fannie\API\webservices; 
+use COREPOS\Fannie\API\member\MemberREST;
+use \FannieDB;
+use \FannieConfig;
 
 class FannieAutoComplete extends FannieWebService 
 {
@@ -35,7 +37,7 @@ class FannieAutoComplete extends FannieWebService
       @param $args array of data
       @return an array of data
     */
-    public function run($args)
+    public function run($args=array())
     {
         $ret = array();
         if (!property_exists($args, 'field') || !property_exists($args, 'search')) {
@@ -54,7 +56,7 @@ class FannieAutoComplete extends FannieWebService
             return $ret;
         }
 
-        $dbc = \FannieDB::get(\FannieConfig::factory()->get('OP_DB'));
+        $dbc = FannieDB::getReadOnly(FannieConfig::factory()->get('OP_DB'));
         switch (strtolower($args->field)) {
             case 'item':
                 $res = false;
@@ -67,6 +69,8 @@ class FannieAutoComplete extends FannieWebService
                                             OR p.brand LIKE ?
                                             OR u.description LIKE ?
                                             OR u.brand LIKE ?
+                                           GROUP BY p.upc,
+                                            p.description
                                            ORDER BY p.description');
                     $term = '%' . $args->search . '%';
                     $res = $dbc->execute($prep, array($term, $term, $term, $term));
@@ -75,7 +79,8 @@ class FannieAutoComplete extends FannieWebService
                         SELECT p.upc,
                             p.upc AS description
                         FROM products AS p
-                        WHERE p.upc LIKE ?');
+                        WHERE p.upc LIKE ?
+                        GROUP BY p.upc');
                     $res = $dbc->execute($prep, array('%'.$args->search . '%'));
                 }
                 while ($res && $row = $dbc->fetch_row($res)) {
@@ -99,12 +104,13 @@ class FannieAutoComplete extends FannieWebService
                 return $ret;
 
             case 'long_brand':
-                $prep = $dbc->prepare('SELECT u.brand
-                                       FROM productUser AS u
-                                        INNER JOIN products AS p ON u.upc=p.upc
-                                       WHERE u.brand LIKE ?
-                                       GROUP BY u.brand
-                                       ORDER BY u.brand');
+                $prep = $dbc->prepare('
+                    SELECT u.brand
+                    FROM productUser AS u
+                        ' . \DTrans::joinProducts('u', 'p', 'INNER') . '
+                    WHERE u.brand LIKE ?
+                    GROUP BY u.brand
+                    ORDER BY u.brand');
                 $res = $dbc->execute($prep, array($args->search . '%'));
                 while ($row = $dbc->fetch_row($res)) {
                     $ret[] = $row['brand'];
@@ -122,101 +128,15 @@ class FannieAutoComplete extends FannieWebService
                 while ($row = $dbc->fetch_row($res)) {
                     $ret[] = $row['vendorName'];
                 }
-                if ($dbc->tableExists('prodExtra')) {
-                    $prep = $dbc->prepare('SELECT distributor
-                                           FROM prodExtra
-                                           WHERE distributor LIKE ?
-                                           GROUP BY distributor
-                                           ORDER BY distributor');
-                    $res = $dbc->execute($prep, array($args->search . '%'));
-                    while ($row = $dbc->fetch_row($res)) {
-                        if (!in_array($row['distributor'], $ret)) {
-                            $ret[] = $row['distributor'];
-                        }
-                    }
-                }
 
                 return $ret;
 
             case 'mfirstname':
-                $prep = $dbc->prepare('SELECT FirstName
-                                       FROM custdata
-                                       WHERE FirstName LIKE ?
-                                       GROUP BY FirstName
-                                       ORDER BY FirstName');
-                $res = $dbc->execute($prep, array('%' . $args->search . '%'));
-                while ($row = $dbc->fetch_row($res)) {
-                    $ret[] = $row['FirstName'];
-                    if (count($ret) > 50) {
-                        break;
-                    }
-                }
-                
-                return $ret;
-
             case 'mlastname':
-                $prep = $dbc->prepare('SELECT LastName
-                                       FROM custdata
-                                       WHERE LastName LIKE ?
-                                       GROUP BY LastName
-                                       ORDER BY LastName');
-                $res = $dbc->execute($prep, array('%' . $args->search . '%'));
-                while ($row = $dbc->fetch_row($res)) {
-                    $ret[] = $row['LastName'];
-                    if (count($ret) > 50) {
-                        break;
-                    }
-                }
-
-                return $ret;
-
             case 'maddress':
-                $prep = $dbc->prepare('SELECT street
-                                       FROM meminfo
-                                       WHERE street LIKE ?
-                                       GROUP BY street
-                                       ORDER BY street');
-                $res = $dbc->execute($prep, array('%' . $args->search . '%'));
-                while ($row = $dbc->fetch_row($res)) {
-                    $ret[] = $row['street'];
-                    if (count($ret) > 50) {
-                        break;
-                    }
-                }
-
-                return $ret;
-
             case 'mcity':
-                $prep = $dbc->prepare('SELECT city
-                                       FROM meminfo
-                                       WHERE city LIKE ?
-                                       GROUP BY city
-                                       ORDER BY city');
-                $res = $dbc->execute($prep, array('%' . $args->search . '%'));
-                while ($row = $dbc->fetch_row($res)) {
-                    $ret[] = $row['city'];
-                    if (count($ret) > 50) {
-                        break;
-                    }
-                }
-
-                return $ret;
-
             case 'memail':
-                $prep = $dbc->prepare('SELECT email_1
-                                       FROM meminfo
-                                       WHERE email_1 LIKE ?
-                                       GROUP BY email_1
-                                       ORDER BY email_1');
-                $res = $dbc->execute($prep, array('%' . $args->search . '%'));
-                while ($row = $dbc->fetch_row($res)) {
-                    $ret[] = $row['email_1'];
-                    if (count($ret) > 50) {
-                        break;
-                    }
-                }
-
-                return $ret;
+                return MemberREST::autoComplete($args->field, $args->search);
 
             case 'sku':
                 $query = 'SELECT sku
@@ -265,11 +185,4 @@ class FannieAutoComplete extends FannieWebService
     }
 }
 
-}
-
-namespace 
-{
-    // global namespace wrapper class
-    class FannieAutoComplete extends \COREPOS\Fannie\API\webservices\FannieAutoComplete {}
-}
 

@@ -21,6 +21,9 @@
 
 *********************************************************************************/
 
+use COREPOS\pos\lib\TransRecord;
+use COREPOS\pos\parser\Parser;
+
 class AnnualMeetingParser extends Parser {
 
     private $plus = array('1042','1041');
@@ -31,21 +34,16 @@ class AnnualMeetingParser extends Parser {
 
     function check($str)
     {
-        if (strlen($str) < 4) return False;
+        if (strlen($str) < 4) return false;
         $plu = substr($str,0,4);
         if (in_array($plu, $this->plus)){
-            if (strlen($str)==4)
-                return True;
-            elseif(strtoupper($str[4])=='M')
-                return True;
-            elseif(strtoupper($str[4])=='V')
-                return True;
-            elseif(strtoupper($str[4])=='S')
-                return True;
-            elseif(strtoupper($str[4])=='K')
-                return True;
+            if (strlen($str)==4) {
+                return true;
+            } elseif(in_array(strtoupper($str[4]), array('M','V','K','N','W'))) {
+                return true;
+            }
         }
-        return False;
+        return false;
     }
 
     function parse($str)
@@ -55,19 +53,19 @@ class AnnualMeetingParser extends Parser {
             CoreLocal::set('qmInput',$str);
             $desc = $this->descriptions[$str];
             $opts = array(
-                $desc.' (Steak)' => 'M',
-                $desc.' (Risotto)' => 'V',
-                $desc.' (Squash V)' => 'S'
+                $desc.' (Pork)' => 'M',
+                $desc.' (Ratatouille)' => 'V',
+                $desc.' (Pork, G/F)' => 'N',
+                $desc.' (Ratatouille, G/F)' => 'W',
             );
             if ($str == 1041){
                 $opts[$desc.' (Kids)'] = 'K';
             }
             CoreLocal::set('qmNumber', $opts);
             $plugin_info = new QuickMenus();
-            $ret['main_frame'] = $plugin_info->plugin_url().'/QMDisplay.php';
+            $ret['main_frame'] = $plugin_info->pluginUrl().'/QMDisplay.php';
             return $ret;
-        }
-        else {
+        } else {
             $flag = strtoupper($str[4]);
             $plu = substr($str,0,4);
             $price = ($flag == 'K') ? 5.00 : 20.00;

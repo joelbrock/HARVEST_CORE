@@ -42,27 +42,18 @@ class SuspensionsReport extends FannieReportPage
 
     function fetch_report_data()
     {
-        global $FANNIE_OP_DB, $FANNIE_URL;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
-        $date1 = FormLib::get_form_value('date1',date('Y-m-d'));
-        $date2 = FormLib::get_form_value('date2',date('Y-m-d'));
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
+        $date1 = $this->form->date1;
+        $date2 = $this->form->date2;
         $code = FormLib::get_form_value('reason','0');
 
         $args = array($date1 . ' 00:00:00', $date2 . ' 23:59:59');
         $query = 'SELECT s.cardno as card_no,
                     s.type as sus_type,
                     s.suspDate,
-                    r.textStr,
-                    c.LastName,
-                    c.FirstName,
-                    m.street,
-                    m.city,
-                    m.state,
-                    m.zip,
-                    m.phone
+                    r.textStr
                   FROM suspensions AS s
-                    LEFT JOIN custdata AS c ON s.cardno=c.CardNo AND c.personNum=1
-                    LEFT JOIN meminfo AS m ON s.cardno=m.card_no
                     LEFT JOIN reasoncodes AS r ON s.reasoncode & r.mask <> 0
                   WHERE s.suspDate BETWEEN ? AND ?';
         if ($code != 0) {
@@ -80,6 +71,16 @@ class SuspensionsReport extends FannieReportPage
             $row = $dbc->fetch_row($res);
             if ($row['card_no'] != $record[0] && $record[0] != 0) {
                 $record[3] = substr($record[3], 0, strlen($record[3])-2);
+                $account = \COREPOS\Fannie\API\member\MemberREST::get($record[0]);
+                $record[6] = $account['addressFirstLine'];
+                $record[7] = $account['city'];
+                $record[8] = $account['state'];
+                $record[9] = $account['zip'];
+                foreach ($account['customers'] as $customer) {
+                    $record[4] = $customer['lastName'];
+                    $record[5] = $customer['firstName'];
+                    $record[10] = $customer['phone'];
+                }
                 $data[] = $record;
                 $record = array(0,1,2,'',4,5,6,7,8,9,10);
             }
@@ -87,17 +88,20 @@ class SuspensionsReport extends FannieReportPage
             $record[1] = $row['sus_type'] == 'I' ? 'INACTIVE' : 'TERMED';
             $record[2] = $row['suspDate'];
             $record[3] .= $row['textStr'] . ', ';
-            $record[4] = $row['LastName'];
-            $record[5] = $row['FirstName'];
-            $record[6] = $row['street'];
-            $record[7] = $row['city'];
-            $record[8] = $row['state'];
-            $record[9] = $row['zip'];
-            $record[10] = $row['phone'];
 
             $last_row = ($i == $num-1) ? true : false;
             if ($last_row) {
                 $record[3] = substr($record[3], 0, strlen($record[3])-2);
+                $account = \COREPOS\Fannie\API\member\MemberREST::get($record[0]);
+                $record[6] = $account['addressFirstLine'];
+                $record[7] = $account['city'];
+                $record[8] = $account['state'];
+                $record[9] = $account['zip'];
+                foreach ($account['customers'] as $customer) {
+                    $record[4] = $customer['lastName'];
+                    $record[5] = $customer['firstName'];
+                    $record[10] = $customer['phone'];
+                }
                 $data[] = $record;
             }
         }
@@ -107,8 +111,8 @@ class SuspensionsReport extends FannieReportPage
 
     function report_description_content()
     {
-        global $FANNIE_OP_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
         $reason = 'Any Reason';
         $mask = FormLib::get('reason', 0);
         if ($mask != 0) {
@@ -127,9 +131,10 @@ class SuspensionsReport extends FannieReportPage
     
     function form_content()
     {
-        global $FANNIE_OP_DB, $FANNIE_URL;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
         $codes = new ReasoncodesModel($dbc);
+        ob_start();
 ?>
 <form method = "get" action="<?php echo $_SERVER['PHP_SELF']; ?>">
 <div class="col-sm-4">
@@ -171,6 +176,7 @@ class SuspensionsReport extends FannieReportPage
 </div>
 </form>
 <?php
+        return ob_get_clean();
     }
 
     public function helpContent()
@@ -182,6 +188,5 @@ class SuspensionsReport extends FannieReportPage
     }
 }
 
-FannieDispatch::conditionalExec(false);
+FannieDispatch::conditionalExec();
 
-?>

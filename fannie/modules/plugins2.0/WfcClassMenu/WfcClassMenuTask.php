@@ -32,8 +32,7 @@ class WfcClassMenuTask extends FannieTask
 {
     public $name = 'WFC Class Menu Task';
 
-    public $description = 'Tracks usage of WFC virtual coupon and updates custdata.blueLine
-    to indicate whether the coupon is available. Replaces older script "nightly.memcoupon.php".';
+    public $description = 'Build custom menu for buying class registrations.';
 
     public function run()
     {
@@ -47,6 +46,7 @@ class WfcClassMenuTask extends FannieTask
                         INNER JOIN productUser AS u ON p.upc=u.upc 
                         LEFT JOIN productExpires AS e ON p.upc=e.upc 
                     WHERE p.department=708 AND CURDATE() <= e.expires
+                        AND p.store_id=1
                     ORDER BY u.description');
         $insP = $dbc->prepare('
             INSERT INTO QuickLookups

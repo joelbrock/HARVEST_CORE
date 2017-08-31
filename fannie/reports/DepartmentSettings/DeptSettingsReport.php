@@ -32,7 +32,7 @@ class DeptSettingsReport extends FannieReportPage
     public $themed = true;
     public $report_set = 'Operational Data';
 
-    protected $report_headers = array('Dept #', 'Dept Name', 'Sales Code', 'Margin', 'Tax', 'FS');
+    protected $report_headers = array('Dept #', 'Dept Name', 'Super', 'Sales Code', 'Margin', 'Tax', 'FS');
     protected $title = "Fannie : Department Settings";
     protected $header = "Department Settings";
     protected $required_fields = array('submit');
@@ -52,68 +52,81 @@ class DeptSettingsReport extends FannieReportPage
 
     public function fetch_report_data()
     {
-        global $FANNIE_OP_DB, $FANNIE_URL;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
+        $FANNIE_URL = $this->config->get('URL');
 
-        $super = FormLib::get('submit')=="by_sd" ? 1 : 0;
+        $super = $this->form->submit =="by_sd" ? 1 : 0;
 
         $join = "";
         $where = "";
         $args = array();
         if ($super == 1){
             $superID = FormLib::get('superdept');
-            $join = "LEFT JOIN superdepts AS s ON d.dept_no=s.dept_ID";
+            $join = "LEFT JOIN superdepts AS s ON d.dept_no=s.dept_ID
+                LEFT JOIN superDeptNames AS m ON s.superID=m.superID ";
             $where = "s.superID = ?";
             $args[] = $superID;
-        }
-        else {
+        } else {
             $d1 = FormLib::get('dept1');
             $d2 = FormLib::get('dept2');
-            $join = "";
+            $join = " LEFT JOIN MasterSuperDepts AS m ON d.dept_no=m.dept_ID";
             $where = "d.dept_no BETWEEN ? AND ?";
             $args = array($d1,$d2);
         }
 
-        $query = $dbc->prepare_statement("SELECT d.dept_no,d.dept_name,d.salesCode,d.margin,
+        $query = $dbc->prepare("SELECT d.dept_no,d.dept_name,d.salesCode,d.margin,
             CASE WHEN d.dept_tax=0 THEN 'NoTax' ELSE t.description END as tax,
-            CASE WHEN d.dept_fs=1 THEN 'Yes' ELSE 'No' END as fs
-            FROM departments AS d LEFT JOIN taxrates AS t
-            ON d.dept_tax = t.id 
+            CASE WHEN d.dept_fs=1 THEN 'Yes' ELSE 'No' END as fs,
+            m.super_name
+            FROM departments AS d 
+                LEFT JOIN taxrates AS t ON d.dept_tax = t.id 
             $join
             WHERE $where
             ORDER BY d.dept_no");
-        $result = $dbc->exec_statement($query,$args);
+        $result = $dbc->execute($query,$args);
         $data = array();
-        while($row = $dbc->fetch_row($result)) {
-            $record = array(
-                    $row[0],
-                    (isset($_REQUEST['excel']))?$row[1]:"<a href=\"{$FANNIE_URL}item/departments/DepartmentEditor.php?did=$row[0]\">$row[1]</a>",
-                    $row[2],
-                    sprintf('%.2f%%',$row[3]*100),
-                    $row[4],
-                    $row[5]
-            );
-            $data[] = $record;
+        while ($row = $dbc->fetchRow($result)) {
+            $data[] = $this->rowToRecord($row);
         }
 
         return $data;
     }
 
+    private function rowToRecord($row)
+    {
+        $record = array(
+            $row[0],
+            (isset($_REQUEST['excel']))?$row[1]:"<a href=\"" . $this->config->get('URL') . "item/departments/DepartmentEditor.php?did=$row[0]\">$row[1]</a>",
+            $row['super_name'],
+            $row[2],
+            sprintf('%.2f%%',$row[3]*100),
+            $row[4],
+            $row[5],
+        );
+        if (empty($row['super_name'])) {
+            $record['meta'] = FannieReportPage::META_COLOR;
+            $record['meta_background'] = '#ff9999';
+        }
+
+        return $record;
+    }
+
     public function form_content()
     {
-        global $FANNIE_OP_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
 
         $opts = "";
-        $prep = $dbc->prepare_statement("SELECT superID,super_name fROM superDeptNames ORDER BY super_name");
-        $resp = $dbc->exec_statement($prep);
+        $prep = $dbc->prepare("SELECT superID,super_name fROM superDeptNames ORDER BY super_name");
+        $resp = $dbc->execute($prep);
         while($row = $dbc->fetch_row($resp)) {
             $opts .= "<option value=$row[0]>$row[1]</option>";
         }
 
         $depts = "";
-        $prep = $dbc->prepare_statement("SELECT dept_no,dept_name FROM departments ORDER BY dept_no");
-        $resp = $dbc->exec_statement($prep);
+        $prep = $dbc->prepare("SELECT dept_no,dept_name FROM departments ORDER BY dept_no");
+        $resp = $dbc->execute($prep);
         $d1 = false;
         while($row = $dbc->fetch_row($resp)) {
             $depts .= "<option value=$row[0]>$row[0] $row[1]</option>";
@@ -176,6 +189,12 @@ class DeptSettingsReport extends FannieReportPage
     {
         return '<p>This is just a quick list of current margin, tax,
             and foodstamp settings for a set of POS departments.</p>';
+    }
+
+    public function unitTest($phpunit)
+    {
+        $data = array(0=>1, 1=>'TEST', 2=>100, 3=>0.5, 4=>0, 5=>1, 'super_name'=>'test');
+        $phpunit->assertInternalType('array', $this->rowToRecord($data));
     }
 }
 

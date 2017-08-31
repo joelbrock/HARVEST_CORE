@@ -44,7 +44,8 @@ class SimpleBackupTask extends FannieTask
 
     public function run()
     {
-        global $FANNIE_OP_DB, $FANNIE_TRANS_DB, $FANNIE_ARCHIVE_DB, $FANNIE_PLUGIN_SETTINGS;
+        global $FANNIE_OP_DB, $FANNIE_TRANS_DB, $FANNIE_ARCHIVE_DB, $FANNIE_PLUGIN_SETTINGS,
+            $FANNIE_SERVER, $FANNIE_SERVER_USER, $FANNIE_SERVER_PW;
 
         $dbs = array($FANNIE_OP_DB,$FANNIE_TRANS_DB,$FANNIE_ARCHIVE_DB);
         foreach ($dbs as $db) {
@@ -73,17 +74,21 @@ class SimpleBackupTask extends FannieTask
                 $this->cronMsg('Could not locate mysqldump program', FannieLogger::ERROR);
                 break; // no point in trying other databases
             }
-            $cmd .= " -q --databases -h \"$FANNIE_SERVER\" -u \"$FANNIE_SERVER_USER\" -p\"$FANNIE_SERVER_PW\" \"$db\"";
             $cmd = escapeshellcmd($cmd);
+            $cmd .= ' -q --databases 
+                -h ' . escapeshellarg($FANNIE_SERVER) . '
+                -u ' . escapeshellarg($FANNIE_SERVER_USER) . '
+                -p' . escapeshellarg($FANNIE_SERVER_PW) . ' 
+                ' . escapeshellarg($db);
             $outfile = $dir . '/' . $db . date('Ymd') . '.sql';
 
-            $gzip = realpath($FANNIE_PLUGIN_SETTINGS['SimpleBackupBinPath']."/mysqldump");
+            $gzip = $this->gzip();
             if ($FANNIE_PLUGIN_SETTINGS['SimpleBackupGZ'] == 1 && $gzip !== false) {
                 $cmd .= ' | ' . escapeshellcmd($gzip);
                 $outfile .= '.gz';
             }
 
-            $cmd .= ' > ' . escapeshellcmd("\"$outfile\"");
+            $cmd .= ' > ' . escapeshellarg($outfile);
             system($cmd);
 
             if (file_exists($outfile)) {
@@ -91,6 +96,17 @@ class SimpleBackupTask extends FannieTask
             } else {
                 $this->cronMsg('Error creating backup: ' . $outfile, FannieLogger::ERROR);
             }
+        }
+    }
+
+    private function gzip()
+    {
+        if (file_exists('/bin/gzip')) {
+            return '/bin/gzip';
+        } elseif (file_exists('/usr/bin/gzip')) {
+            return '/usr/bin/gzip';
+        } else {
+            return false;
         }
     }
 }

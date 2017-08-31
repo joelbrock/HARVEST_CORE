@@ -36,32 +36,31 @@ if (!class_exists('FannieAPI')) {
 class RecentSalesReport extends FannieReportPage
 {
     public $description = '[Recent Sales] lists sales for an item in recent days/weeks/months.';
-    public $themed = true;
+    public $report_set = 'Movement Reports';
 
     protected $header = 'Recent Sales';
     protected $title = 'Fannie : Recent Sales';
 
     protected $report_headers = array('', 'Qty', '$');
-    protected $report_cache = 'day';
+    protected $report_cache = 'none';
     protected $sortable = false;
     protected $no_sort_but_style = true;
 
-    private $upc;
-    private $lc;
+    private $upc = '';
+    private $likecode = '';
 
     public function preprocess() {
         // custom: one of the fields is required but not both
         $this->upc = BarcodeLib::padUPC(FormLib::get('upc'));
-        $this->lc = FormLib::get('likecode');
-        if ($this->upc != '0000000000000' || $this->lc !== '') {
-            if ($this->lc !== '') {
-                $this->report_headers[0] = 'Like Code #'.$this->lc;
+        $this->likecode = FormLib::get('likecode');
+        if ($this->upc != '0000000000000' || $this->likecode !== '') {
+            if ($this->likecode !== '') {
+                $this->report_headers[0] = 'Like Code #'.$this->likecode;
                 $this->required_fields = array('likecode');
             } else {
-                $this->report_headers[0] = $this->upc;
+                $this->report_headers[0] = 'UPC #' . $this->upc;
                 $this->required_fields = array('upc');
             }
-
             parent::preprocess();
         }
 
@@ -70,31 +69,40 @@ class RecentSalesReport extends FannieReportPage
 
     public function report_description_content()
     {
-        global $FANNIE_OP_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
         $prod = new ProductsModel($dbc);
         $prod->upc(BarcodeLib::padUPC(FormLib::get('upc')));
         $prod->load();
-        $ret = array('Recent Sales For ' . $prod->upc() . ' ' . $prod->description());
+        $ret = array('Recent Sales For ' . $prod->upc() . ' ' . $prod->description() . '<br />');
         if ($this->report_format == 'html') {
-            $ret[] = sprintf('<a href="../ItemLastQuarter/ItemLastQuarterReport.php?upc=%s">Weekly Sales Details</a>', $prod->upc());
+            $stores = FormLib::storePicker();
+            $ret[] = $stores['html'] . ' | ';
+            $ret[] = sprintf('<a href="../ItemLastQuarter/ItemLastQuarterReport.php?upc=%s">Weekly Sales Details</a> | ', $prod->upc());
             $ret[] = sprintf('<a href="../ItemOrderHistory/ItemOrderHistoryReport.php?upc=%s">Recent Order History</a>', $prod->upc());
+            $this->addScript('../../src/javascript/jquery.js');
+            $this->addScript('recentSales.js');
+            $field = ($this->likecode !== '' ? 'likecode' : 'upc');
+            $val = ($this->likecode !== '' ? $this->likecode : $this->upc);
+            $this->addOnloadCommand("recentSales.bindSelect('{$field}', '{$val}');\n");
         }
 
         return $ret;
     }
 
-    public function fetch_report_data()
+    protected function defaultDescriptionContent($rowcount, $datefields=array())
     {
-        global $FANNIE_OP_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
+        return array(); // override
+    }
 
+    private function getDates()
+    {
         $dates = array();
         $stamp = strtotime('yesterday');
         $dates['Yesterday'] = array(date("Y-m-d",$stamp), date('Y-m-d', $stamp));
         $stamp = mktime(0,0,0,date("n",$stamp),date("j",$stamp)-1,date("Y",$stamp));
         $dates['2 Days Ago'] = array(date("Y-m-d",$stamp), date('Y-m-d', $stamp));
-        $stamp = mktime(0,0,0,date("n",$stamp),date("j",$stamp)-1,date("Y",$stamp));
+        $stamp = mktime(0,0,0,date("n",$stamp),date("j",$stamp)-2,date("Y",$stamp));
         $dates['3 Days Ago'] = array(date("Y-m-d",$stamp), date('Y-m-d', $stamp));
 
         $dates['This Week'] = array(date("Y-m-d",strtotime("monday this week")),
@@ -106,33 +114,47 @@ class RecentSalesReport extends FannieReportPage
         $stamp = mktime(0,0,0,date("n")-1,1,date("Y"));
         $dates['Last Month'] = array(date("Y-m-01",$stamp),date("Y-m-t",$stamp));
 
+        return $dates;
+    }
+
+    public function fetch_report_data()
+    {
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
+
+        $dates = $this->getDates();
         $dlog = DTransactionsModel::selectDlog($dates['Last Month'][0], $dates['Yesterday'][0]);
 
-        $where = 'd.upc = ?';
-        $baseArgs = array($this->upc);
-        if ($this->lc !== '') {
-            $where = 'u.likeCode = ?';
-            $baseArgs = array($this->lc);
+        list($where, $item) = array('d.upc = ?', $this->upc);
+        if ($this->likecode !== '') {
+            list($where, $item) = array('u.likeCode = ?', $this->likecode);
+        }
+        $store = FormLib::get('store', false);
+        if ($store === false) {
+            $store = COREPOS\Fannie\API\lib\Store::getIdByIp();
+            if ($store === false) {
+                $store = 0;
+            }
         }
 
-        $q = "SELECT SUM(CASE WHEN trans_status='M' THEN 0 ELSE quantity END) as qty,
+        $qtyQ = "SELECT " . DTrans::sumQuantity('d') . " AS qty,
             SUM(total) as ttl
             FROM $dlog as d ";
-        if ($this->lc !== '') {
-            $q .= ' LEFT JOIN upcLike AS u ON d.upc=u.upc ';
+        if ($this->likecode !== '') {
+            $qtyQ .= ' LEFT JOIN upcLike AS u ON d.upc=u.upc ';
         }
-        $q .= "WHERE $where
-            AND tdate BETWEEN ? AND ?";
-        $p = $dbc->prepare_statement($q);
+        $qtyQ .= "WHERE $where
+            AND tdate < " . $dbc->curdate() . "
+            AND tdate BETWEEN ? AND ? 
+            AND ". DTrans::isStoreID($store, 'd');
+        $prep = $dbc->prepare($qtyQ);
         
         $data = array();
-        foreach($dates as $label => $span) {
-            $args = array($baseArgs[0], $span[0].' 00:00:00', $span[1].' 23:59:59');
-            $r = $dbc->exec_statement($p, $args);
-
-            $row = array('qty'=>0, 'ttl'=>0);
-            if ($dbc->num_rows($r) > 0) {
-                $row = $dbc->fetch_row($r);
+        foreach ($dates as $label => $span) {
+            $args = array($item, $span[0].' 00:00:00', $span[1].' 23:59:59', $store);
+            $row = $dbc->getRow($prep, $args);
+            if ($row === false) {
+                $row = array('qty'=>0, 'ttl'=>0);
             }
 
             $record = array($label, sprintf('%.2f',$row['qty']), sprintf('%.2f', $row['ttl']));
@@ -174,4 +196,3 @@ class RecentSalesReport extends FannieReportPage
 
 FannieDispatch::conditionalExec();
 
-?>

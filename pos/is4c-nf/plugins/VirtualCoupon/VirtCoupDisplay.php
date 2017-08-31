@@ -21,9 +21,13 @@
 
 *********************************************************************************/
 
+use COREPOS\pos\lib\gui\NoInputCorePage;
+use COREPOS\pos\lib\Database;
+
 include_once(dirname(__FILE__).'/../../lib/AutoLoader.php');
 
-class VirtCoupDisplay extends NoInputPage {
+class VirtCoupDisplay extends NoInputCorePage 
+{
 
     private $temp_result;
     private $temp_num_rows;
@@ -48,9 +52,11 @@ class VirtCoupDisplay extends NoInputPage {
             }
             else if (is_numeric($input)){
                 $upc = "00499999".str_pad((int)$input,5,'0',STR_PAD_LEFT);
-                CoreLocal::set("msgrepeat",1);
-                CoreLocal::set("strRemembered",$upc);
-                $this->change_page($this->page_url."gui-modules/pos2.php");
+                $this->change_page(
+                    $this->page_url 
+                    . "gui-modules/pos2.php"
+                    . '?reginput=' . urlencode($upc)
+                    . '&repeat=1');
                 return False;
             }
         } 
@@ -61,10 +67,10 @@ class VirtCoupDisplay extends NoInputPage {
         $memberID = CoreLocal::get("memberID");
         $sql = Database::pDataConnect();
 
-        $query = "select coupID,description FROM houseVirtualCoupons
-            WHERE card_no=".$memberID." AND ".
-            $sql->now()." > start_date AND ".
-            $sql->now()." < end_date";
+        $query = sprintf("select coupID,description FROM houseVirtualCoupons
+            WHERE card_no=%d 
+                AND " . $sql->curdate() . " BETWEEN start_date AND end_date",
+            $memberID);
         $result = $sql->query($query);
         $num_rows = $sql->num_rows($result);
 
@@ -140,7 +146,7 @@ class VirtCoupDisplay extends NoInputPage {
 
             $selectFlag = (isset($selectFlag)?$selectFlag:0);
             for ($i = 0; $i < $num_rows; $i++) {
-                $row = $db->fetch_array($result);
+                $row = $db->fetchRow($result);
                 if( $i == 0 && $selectFlag == 0) {
                     $selected = "selected";
                 } else {
@@ -158,7 +164,5 @@ class VirtCoupDisplay extends NoInputPage {
     } // END body_content() FUNCTION
 }
 
-if (basename($_SERVER['PHP_SELF']) == basename(__FILE__))
-    new VirtCoupDisplay();
+AutoLoader::dispatch();
 
-?>

@@ -23,16 +23,16 @@
 
 class ContactInfo extends \COREPOS\Fannie\API\member\MemberModule {
 
-    function showEditForm($memNum, $country="US"){
-        $dbc = $this->db();
-        
-        $infoQ = $dbc->prepare_statement("SELECT CardNo,FirstName,LastName,
-                street,city,state,zip,phone,email_1,
-                email_2,ads_OK FROM custdata AS c
-                LEFT JOIN meminfo AS m ON c.CardNo = m.card_no
-                WHERE c.personNum=1 AND CardNo=?");
-        $infoR = $dbc->exec_statement($infoQ,array($memNum));
-        $infoW = $dbc->fetch_row($infoR);
+    function showEditForm($memNum, $country="US")
+    {
+        $account = self::getAccount();
+        $primary = array();
+        foreach ($account['customers'] as $c) {
+            if ($c['accountHolder']) {
+                $primary = $c;
+                break;
+            }
+        }
 
         $labels = array();
         switch ($country) {
@@ -51,51 +51,56 @@ class ContactInfo extends \COREPOS\Fannie\API\member\MemberModule {
             <div class=\"panel-body\">";
 
         $ret .= '<div class="form-group form-inline">';
+        $ret .= '<input type="hidden" name="ContactInfo_customerID" value="' . $primary['customerID'] . '" />';
         $ret .= '<span class="label primaryBackground">First Name</span>';
         $ret .= sprintf('<input name="ContactInfo_fn" maxlength="30"
-                value="%s" class="form-control" />',$infoW['FirstName']);
+                value="%s" class="form-control" />',$primary['firstName']);
         $ret .= ' <span class="label primaryBackground">Last Name</span>';
         $ret .= sprintf('<input name="ContactInfo_ln" maxlength="30"
-                value="%s" class="form-control" />',$infoW['LastName']);
-        $ret .= sprintf(' <a href="MemPurchasesPage.php?id=%d">View Receipts</a>',
+                value="%s" class="form-control" />',$primary['lastName']);
+        $ret .= sprintf(' <a href="MemPurchasesPage.php?id=%d">Receipts</a>',
                     $memNum);
+        $ret .= sprintf(' |  <a href="../reports/Patronage/MemberPatronageReport.php?id=%d">Patronage</a>',
+                    $memNum);
+        $ret .= sprintf(' |  <a href="../ordering/NewSpecialOrdersPage.php?card_no=%d">Special Orders</a>',
+                    $memNum);
+        $ret .= '</div>';
         $ret .= '</div>';
 
         $ret .= '<div class="form-group form-inline">';
-        $addrs = strstr($infoW['street'],"\n")?explode("\n",$infoW['street']):array($infoW['street'],'');
         $ret .= '<span class="label primaryBackground">Address</span>';
         $ret .= sprintf('<input name="ContactInfo_addr1" maxlength="125"
-                value="%s" class="form-control" />',$addrs[0]);
+                value="%s" class="form-control" />',$account['addressFirstLine']);
         $ret .= ' <span class="label primaryBackground">Address (2)</span>';
         $ret .= sprintf('<input name="ContactInfo_addr2" maxlength="125"
-                value="%s" class="form-control" />',$addrs[1]);
+                value="%s" class="form-control" />',$account['addressSecondLine']);
         $ret .= ' <label><span class="label primaryBackground">Gets Mail</span>';
         $ret .= sprintf('<input type="checkbox" name="ContactInfo_mail"
-                %s class="checkbox-inline" /></label>',($infoW['ads_OK']==1?'checked':''));
+                %s class="checkbox-inline" /></label>',($account['contactAllowed']==1?'checked':''));
         $ret .= '</div>';
         
         $ret .= '<div class="form-group form-inline">';
         $ret .= '<span class="label primaryBackground">City</span>';
         $ret .= sprintf('<input name="ContactInfo_city" maxlength="20"
-                value="%s" class="form-control" />',$infoW['city']);
+                value="%s" class="form-control" />',$account['city']);
         $ret .= ' <span class="label primaryBackground">' . $labels['state'] . '</span>';
         $ret .= sprintf('<input name="ContactInfo_state" maxlength="2"
-                value="%s" class="form-control" />',$infoW['state']);
+                value="%s" class="form-control" />',$account['state']);
         $ret .= ' <span class="label primaryBackground">' . $labels['zip'] . '</span>';
         $ret .= sprintf('<input name="ContactInfo_zip" maxlength="10"
-                value="%s" class="form-control" />',$infoW['zip']);
+                value="%s" class="form-control" />',$account['zip']);
         $ret .= '</div>';
 
         $ret .= '<div class="form-group form-inline">';
         $ret .= '<span class="label primaryBackground">Phone</span>';
         $ret .= sprintf('<input name="ContactInfo_ph1" maxlength="30"
-                value="%s" class="form-control" />',$infoW['phone']);
+                value="%s" class="form-control" />',$primary['phone']);
         $ret .= ' <span class="label primaryBackground">Alt. Phone</span>';
         $ret .= sprintf('<input name="ContactInfo_ph2" maxlength="30"
-                value="%s" class="form-control" />',$infoW['email_2']);
+                value="%s" class="form-control" />',$primary['altPhone']);
         $ret .= ' <span class="label primaryBackground">E-mail</span>';
         $ret .= sprintf('<input type="email" name="ContactInfo_email" maxlength="75"
-                value="%s" class="form-control" />',$infoW['email_1']);
+                value="%s" class="form-control" />',$primary['email']);
         $ret .= "</div>";
 
         $ret .= "</div>";
@@ -104,77 +109,65 @@ class ContactInfo extends \COREPOS\Fannie\API\member\MemberModule {
         return $ret;
     }
 
-    function saveFormData($memNum){
-        global $FANNIE_ROOT;
-        $dbc = $this->db();
-        if (!class_exists("MeminfoModel"))
-            include($FANNIE_ROOT.'classlib2.0/data/models/MeminfoModel.php');
-        if (!class_exists("CustdataModel"))
-            include($FANNIE_ROOT.'classlib2.0/data/models/CustdataModel.php');
+    private function formatPhone($phone)
+    {
+        if (preg_match("/^[-() .0-9]+$/",$phone)) {
+            $digits = preg_replace("/[^0-9]/", '' ,$phone);
+            if (preg_match("/^\d{10}$/",$digits)) {
+                return preg_replace("/(\d{3})(\d{3})(\d{4})/",'${1}-${2}-${3}', $digits);
+            }
+        }
 
-        $MI_FIELDS = array(
-            'street' => FormLib::get_form_value('ContactInfo_addr1',''),
-            'city' => FormLib::get_form_value('ContactInfo_city',''),
-            'state' => FormLib::get_form_value('ContactInfo_state',''),
-            'zip' => FormLib::get_form_value('ContactInfo_zip',''),
-            'phone' => FormLib::get_form_value('ContactInfo_ph1',''),
-            'email_2' => FormLib::get_form_value('ContactInfo_ph2',''),
-            'email_1' => FormLib::get_form_value('ContactInfo_email',''),
-            'ads_OK' => (FormLib::get_form_value('ContactInfo_mail')!=='' ? 1 : 0)
-        );
-        /* Canadian Postal Code, and City and Province
-         * Phone style: ###-###-####
-        */
-        if ( preg_match("/^[A-Z]\d[A-Z]/i", $MI_FIELDS['zip']) ) {
-            $MI_FIELDS['zip'] = strtoupper($MI_FIELDS['zip']);
-            if ( strlen($MI_FIELDS['zip']) == 6 ) {
-                $MI_FIELDS['zip'] = substr($MI_FIELDS['zip'],0,3).' '. substr($MI_FIELDS['zip'],3,3);
-            }
-            // Postal code M* supply City and Province
-            if ( preg_match("/^M/", $MI_FIELDS['zip']) &&
-                    $MI_FIELDS['city'] == '' && $MI_FIELDS['state'] == '') {
-                $MI_FIELDS['city'] = 'Toronto';
-                $MI_FIELDS['state'] = 'ON';
-            }
-            // Phone# style: ###-###-####
-            if ( preg_match("/^[MKLP]/", $MI_FIELDS['zip']) ) {
-                if ( preg_match("/^[-() .0-9]+$/",$MI_FIELDS['phone']) ) {
-                    $phone = preg_replace("/[^0-9]/", '' ,$MI_FIELDS['phone']);
-                    if ( preg_match("/^\d{10}$/",$phone) )
-                        $MI_FIELDS['phone'] = preg_replace("/(\d{3})(\d{3})(\d{4})/",'${1}-${2}-${3}',$phone);
-                }
-                if ( preg_match("/^[-() .0-9]+$/",$MI_FIELDS['email_2']) ) {
-                    $phone = preg_replace("/[^0-9]/", '' ,$MI_FIELDS['email_2']);
-                    if ( preg_match("/^\d{10}$/",$phone) )
-                        $MI_FIELDS['email_2'] = preg_replace("/(\d{3})(\d{3})(\d{4})/",'${1}-${2}-${3}',$phone);
+        return $phone;
+    }
+
+    private function canadafication($json)
+    {
+        $json['zip'] = strtoupper($json['zip']);
+        if (strlen($json['zip']) == 6) {
+            $json['zip'] = substr($json['zip'],0,3).' '. substr($json['zip'],3,3);
+        }
+        // Postal code M* supply City and Province
+        if (preg_match("/^M/", $json['zip']) &&
+                $json['city'] == '' && $json['state'] == '') {
+            $json['city'] = 'Toronto';
+            $json['state'] = 'ON';
+        }
+
+        return $json;
+    } 
+
+    public function saveFormData($memNum, $json=array())
+    {
+        $json['addressFirstLine'] = FormLib::get('ContactInfo_addr1');
+        $json['addressSecondLine'] = FormLib::get('ContactInfo_addr2');
+        $json['city'] = FormLib::get('ContactInfo_city');
+        $json['state'] = FormLib::get('ContactInfo_state');
+        $json['zip'] = FormLib::get('ContactInfo_zip');
+        $json['contactAllowed'] = (FormLib::get('ContactInfo_mail')!=='' ? 1 : 0);
+        for ($i = 0; $i<count($json['customers']); $i++) {
+            if ($json['customers'][$i]['accountHolder']) {
+                $json['customers'][$i]['lastName'] = FormLib::get('ContactInfo_ln');
+                $json['customers'][$i]['firstName'] = FormLib::get('ContactInfo_fn');
+                $json['customers'][$i]['phone'] = FormLib::get('ContactInfo_ph1');
+                $json['customers'][$i]['altPhone'] = FormLib::get('ContactInfo_ph2');
+                $json['customers'][$i]['email'] = FormLib::get('ContactInfo_email');
+
+                // Phone# style: ###-###-####
+                if (preg_match("/^[MKLP]/", $json['zip']) ) {
+                    $json['customers'][$i]['phone'] = $this->formatPhone($json['customers'][$i]['phone']);
+                    $json['customers'][$i]['altPhone'] = $this->formatPhone($json['customers'][$i]['altPhone']);
                 }
             }
         }
-        if (FormLib::get_form_value('ContactInfo_addr2','') !== '')
-            $MI_FIELDS['street'] .= "\n".FormLib::get_form_value('ContactInfo_addr2');
 
-        $meminfo = new MeminfoModel($dbc);
-        $meminfo->card_no($memNum);
-        $meminfo->street($MI_FIELDS['street']);
-        $meminfo->city($MI_FIELDS['city']);
-        $meminfo->state($MI_FIELDS['state']);
-        $meminfo->phone($MI_FIELDS['phone']);
-        $meminfo->email_2($MI_FIELDS['email_2']);
-        $meminfo->email_1($MI_FIELDS['email_1']);
-        $meminfo->ads_OK($MI_FIELDS['ads_OK']);
-        $test1 = $meminfo->save();
+        /* Canadian Postal Code, and City and Province
+        */
+        if (preg_match("/^[A-Z]\d[A-Z]/i", $json['zip']) ) {
+            $json = $this->canadafication($json);
+        }
 
-        $custdata = new CustdataModel($dbc);
-        $custdata->CardNo($memNum);
-        $custdata->personNum(1);
-        $custdata->FirstName(FormLib::get('ContactInfo_fn'));
-        $custdata->LastName(FormLib::get('ContactInfo_ln'));
-        $test2 = $custdata->save();
-
-        if ($test1 === False || $test2 === False)
-            return "Error: problem saving Contact Information<br />";
-        else
-            return "";
+        return $json;
     }
 
     function hasSearch(){ return True; }
@@ -216,6 +209,9 @@ class ContactInfo extends \COREPOS\Fannie\API\member\MemberModule {
                 <input type="text" name="ContactInfo_zip" class="form-control" />
             </div>
             <div class="row form-group form-inline">
+                <label>Phone</label>:
+                <input type="text" name="ContactInfo_phone" id="s_phone" 
+                    class="form-control" />
                 <label>Email</label>:
                 <input type="text" name="ContactInfo_email" id="s_email" 
                     class="form-control" />
@@ -236,8 +232,6 @@ class ContactInfo extends \COREPOS\Fannie\API\member\MemberModule {
 
     function getSearchResults()
     {
-        $dbc = $this->db();
-
         $fn = FormLib::get_form_value('ContactInfo_fn');
         $ln = FormLib::get_form_value('ContactInfo_ln');
         $addr = FormLib::get_form_value('ContactInfo_addr');
@@ -245,53 +239,40 @@ class ContactInfo extends \COREPOS\Fannie\API\member\MemberModule {
         $state = FormLib::get_form_value('ContactInfo_state');
         $zip = FormLib::get_form_value('ContactInfo_zip');
         $email = FormLib::get_form_value('ContactInfo_email');
+        $phone = FormLib::get_form_value('ContactInfo_phone');
+        
+        $json = array();
+        $customer = array();
 
-        $where = "";
-        $args = array();
         if (!empty($fn)){
-            $where .= " AND FirstName LIKE ?";
-            $args[] = '%'.$fn.'%';
+            $customer['firstName'] = $fn;
         }
         if (!empty($ln)){
-            $where .= " AND LastName LIKE ?";
-            $args[] = '%'.$ln.'%';
+            $customer['lastName'] = $ln;
         }
         if (!empty($addr)){
-            $where .= " AND street LIKE ?";
-            $args[] = '%'.$addr.'%';
+            $json['addressFirstLine'] = $addr;
         }
         if (!empty($city)){
-            $where .= " AND city LIKE ?";
-            $args[] = '%'.$city.'%';
+            $json['city'] = $city;
         }
         if (!empty($state)){
-            $where .= " AND state LIKE ?";
-            $args[] = '%'.$state.'%';
+            $json['state'] = $state;
         }
         if (!empty($zip)){
-            $where .= " AND zip LIKE ?";
-            $args[] = '%'.$zip.'%';
+            $json['zip'] = $zip;
         }
         if (!empty($email)){
-            $where .= " AND email_1 LIKE ?";
-            $args[] = '%'.$email.'%';
+            $customer['email'] = $email;
         }
+        if (!empty($phone)){
+            $customer['phone'] = $phone;
+        }
+        $json['customers'] = array($customer);
 
-        $ret = array();
-        if (!empty($where)){
-            $q = $dbc->prepare_statement("SELECT CardNo,FirstName,LastName FROM
-                custdata as c LEFT JOIN meminfo AS m
-                ON c.CardNo = m.card_no
-                WHERE 1=1 $where ORDER BY m.card_no, c.personNum DESC");
-            $r = $dbc->exec_statement($q,$args);
-            if ($dbc->num_rows($r) > 0){
-                while($w = $dbc->fetch_row($r)){
-                    $ret[$w[0]] = $w[1]." ".$w[2];
-                }
-            }
-        }
-        return $ret;
+        $accounts = \COREPOS\Fannie\API\member\MemberREST::search($json, 0);
+
+        return $accounts;
     }
 }
 
-?>

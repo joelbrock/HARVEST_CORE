@@ -21,13 +21,15 @@
 
 *********************************************************************************/
 
-if (!chdir("Suspensions")){
+if (!chdir(dirname(__FILE__))){
     echo "Error: Can't find directory (suspensions)";
-    exit;
+    return;
 }
 
 include('../../config.php');
-include($FANNIE_ROOT.'src/SQLManager.php');
+if (!class_exists('FannieAPI')) {
+    include($FANNIE_ROOT . 'classlib2.0/FannieAPI.php');
+}
 
 /* HELP
 
@@ -55,7 +57,7 @@ $sql = new SQLManager($FANNIE_SERVER,$FANNIE_SERVER_DBMS,$FANNIE_OP_DB,
 
 $TRANS = $FANNIE_TRANS_DB . ($FANNIE_SERVER_DBMS=="MSSQL" ? 'dbo.' : '.');
 
-$custdata = $sql->table_definition('custdata');
+$custdata = $sql->tableDefinition('custdata');
 
 $meminfoQ = "UPDATE meminfo AS m LEFT JOIN
         custdata AS c ON m.card_no=c.CardNo
@@ -108,4 +110,3 @@ if (strlen($cns) > 2){
     $delR = $sql->query($delQ);
 }
 
-?>

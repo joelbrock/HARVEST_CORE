@@ -21,6 +21,9 @@
 
 *********************************************************************************/
 
+namespace COREPOS\pos\lib\models\op;
+use COREPOS\pos\lib\models\ViewModel;
+
 /**
   @class MemberCardsViewModel
 */
@@ -36,48 +39,20 @@ class MemberCardsViewModel extends ViewModel
 
     public $preferred_db = 'op';
 
+    public function doc()
+    {
+        return '';
+    }
+
     public function definition()
     {
         $cardsViewQ = "
             SELECT "
-                . $this->connection->concat("'".CoreLocal::get('memberUpcPrefix')."'",'c.CardNo','') . " AS upc, 
+                . $this->connection->concat("'".\CoreLocal::get('memberUpcPrefix')."'",'c.CardNo','') . " AS upc, 
                 c.CardNo as card_no 
             FROM custdata c";
 
         return $cardsViewQ;
     }
-
-    /* START ACCESSOR FUNCTIONS */
-
-    public function upc()
-    {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["upc"])) {
-                return $this->instance["upc"];
-            } elseif(isset($this->columns["upc"]["default"])) {
-                return $this->columns["upc"]["default"];
-            } else {
-                return null;
-            }
-        } else {
-            $this->instance["upc"] = func_get_arg(0);
-        }
-    }
-
-    public function card_no()
-    {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["card_no"])) {
-                return $this->instance["card_no"];
-            } elseif(isset($this->columns["card_no"]["default"])) {
-                return $this->columns["card_no"]["default"];
-            } else {
-                return null;
-            }
-        } else {
-            $this->instance["card_no"] = func_get_arg(0);
-        }
-    }
-    /* END ACCESSOR FUNCTIONS */
 }
 

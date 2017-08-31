@@ -21,10 +21,11 @@
 
 *********************************************************************************/
 
-namespace COREPOS\Fannie\API\webservices 
-{
+namespace COREPOS\Fannie\API\webservices;
+use \FannieDB;
+use \FannieConfig;
 
-class FannieItemInfo extends FannieWebService 
+class FannieItemInfo extends FannieWebService
 {
     
     public $type = 'json'; // json/plain by default
@@ -35,7 +36,7 @@ class FannieItemInfo extends FannieWebService
       @param $args array of data
       @return an array of data
     */
-    public function run($args)
+    public function run($args=array())
     {
         $ret = array();
         if (!property_exists($args, 'type')) {
@@ -77,7 +78,7 @@ class FannieItemInfo extends FannieWebService
         }
 
         // lookup results
-        $dbc = \FannieDB::get(\FannieConfig::factory()->get('OP_DB'));
+        $dbc = \FannieDB::getReadOnly(\FannieConfig::factory()->get('OP_DB'));
         switch (strtolower($args->type)) {
             case 'vendor':
                 $vendor = new \VendorItemsModel($dbc);
@@ -102,13 +103,5 @@ class FannieItemInfo extends FannieWebService
         }
     }
 
-}
-
-}
-
-namespace 
-{
-    // global namespace wrapper class
-    class FannieItemInfo extends \COREPOS\Fannie\API\webservices\FannieItemInfo {}
 }
 

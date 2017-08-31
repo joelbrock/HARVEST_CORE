@@ -40,12 +40,14 @@ class VendorSalesReport extends FannieReportPage
 
     public function fetch_report_data()
     {
-        global $FANNIE_OP_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
-        $date1 = FormLib::getDate('date1', date('Y-m-d'));
-        $date2 = FormLib::getDate('date2', date('Y-m-d'));
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
+        $date1 = $this->form->date1;
+        $date2 = $this->form->date2;
         $deptStart = FormLib::get('deptStart', 1);
-        $deptEnd = FormLib::get('deptStart', 1);
+        $deptEnd = FormLib::get('deptEnd', 1);
+        $deptMulti = FormLib::get('departments', array());
+        $subs = FormLib::get('subdepts', array());
         $buyer = FormLib::get('buyer', '');
         $dlog = DTransactionsModel::selectDlog($date1, $date2);
 
@@ -65,28 +67,34 @@ class VendorSalesReport extends FannieReportPage
                 ' . DTrans::sumQuantity('t') . ' AS qty,
                 SUM(t.total) AS ttl
             FROM ' . $dlog . ' AS t
-                LEFT JOIN products AS p ON t.upc=p.upc
+                ' . DTrans::joinProducts('t', 'p', 'LEFT') . '
                 LEFT JOIN vendors AS v ON p.default_vendor_id=v.vendorID
-                LEFT JOIN prodExtra AS x ON p.upc=x.upc AND x.distributor <> \'\'
+                LEFT JOIN prodExtra AS x ON p.upc=x.upc 
                 ';
-        if ($buyer !== '' && $buyer == -1) {
-            $query .= ' LEFT JOIN MasterSuperDepts AS s ON t.department=s.dept_ID ';
-        } elseif ($buyer !== '' && $buyer >= 0) {
+        if ($buyer !== '' && $buyer > -1) {
             $query .= ' LEFT JOIN superdepts AS s ON t.department=s.dept_ID ';
+        } elseif ($buyer !== '' && $buyer == -2) {
+            $query .= ' LEFT JOIN MasterSuperDepts AS s ON t.department=s.dept_ID ';
         }
         $query .= '
             WHERE t.tdate BETWEEN ? AND ?
                 AND t.trans_type IN (\'I\',\'D\') ';
         $args = array($date1 . ' 00:00:00', $date2 . ' 23:59:59');
-        if ($buyer === '') {
-            $query .= ' AND t.department BETWEEN ? AND ? ';
-            $args[] = $dept1;
-            $args[] = $dept2;
-        } elseif ($buyer == -1) {
-            $query .= ' AND s.superID <> 0 ';
-        } elseif ($buyer >= 0) {
-            $query .= ' AND s.superID = ? ';
-            $args[] = $buyer;
+        if ($buyer !== '') {
+            if ($buyer == -2) {
+                $query .= ' AND s.superID != 0 ';
+            } elseif ($buyer != -1) {
+                $query .= ' AND s.superID=? ';
+                $args[] = $buyer;
+            }
+        }
+        if ($buyer != -1) {
+            list($conditional, $args) = DTrans::departmentClause($deptStart, $deptEnd, $deptMulti, $args, 't');
+            $query .= $conditional;
+        }
+        if (count($subs) > 0) {
+            list($inStr, $args) = $dbc->safeInClause($subs, $args);
+            $query .= " AND p.subdept IN ($inStr) ";
         }
         $query .= '
             GROUP BY COALESCE(v.vendorName, x.distributor)
@@ -127,12 +135,7 @@ class VendorSalesReport extends FannieReportPage
 
     public function form_content()
     {
-        global $FANNIE_OP_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
-        $depts = new DepartmentsModel($dbc);
-        $supers = new SuperDeptNamesModel($dbc);
-
-        return FormLib::dateAndDepartmentForm($depts->find('dept_no'), $supers->find('superID'), true);
+        return FormLib::dateAndDepartmentForm();
     }
 
     public function helpContent()

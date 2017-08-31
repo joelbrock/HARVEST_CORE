@@ -35,12 +35,12 @@ class CreatePatronageSnapshot extends FannieRESTfulPage
 
     public function preprocess()
     {
-        $this->__routes[] = 'get<date1><date2><mtype>';
+        $this->__routes[] = 'get<date1><date2><mtype><stype>';
 
         return parent::preprocess();
     }
 
-    protected function get_date1_date2_mtype_handler()
+    protected function get_date1_date2_mtype_stype_handler()
     {
         global $FANNIE_TRANS_DB, $FANNIE_ROOT, $FANNIE_OP_DB;
         $dbc = FannieDB::get($FANNIE_TRANS_DB);
@@ -54,16 +54,28 @@ class CreatePatronageSnapshot extends FannieRESTfulPage
         }
         $mtype = rtrim($mtype,",").")";
 
+        $stype = '(';
+        $sArgs = array();
+        foreach ($this->stype as $s) {
+            $stype .= '?,';
+            $sArgs[] = (int)$s;
+        }
+        $stype = rtrim($stype, ',') . ')';
+        if (count($sArgs) == 0) {
+            $stype = '(?)';
+            $sArgs = array('-9999');
+        }
+
         $dlog = DTransactionsModel::selectDlog($this->date1, $this->date2);
 
         if ($dbc->table_exists("dlog_patronage")) {
-            $drop = $dbc->prepare_statement("DROP TABLE dlog_patronage");
-            $dbc->exec_statement($drop);
+            $drop = $dbc->prepare("DROP TABLE dlog_patronage");
+            $dbc->execute($drop);
         }
-        $create = $dbc->prepare_statement('CREATE TABLE dlog_patronage (card_no INT, trans_type VARCHAR(2), 
+        $create = $dbc->prepare('CREATE TABLE dlog_patronage (card_no INT, trans_type VARCHAR(2), 
                 trans_subtype VARCHAR(2), total DECIMAL(10,2), min_year INT, max_year INT,
                 primary key (card_no, trans_type, trans_subtype))');
-        $dbc->exec_statement($create);
+        $dbc->execute($create);
 
         $insQ = sprintf("
                 INSERT INTO dlog_patronage
@@ -79,21 +91,23 @@ class CreatePatronageSnapshot extends FannieRESTfulPage
                 LEFT JOIN %s%sMasterSuperDepts AS m ON d.department=m.dept_ID
                 WHERE d.trans_type IN ('I','D','S','T')
                     AND d.total <> 0 
-                    AND (m.superID IS NULL OR m.superID <> 0)
                     AND (s.memtype1 IN %s OR c.memType IN %s)
+                    AND (m.superID IS NULL OR m.superID NOT IN %s)
                     AND d.tdate BETWEEN ? AND ?
                 GROUP BY d.card_no, trans_type, trans_subtype",
                 $dlog,$FANNIE_OP_DB,$dbc->sep(),
                 $FANNIE_OP_DB,$dbc->sep(),
                 $FANNIE_OP_DB,$dbc->sep(),
-                $mtype,$mtype);
+                $mtype,$mtype,
+                $stype);
         $args = $mArgs;
         foreach ($mArgs as $m) $args[] = $m; // need them twice
+        foreach ($sArgs as $s) $args[] = $s;
         $args[] = $this->date1 . ' 00:00:00';
         $args[] = $this->date2 . ' 23:59:59';
     
-        $prep = $dbc->prepare_statement($insQ);
-        $worked = $dbc->exec_statement($prep,$args);
+        $prep = $dbc->prepare($insQ);
+        $worked = $dbc->execute($prep,$args);
 
         if ($worked) {
             $this->add_onload_command("showBootstrapAlert('#alert-area', 'success', 'Patronage Snapshot Created');\n");
@@ -104,7 +118,7 @@ class CreatePatronageSnapshot extends FannieRESTfulPage
         return true;
     }
 
-    protected function get_date1_date2_mtype_view()
+    protected function get_date1_date2_mtype_stype_view()
     {
         return '
             <div id="alert-area"></div>
@@ -134,19 +148,44 @@ class CreatePatronageSnapshot extends FannieRESTfulPage
         <input type="text" name="date1" id="date1" class="form-control date-field" required />
         <label>End Date</label>
         <input type="text" name="date2" id="date2" class="form-control date-field" required />
-        <label>Member Type(s)</label>
+        <label>Member Type(s) to include</label>
         <div class="form-group well">
         <?php
-        $typeQ = $dbc->prepare_statement("SELECT memtype,memDesc FROM ".$FANNIE_OP_DB.$dbc->sep()."memtype ORDER BY memtype");
-        $typeR = $dbc->exec_statement($typeQ);
+        $typeQ = $dbc->prepare("
+            SELECT memtype,
+                memDesc,
+                custdataType
+            FROM ".$FANNIE_OP_DB.$dbc->sep()."memtype 
+            ORDER BY memtype");
+        $typeR = $dbc->execute($typeQ);
         while ($typeW = $dbc->fetch_row($typeR)) {
             printf('<input class="checkbox-inline" type="checkbox" value="%d" name="mtype[]"
-                id="mtype%d" /> <label for="mtype%d">%s</label><br />',
+                id="mtype%d" %s /> <label for="mtype%d">%s</label><br />',
                 $typeW['memtype'],$typeW['memtype'],
+                (strtoupper($typeW['custdataType']) == 'PC' ? 'checked' : ''),
                 $typeW['memtype'],$typeW['memDesc']
             );
         }
         echo '</div>';
+        echo '<label>Super Department(s) to exclude from purchases</label>
+            <div class="form-group well">';
+        $msd = $dbc->query('
+            SELECT superID,
+                super_name
+            FROM MasterSuperDepts
+            GROUP BY superID,
+                super_name
+            ORDER BY super_name');
+        while ($m = $dbc->fetchRow($msd)) {
+            printf('<input class="checkbox-inline" type="checkbox" value="%d" name="stype[]"
+                id="style%d" %s /> <label for="stype%d">%s</label><br />',
+                $m['superID'], $m['superID'], 
+                ($m['superID'] == 0 ? 'checked' : ''),
+                $m['superID'], $m['super_name']
+            );
+        }
+        echo '</div>';
+
         echo '<p><button type="submit" class="btn btn-default">Create Table</button></p>';
         echo '</form>';
 
@@ -159,6 +198,11 @@ class CreatePatronageSnapshot extends FannieRESTfulPage
             compiling member transaction data for the year. This will
             speed up many subsequent steps since it can be a lot of
             information to go through.</p>
+            <p>The fiscal year is defined by the start and end dates.
+            Only members in the select member type(s) will be included
+            in the patronage calculation. Sales that are in the
+            selected super departments will be <em>omitted</em> from
+            members\' total purchases.</p>
             <p>Member purchase totals are organized by transaction
             type and subtype. Records whose department belong to
             super department number zero are excluded in keeping with

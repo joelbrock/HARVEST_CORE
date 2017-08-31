@@ -42,73 +42,103 @@ class ItemOrderHistoryReport extends FannieReportPage
 
     public function report_description_content()
     {
-        global $FANNIE_OP_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
         $prod = new ProductsModel($dbc);
-        $prod->upc(BarcodeLib::padUPC(FormLib::get('upc')));
+        $prod->upc(BarcodeLib::padUPC($this->form->upc));
         $prod->load();
+        $stores = FormLib::storePicker();
         $ret = array('Order History For ' . $prod->upc() . ' ' . $prod->description());
         if (FormLib::get('all')) {
             $ret[] = 'All [known] orders';
             if ($this->report_format = 'html') {
-                $ret[] = sprintf('<a href="ItemOrderHistoryReport.php?upc=%s">Show Recent</a>', $prod->upc());
+                $ret[] = sprintf(' <a href="ItemOrderHistoryReport.php?upc=%s">Show Recent</a>', $prod->upc())
+                    . ' | ' . $stores['html'];
             }
         } else {
             $ret[] = 'Since ' . date('F d, Y', strtotime('92 days ago'));
             if ($this->report_format = 'html') {
-                $ret[] = sprintf('<a href="ItemOrderHistoryReport.php?upc=%s&all=1">Show All</a>', $prod->upc());
+                $ret[] = sprintf(' <a href="ItemOrderHistoryReport.php?upc=%s&all=1">Show All</a>', $prod->upc())
+                    . ' | ' . $stores['html'];
             }
         }
+        $this->addScript('../../src/javascript/jquery.js');
+        $this->addScript('../RecentSales/recentSales.js');
+        $this->addOnloadCommand("recentSales.bindSelect('upc', '" . $prod->upc() . "');\n");
 
         return $ret;
     }
 
     public function fetch_report_data()
     {
-        global $FANNIE_OP_DB, $FANNIE_ARCHIVE_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
 
-        $upc = FormLib::get('upc');
+        $upc = $this->form->upc;
         $upc = BarcodeLib::padUPC($upc);
+        $store = FormLib::get('store', false);
+        if ($store === false) {
+            $store = COREPOS\Fannie\API\lib\Store::getIdByIp();
+            if ($store === false) {
+                $store = 0;
+            }
+        }
 
+        $mapR = $dbc->prepare('SELECT DISTINCT sku FROM VendorAliases WHERE upc=?');
+        $mapped = $dbc->getValue($mapR, array($upc));
+
+        $args = array($upc);
         $query = 'SELECT i.sku, i.quantity, i.unitCost, i.caseSize,
-                        i.quantity * i.unitCost * i.caseSize AS ttl,
-                        o.vendorInvoiceID, v.vendorName, o.placedDate
+                        i.receivedTotalCost AS ttl,
+                        o.vendorInvoiceID, v.vendorName, o.placedDate,
+                        o.orderID,
+                        i.receivedQty
                         FROM PurchaseOrderItems AS i
                             LEFT JOIN PurchaseOrder AS o ON i.orderID=o.orderID
                             LEFT JOIN vendors AS v ON o.vendorID=v.vendorID
-                        WHERE i.internalUPC = ?
-                            AND o.placedDate >= ?
+                        WHERE ';
+        if ($mapped) {
+            $query .= ' (i.internalUPC=? OR i.sku=?) ';
+            $args[] = $mapped;
+        } else {
+            $query .= ' i.internalUPC=? ';
+        }
+        $query .= ' AND o.placedDate >= ?
+                            ' . ($store ? ' AND o.storeID=? ' : '') . '
                         ORDER BY o.placedDate';
-        $prep = $dbc->prepare($query);
-        $args = array($upc);
         if (FormLib::get('all')) {
             $args[] = '1900-01-01 00:00:00';
         } else {
             $args[] = date('Y-m-d', strtotime('92 days ago'));
         }
+        if ($store) {
+            $args[] = $store;
+        }
+        $prep = $dbc->prepare($query);
         $result = $dbc->execute($prep, $args);
         $data = array();
-        while($row = $dbc->fetch_row($result)) {
-            $record = array(
-                $row['placedDate'],
-                $row['vendorName'],
-                $row['vendorInvoiceID'],
-                $row['sku'],
-                $row['quantity'],
-                $row['caseSize'],
-                $row['unitCost'],
-                $row['ttl'],
-            );
-            $data[] = $record;
+        while ($row = $dbc->fetchRow($result)) {
+            $data[] = $this->rowToRecord($row);
         }
 
         return $data;
     }
 
-    public function calculate_footers($data)
+    private function rowToRecord($row)
     {
-        return array();
+        if (empty($row['vendorInvoiceID'])) {
+            $row['vendorInvoiceID'] = '(invoice)';
+        }
+        return array(
+            $row['placedDate'],
+            $row['vendorName'],
+            sprintf('<a href="../../purchasing/ViewPurchaseOrders.php?id=%d">%s</a>', $row['orderID'], $row['vendorInvoiceID']),
+            $row['sku'],
+            $row['quantity'],
+            $row['caseSize'],
+            sprintf('%.2f', $row['receivedQty'] == 0 ? $row['unitCost'] : $row['ttl'] / $row['receivedQty']),
+            $row['ttl'],
+        );
     }
 
     public function form_content()
@@ -126,11 +156,9 @@ class ItemOrderHistoryReport extends FannieReportPage
 
     public function readinessCheck()
     {
-        global $FANNIE_OP_DB, $FANNIE_URL;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
-        if (!$dbc->tableExists('PurchaseOrderItems')) {
-            $this->error_text = _("You are missing an important table") . " ($FANNIE_OP_DB.PurchaseOrderItems). ";
-            $this->error_text .= " Visit the <a href=\"{$FANNIE_URL}install\">Install Page</a> to create it.";
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
+        if ($this->tableExistsReadinessCheck($this->config->get('OP_DB'), 'PurchaseOrderItems') === false) {
             return false;
         } else {
             $testQ = 'SELECT orderID FROM PurchaseOrderItems';
@@ -151,6 +179,14 @@ class ItemOrderHistoryReport extends FannieReportPage
             Lists purchase orders and/or invoices
             containing a particular item.
             </p>';
+    }
+
+    public function unitTest($phpunit)
+    {
+        $data = array('placedDate'=>'2000-01-01', 'vendorName'=>'test',
+            'vendorInvoiceID'=>'1234', 'sku'=>'111', 'quantity'=>1,
+            'caseSize'=>5, 'unitCost'=>1, 'ttl'=>5, 'orderID'=>1, 'receivedQty'=>1);
+        $phpunit->assertInternalType('array', $this->rowToRecord($data));
     }
 }
 

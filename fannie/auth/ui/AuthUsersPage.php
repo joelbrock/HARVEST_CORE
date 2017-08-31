@@ -25,7 +25,7 @@ if (!class_exists('FannieAPI')) {
     include_once(dirname(__FILE__) . '/../../classlib2.0/FannieAPI.php');
 }
 if (!function_exists('checkLogin')) {
-    require('../login.php');
+    require(dirname(__FILE__) . '/../login.php');
 }
 
 class AuthUsersPage extends FannieRESTfulPage 
@@ -39,7 +39,6 @@ class AuthUsersPage extends FannieRESTfulPage
 
     public function preprocess()
     {
-        $this->__routes[] = 'get<detail>';
         $this->__routes[] = 'get<new>';
         $this->__routes[] = 'get<remove>';
         $this->__routes[] = 'get<reset>';
@@ -53,7 +52,7 @@ class AuthUsersPage extends FannieRESTfulPage
         return parent::preprocess();
     }
 
-    public function post_id_reset_handler()
+    protected function post_id_reset_handler()
     {
         $newpass = '';
         srand();
@@ -81,23 +80,25 @@ class AuthUsersPage extends FannieRESTfulPage
         return true;
     }
 
-    public function delete_id_handler()
+    protected function delete_id_handler()
     {
-        deleteLogin($this->id);
-        header('Location: ' . $_SERVER['PHP_SELF']);
+        foreach ($this->id as $id) {
+            deleteLogin($id);
+        }
+        header('Location: ' . filter_input(INPUT_SERVER, 'PHP_SELF'));
 
         return false;
     }
 
-    public function delete_id_authClass_handler()
+    protected function delete_id_authClass_handler()
     {
         deleteAuth($this->id, $this->authClass);
-        header('Location: ' . $_SERVER['PHP_SELF']);
+        header('Location: ' . filter_input(INPUT_SERVER, 'PHP_SELF'));
 
         return false;
     }
 
-    public function post_name_pass1_pass2_handler()
+    protected function post_name_pass1_pass2_handler()
     {
         if ($this->pass1 != $this->pass2) {
             $this->add_onload_command("showBootstrapAlert('form', 'danger', 'Passwords do not match');\n");
@@ -106,7 +107,7 @@ class AuthUsersPage extends FannieRESTfulPage
 
         $created = createLogin($this->name, $this->pass1);
         if ($created) {
-            header('Location: ' . $_SERVER['PHP_SELF']);
+            header('Location: ' . filter_input(INPUT_SERVER, 'PHP_SELF'));
             return false;
         } else {
             $this->add_onload_command("showBootstrapAlert('form', 'danger', 'Error creating users');\n");
@@ -114,47 +115,85 @@ class AuthUsersPage extends FannieRESTfulPage
         }
     }
 
-    public function post_id_authClass_start_end_handler()
+    protected function post_id_authClass_start_end_handler()
     {
         addAuth($this->id, $this->authClass, $this->start, $this->end);
-        header('Location: ' . $_SERVER['PHP_SELF']);
+        header('Location: ' . filter_input(INPUT_SERVER, 'PHP_SELF'));
 
         return false;
     }
 
-    public function post_id_reset_view()
+    protected function post_id_reset_view()
     {
         // handler adds javascript messaging
         return $this->get_view();
     }
 
-    public function get_id_view()
+    protected function get_id_view()
     {
-        ob_start();
-        showAuths($this->id);
+        $ret = '<h3>User: ' . $this->id . '</h3>';
+        $ret .= '<p><strong>User ID</strong>: ' . getUID($this->id) . '</p>';
+        $auths = showAuths($this->id);
+        $ret .= '<table class="table table-bordered">
+            <tr>
+                <th>Auth Class</th>
+                <th>Subclass Start</th>
+                <th>Subclass End</th>
+                <th>Delete from User</th>
+            </tr>';
+        foreach ($auths as $info) {
+            $link = sprintf('<a href="?_method=delete&id=%s&authClass=%s">%s</a>',
+                $this->id, $info[0],
+                COREPOS\Fannie\API\lib\FannieUI::deleteIcon());
+            $ret .= sprintf('<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>',
+                $info[0], $info[1], $info[2], $link);
+        }
+        $ret .= '</table>
+            <p>
+                <a href="' . filter_input(INPUT_SERVER, 'PHP_SELF') . '" class="btn btn-default">User Menu</a>
+                <a href="?newAuth=1&init=' . $this->id . '" class="btn btn-default btn-reset">Add Auth</a>
+                <a href="?reset=1&init=' . $this->id . '" class="btn btn-default btn-reset">Reset Password</a>
+            </p>';
 
-        return ob_get_clean();
+        return $ret;
     }
 
-    public function get_detail_view()
+    protected function get_remove_view()
     {
-        return $this->user_form(array(), 'View Authorizations');
+        $ret = '<form method="post" action="' . filter_input(INPUT_SERVER, 'PHP_SELF') . '">
+            <input type="hidden" name="_method" value="delete" />
+            <table class="table table-bordered table-striped">
+            <tr>
+                <th>Name</th>
+                <th>' . \COREPOS\Fannie\API\lib\FannieUI::deleteIcon() . '</th>
+            </tr>';
+        foreach (getUserList() as $name) {
+            $ret .= sprintf('<tr>
+                <td>%s</td>
+                <td><input type="checkbox" name="id[]" value="%s" /></td>
+                </tr>',
+                $name, $name);
+        }
+        $ret .= '</table>
+            <p>
+                <button type="submit" class="btn btn-default btn-danger">
+                Delete Selected Users
+                </button>
+            <p>
+            </form>';
+
+        return $ret;
     }
 
-    public function get_remove_view()
-    {
-        return $this->user_form(array('_method'=>'delete'), 'Delete User');
-    }
-
-    public function post_name_pass1_pass2_view()
+    protected function post_name_pass1_pass2_view()
     {
         // handler scripted error messages to run on load
         return $this->get_new_view();
     }
 
-    public function get_new_view()
+    protected function get_new_view()
     {
-        $ret = '<form method="post" action="' . $_SERVER['PHP_SELF'] . '">
+        $ret = '<form method="post" action="' . filter_input(INPUT_SERVER, 'PHP_SELF') . '">
             <div class="form-group">
                 <label>Username</label>
                 <input type="text" name="name" required class="form-control" />
@@ -176,20 +215,31 @@ class AuthUsersPage extends FannieRESTfulPage
         return $ret;
     }
 
-    public function get_reset_view()
+    protected function get_reset_view()
     {
         return $this->user_form(array('_method'=>'post','reset'=>'1'), 'Reset Password');
     }
 
-    private function user_form($hidden, $verb)
+    private function userSelect()
     {
-        $ret = '<form method="get" action="' . $_SERVER['PHP_SELF'] . '">
+        $init = FormLib::get('init', -999);
+        $this->add_onload_command("\$('select.form-control').focus();\n");
+        $ret = '<div class="form-group">
             <label>Username</label>
             <select name="id" class="form-control">';
         foreach (getUserList() as $uid => $name) {
-            $ret .=  "<option>".$name."</option>";
+            $ret .=  "<option " . ($init == $name ? 'selected' : '') . ">".$name."</option>";
         }
-        $ret .= '</select>
+        $ret .= '</select></div>';
+
+        return $ret;
+    }
+
+    private function user_form($hidden, $verb)
+    {
+        $ret = '<form method="get" action="' . filter_input(INPUT_SERVER, 'PHP_SELF') . '">';
+        $ret .= $this->userSelect();
+        $ret .= '
             <p>
             <button class="btn btn-default" type="submit">' . $verb . '</button>
             </p>';
@@ -200,49 +250,57 @@ class AuthUsersPage extends FannieRESTfulPage
             $ret .= sprintf('<input type="hidden" name="%s" value="%s" />', $name, $value);
         }
         $ret .= '</form>';
-        $this->add_onload_command("\$('select.form-control').focus();\n");
 
         return $ret;
     }
 
-    public function get_newAuth_view()
+    protected function get_newAuth_view()
     {
-        $ret = '<form method="post" action="' . $_SERVER['PHP_SELF'] . '">
-            <label>Username</label>
-            <select name="id" class="form-control">';
-        foreach (getUserList() as $uid => $name) {
-            $ret .=  "<option>".$name."</option>";
-        }
-        $ret .= '</select>
-            <label>Authorization Class</label>
-            <select name="authClass" class="form-control">';
-        foreach (getAuthList() as $name) {
-            $ret .= '<option>' . $name . '</option>';
-        }
-        $ret .= '</select>
-            <label>Subclass Start</label>
-            <input type="text" name="start" value="all" class="form-control" />
-            <label>Subclass End</label>
-            <input type="text" name="end" value="all" class="form-control" />
+        $ret = '<form method="post" action="' . filter_input(INPUT_SERVER, 'PHP_SELF') . '">';
+        $ret .= $this->userSelect();
+        $ret .= '
+            <table class="table table-bordered table-striped">
+            <tr>
+                <th>Authorization Class</th>
+                <th class="col-sm-3">Notes</th>
+                <th>Subclass Start</th>
+                <th>Subclass End</th>
+            </tr>';
+            $ret .= '<tr>
+                <td><select name="authClass" class="form-control"
+                onchange="$(\'.auth-notes\').hide();$(\'#auth-notes-\'+this.value).show();">';
+            foreach (getAuthList() as $name) {
+                $ret .= sprintf('<option>' . $name . '</option>');
+            }
+            $ret .= '</select></td>
+                <td>';
+            $first = true;
+            foreach (getAuthList() as $name) {
+                $notes = getAuthNotes($name);
+                $ret .= sprintf('<span class="auth-notes %s" id="auth-notes-%s">%s</span>',
+                    ($first ? '' : 'collapse'), $name, $notes);
+                $first = false;
+            }
+            $ret .= '</td>
+                <td><input type="text" name="start" value="all" class="form-control" /></td>
+                <td><input type="text" name="end" value="all" class="form-control" /></td>
+                </tr>';
+        $ret .= '</table>
             <p>
             <button class="btn btn-default" type="submit">Add Authorization</button>
+            <a href="' . filter_input(INPUT_SERVER, 'PHP_SELF') . '" class="btn btn-default btn-reset">Users Menu</a>
             </p>';
         $ret .= '</form>';
-        $this->add_onload_command("\$('select.form-control:first').focus();\n");
 
         return $ret;
     }
 
-    public function get_removeAuth_view()
+    protected function get_removeAuth_view()
     {
-        $ret = '<form method="post" action="' . $_SERVER['PHP_SELF'] . '">
-            <input type="hidden" name="_method" value="delete" />
-            <label>Username</label>
-            <select name="id" class="form-control">';
-        foreach (getUserList() as $uid => $name) {
-            $ret .=  "<option>".$name."</option>";
-        }
-        $ret .= '</select>
+        $ret = '<form method="post" action="' . filter_input(INPUT_SERVER, 'PHP_SELF') . '">
+            <input type="hidden" name="_method" value="delete" />';
+        $ret .= $this->userSelect();
+        $ret .= '
             <label>Authorization Class</label>
             <select name="authClass" class="form-control">';
         foreach (getAuthList() as $name) {
@@ -253,26 +311,39 @@ class AuthUsersPage extends FannieRESTfulPage
             <button class="btn btn-default" type="submit">Remove Authorization</button>
             </p>';
         $ret .= '</form>';
-        $this->add_onload_command("\$('select.form-control:first').focus();\n");
 
         return $ret;
     }
 
-    public function get_view()
+    protected function get_view()
     {
         ob_start();
         echo '<div class="row container" id="btn-bar">';
         echo '<a class="btn btn-default" href="AuthIndexPage.php">Menu</a> ';
-        echo '<a class="btn btn-default" href="' . $_SERVER['PHP_SELF'] . '?new=1">Add User</a> ';
-        echo '<a class="btn btn-default" href="' . $_SERVER['PHP_SELF'] . '?detail=1">View User</a> ';
-        echo '<a class="btn btn-default" href="' . $_SERVER['PHP_SELF'] . '?remove=1">Delete User</a> ';
-        echo '<a class="btn btn-default" href="' . $_SERVER['PHP_SELF'] . '?newAuth=1">Add Auth</a> ';
-        echo '<a class="btn btn-default" href="' . $_SERVER['PHP_SELF'] . '?removeAuth=1">Delete Auth</a> ';
-        echo '<a class="btn btn-default" href="' . $_SERVER['PHP_SELF'] . '?reset=1">Reset Password</a> ';
+        echo '<a class="btn btn-default" href="' . filter_input(INPUT_SERVER, 'PHP_SELF') . '?new=1">Add User</a> ';
+        echo '<a class="btn btn-default" href="' . filter_input(INPUT_SERVER, 'PHP_SELF') . '?remove=1">Delete User</a> ';
+        echo '<a class="btn btn-default" href="' . filter_input(INPUT_SERVER, 'PHP_SELF') . '?newAuth=1">Add Auth</a> ';
         echo '</div>';
-        showUsers();
+        echo '<table class="table table-bordered">
+            <tr><th>Name</th><th>User ID</th></tr>';
+        foreach (getUserList() as $uid => $name) {
+            printf('<tr><td><a href="?id=%s">%s</a></td><td>%s</td></tr>',
+                $name, $name, $uid);
+        }
+        echo '</table>';
 
         return ob_get_clean();
+    }
+
+    public function unitTest($phpunit)
+    {
+        $phpunit->assertNotEquals(0, strlen($this->get_view()));
+        $phpunit->assertNotEquals(0, strlen($this->get_removeAuth_view()));
+        $phpunit->assertNotEquals(0, strlen($this->get_newAuth_view()));
+        $phpunit->assertNotEquals(0, strlen($this->get_new_view()));
+        $this->id = 1;
+        $phpunit->assertNotEquals(0, strlen($this->get_id_view()));
+        $phpunit->assertNotEquals(0, strlen($this->get_remove_view()));
     }
 }
 

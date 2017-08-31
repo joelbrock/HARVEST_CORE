@@ -21,36 +21,30 @@
 
 *********************************************************************************/
 
+use COREPOS\pos\lib\gui\NoInputCorePage;
+use COREPOS\pos\lib\TransRecord;
 include_once(dirname(__FILE__).'/../lib/AutoLoader.php');
 
-class PaidOutComment extends NoInputPage {
+class PaidOutComment extends NoInputCorePage 
+{
 
     function preprocess()
     {
-        if (isset($_REQUEST["selectlist"])){
-            $input = $_REQUEST["selectlist"];
-            if ($input == "CL"){
-                CoreLocal::set("msgrepeat",0);
-                CoreLocal::set("strRemembered","");
-                CoreLocal::set("refundComment","");
-            }
-            else if ($input == "Other"){
-                return True;
-            }
-            else {
+        try {
+            $input = $this->form->selectlist;
+            $qstr = '';
+            if ($input == "Other"){
+                return true;
+            } elseif ($input != 'CL') {
                 $input = str_replace("'","",$input);
-                CoreLocal::set("strRemembered",CoreLocal::get("refundComment"));
-                // add comment calls additem(), which wipes
-                // out refundComment; save it
+                $qstr = '?reginput=' . $input . '&repeat=1';
                 TransRecord::addcomment("PO: ".$input);
-                CoreLocal::set("refundComment",CoreLocal::get("strRemembered"));
-                CoreLocal::set("msgrepeat",1);
-                //CoreLocal::set("refund",1);
             }
-            $this->change_page($this->page_url."gui-modules/pos2.php");
-            return False;
-        }
-        return True;
+            $this->change_page($this->page_url."gui-modules/pos2.php" . $qstr);
+            return false;
+        } catch (Exception $ex) {}
+
+        return true;
     }
     
     function head_content()
@@ -65,43 +59,54 @@ class PaidOutComment extends NoInputPage {
         ?>
         <div class="baseHeight">
         <div class="centeredDisplay colored">
-        <span class="larger">reason for paidout</span>
+        <span class="larger"><?php echo 'reason for paidout'; ?></span>
         <form name="selectform" method="post" 
-            id="selectform" action="<?php echo $_SERVER['PHP_SELF']; ?>">
+            id="selectform" action="<?php echo filter_input(INPUT_SERVER, 'PHP_SELF'); ?>">
         <?php
-        if (isset($_POST['selectlist']) && $_POST['selectlist'] == 'Other') {
+        if ($this->form->tryGet('selectlist') == 'Other') {
         ?>
             <input type="text" id="selectlist" name="selectlist" 
                 onblur="$('#selectlist').focus();" />
         <?php
-        }
-        else {
+        } else {
         ?>
             <select name="selectlist" id="selectlist"
                 onblur="$('#selectlist').focus();">
-            <option>Paid to Supplier</option>
-            <option>Store Use</option>
-            <option>Coupon</option>
-            <option>Other</option>
-            <option>Discount</option>
-            <option>Gift Card Refund</option>
+            <option><?php echo _('Paid to Supplier'); ?></option>
+            <option><?php echo _('Store Use'); ?></option>
+            <option><?php echo _('Coupon'); ?></option>
+            <option><?php echo _('Other'); ?></option>
+            <option><?php echo _('Discount'); ?></option>
+            <option><?php echo _('Gift Card Refund'); ?></option>
             </select>
         <?php
         }
         ?>
         </form>
         <p>
-        <span class="smaller">[clear] to cancel</span>
+        <span class="smaller"><?php echo _('[clear] to cancel'); ?></span>
         </p>
         </div>
         </div>    
         <?php
-        $this->add_onload_command("\$('#selectlist').focus();\n");
-        //if (isset($_POST['selectlist']) && $_POST['selectlist'] == 'Other') 
-        $this->add_onload_command("selectSubmit('#selectlist', '#selectform')\n");
+        $this->addOnloadCommand("\$('#selectlist').focus();\n");
+        $this->addOnloadCommand("selectSubmit('#selectlist', '#selectform')\n");
     } // END body_content() FUNCTION
+
+    public function unitTest($phpunit)
+    {
+        $this->form = new COREPOS\common\mvc\ValueContainer();
+        $debug = $this->session->Debug_Redirects;
+        $this->session->Debug_Redirects = 1;
+        ob_start();
+        $this->form->selectlist = 'Other';
+        $phpunit->assertEquals(true, $this->preprocess());
+        $this->form->selectlist = 'Test';
+        $phpunit->assertEquals(false, $this->preprocess());
+        ob_end_clean();
+        $this->session->Debug_Redirects = $debug;
+    }
 }
 
-if (basename(__FILE__) == basename($_SERVER['PHP_SELF']))
-    new PaidOutComment();
-?>
+AutoLoader::dispatch();
+

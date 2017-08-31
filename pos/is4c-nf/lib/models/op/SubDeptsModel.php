@@ -21,6 +21,9 @@
 
 *********************************************************************************/
 
+namespace COREPOS\pos\lib\models\op;
+use COREPOS\pos\lib\models\BasicModel;
+
 /**
   @class SubDeptsModel
 */
@@ -36,52 +39,15 @@ class SubDeptsModel extends BasicModel
     'dept_ID' => array('type'=>'SMALLINT', 'primary_key'=>true),
     );
 
-    /* START ACCESSOR FUNCTIONS */
-
-    public function subdept_no()
+    public function doc()
     {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["subdept_no"])) {
-                return $this->instance["subdept_no"];
-            } elseif(isset($this->columns["subdept_no"]["default"])) {
-                return $this->columns["subdept_no"]["default"];
-            } else {
-                return null;
-            }
-        } else {
-            $this->instance["subdept_no"] = func_get_arg(0);
-        }
+        return '
+Use:
+A department may contain multiple subdepartments.
+In most implementations I\'ve seen, invidual products
+can be tagged with a subdepartment, but that
+setting doesn\'t go into the final transaction log
+        ';
     }
-
-    public function subdept_name()
-    {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["subdept_name"])) {
-                return $this->instance["subdept_name"];
-            } elseif(isset($this->columns["subdept_name"]["default"])) {
-                return $this->columns["subdept_name"]["default"];
-            } else {
-                return null;
-            }
-        } else {
-            $this->instance["subdept_name"] = func_get_arg(0);
-        }
-    }
-
-    public function dept_ID()
-    {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["dept_ID"])) {
-                return $this->instance["dept_ID"];
-            } elseif(isset($this->columns["dept_ID"]["default"])) {
-                return $this->columns["dept_ID"]["default"];
-            } else {
-                return null;
-            }
-        } else {
-            $this->instance["dept_ID"] = func_get_arg(0);
-        }
-    }
-    /* END ACCESSOR FUNCTIONS */
 }
 

@@ -59,13 +59,15 @@ class NewItemsReport extends FannieReportPage
 
     public function fetch_report_data()
     {
-        global $FANNIE_OP_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
 
-        $date1 = FormLib::get('date1', date('Y-m-d'));
-        $date2 = FormLib::get('date2', date('Y-m-d'));
+        $date1 = $this->form->date1;
+        $date2 = $this->form->date2;
         $deptStart = FormLib::get('deptStart');
         $deptEnd = FormLib::get('deptEnd');
+        $deptMulti = FormLib::get('departments', array());
+        $subs = FormLib::get('subdepts', array());
     
         $buyer = FormLib::get('buyer', '');
 
@@ -74,14 +76,20 @@ class NewItemsReport extends FannieReportPage
         $args = array();
         $where = ' 1=1 ';
         if ($buyer !== '') {
-            if ($buyer != -1) {
-                $where = ' s.superID=? ';
+            if ($buyer == -2) {
+                $where .= ' AND s.superID != 0 ';
+            } elseif ($buyer != -1) {
+                $where .= ' AND s.superID=? ';
                 $args[] = $buyer;
             }
-        } else {
-            $where = ' t.department BETWEEN ? AND ? ';
-            $args[] = $deptStart;
-            $args[] = $deptEnd;
+        }
+        if ($buyer != -1) {
+            list($conditional, $args) = DTrans::departmentClause($deptStart, $deptEnd, $deptMulti, $args, 'p');
+            $where .= $conditional;
+        }
+        if (count($subs) > 0) {
+            list($inStr, $args) = $dbc->safeInClause($subs, $args);
+            $where .= " AND p.subdept IN ($inStr) ";
         }
         $args[] = $date1.' 00:00:00';
         $args[] = $date2.' 23:59:59';
@@ -93,45 +101,39 @@ class NewItemsReport extends FannieReportPage
         // join only needed with specific buyer
         if ($buyer !== '' && $buyer > -1) {
             $query .= 'LEFT JOIN superdepts AS s ON p.department=s.dept_ID ';
+        } elseif ($buyer !== '' && $buyer == -2) {
+            $query .= 'LEFT JOIN MasterSuperDepts AS s ON p.department=s.dept_ID ';
         }
         $query .= "WHERE $where
             GROUP BY p.upc,p.description,p.department, d.dept_name
             HAVING entryDate BETWEEN ? AND ?
             ORDER BY entryDate";
 
-        $prep = $dbc->prepare_statement($query);
-        $result = $dbc->exec_statement($query, $args);
+        $prep = $dbc->prepare($query);
+        $result = $dbc->execute($query, $args);
 
         $data = array();
-        while($row = $dbc->fetch_row($result)) {
-            $record = array(
-                $row['entryDate'],
-                $row['upc'],
-                $row['description'],
-                $row['department'],
-                $row['dept_name'],
-            );
-
-            $data[] = $record;
+        while ($row = $dbc->fetchRow($result)) {
+            $data[] = $this->rowToRecord($row);
         }
 
         return $data;
     }
 
+    private function rowToRecord($row)
+    {
+        return array(
+            $row['entryDate'],
+            $row['upc'],
+            $row['description'],
+            $row['department'],
+            $row['dept_name'],
+        );
+    }
+
     public function form_content()
     {
-        global $FANNIE_OP_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
-
-        $depts = new DepartmentsModel($dbc);
-        $d_list = $depts->find('dept_no');
-        $supers = new SuperDeptNamesModel($dbc);
-        $supers->superID(0, '>');
-        $s_list = $supers->find('superID');
-
-        $form = FormLib::dateAndDepartmentForm($d_list, $s_list, true);
-
-        return $form;
+        return FormLib::dateAndDepartmentForm();
     }
 
     public function helpContent()
@@ -141,8 +143,14 @@ class NewItemsReport extends FannieReportPage
             in the given date range.
             </p>';
     }
+
+    public function unitTest($phpunit)
+    {
+        $data = array('entryDate'=>'2000-01-01','upc'=>'4011',
+            'description'=>'test','department'=>1,'dept_name'=>'test');
+        $phpunit->assertInternalType('array', $this->rowToRecord($data));
+    }
 }
 
 FannieDispatch::conditionalExec();
 
-?>

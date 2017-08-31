@@ -106,7 +106,7 @@ else {
         echo "Error: bad file name: $fn";
         echo "<br />";
         echo "<a href=\"magic-doc.php\">Back</a>";
-        exit;
+        return;
     }
 
     $data = file_get_contents($fn);
@@ -124,4 +124,4 @@ else {
         printf("<pre>%s</pre>",$documentation);
     echo '<a href="magic-doc.php">Back</a><br />';
 }
-?>
+

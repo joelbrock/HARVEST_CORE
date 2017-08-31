@@ -21,6 +21,9 @@
 
 *********************************************************************************/
 
+namespace COREPOS\pos\lib\models\op;
+use COREPOS\pos\lib\models\BasicModel;
+
 /**
   @class ShrinkReasonsModel
 */
@@ -36,37 +39,13 @@ class ShrinkReasonsModel extends BasicModel
 
     public $preferred_db = 'op';
 
-    /* START ACCESSOR FUNCTIONS */
-
-    public function shrinkReasonID()
+    public function doc()
     {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["shrinkReasonID"])) {
-                return $this->instance["shrinkReasonID"];
-            } elseif(isset($this->columns["shrinkReasonID"]["default"])) {
-                return $this->columns["shrinkReasonID"]["default"];
-            } else {
-                return null;
-            }
-        } else {
-            $this->instance["shrinkReasonID"] = func_get_arg(0);
-        }
+        return '
+Use:
+Maintain list of reasons for marking
+shrink
+        ';
     }
-
-    public function description()
-    {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["description"])) {
-                return $this->instance["description"];
-            } elseif(isset($this->columns["description"]["default"])) {
-                return $this->columns["description"]["default"];
-            } else {
-                return null;
-            }
-        } else {
-            $this->instance["description"] = func_get_arg(0);
-        }
-    }
-    /* END ACCESSOR FUNCTIONS */
 }
 

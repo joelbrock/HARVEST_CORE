@@ -1,20 +1,22 @@
 <?php
-require_once($FANNIE_ROOT.'src/Credentials/GoE.wfc.php');
+if (file_exists(dirname(__FILE__) . '/Credentials/GoE.wfc.php')) {
+    require_once(dirname(__FILE__) .'/Credentials/GoE.wfc.php');
+}
 
 function getFailedTrans($dateStr,$hour){
     global $sql;
 
     $trans_stack = array();
-    $query = $sql->prepare_statement("SELECT q.refNum FROM efsnetRequest as q
-        LEFT JOIN efsnetResponse as r ON q.date=r.date
-        and q.cashierNo=r.cashierNo and q.laneNo=r.laneNo
-        and q.transNo=r.transNo and q.transID=r.transID
-        WHERE ".
-        $sql->datediff('q.datetime','?')."=0 
-        AND ".$sql->hour('q.datetime')."=?
-        AND r.httpCode <> 200
-        AND (r.refNum like '%%-%%' OR r.refNum='')");
-    $response = $sql->exec_statement($query,array($dateStr,$hour));
+    $query = $sql->prepare("
+        SELECT refNum
+        FROM PaycardTransactions
+        WHERE 
+        dateID=?
+        AND ".$sql->hour('requestDatetime')."=?
+        AND httpCode <> 200
+        AND (refNum like '%-%' OR refNum='')");
+    $dateStr = date('Ymd', strtotime($dateStr));
+    $response = $sql->execute($query,array($dateStr,$hour));
     while($row = $sql->fetch_row($response))
         $trans_stack[] = $row['refNum'];
 
@@ -87,8 +89,6 @@ function docurl($xml){
     curl_setopt($curl_handle, CURLOPT_HTTPHEADER, array("Content-type: text/xml"));
     curl_setopt($curl_handle, CURLOPT_POSTFIELDS, $xml);
 
-    set_time_limit(300);
-
     $response = curl_exec($curl_handle);
 
     $result = array(
@@ -104,4 +104,3 @@ function docurl($xml){
     return $result;
 }
 
-?>

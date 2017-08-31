@@ -6,7 +6,7 @@ if (!class_exists("SQLManager")) require_once($FANNIE_ROOT."src/SQLManager.php")
 include('../../db.php');
 
 if (!isset($_GET['batchID'])) {
-    exit;
+    return;
 }
 
 $batchID = $_GET['batchID'];
@@ -14,7 +14,7 @@ $batchID = $_GET['batchID'];
 $batchInfoQ = $sql->prepare("SELECT * FROM batchTest WHERE batchID = ?");
 $batchInfoR = $sql->execute($batchInfoQ, array($batchID));
 
-$batchInfoW = $sql->fetch_array($batchInfoR);
+$batchInfoW = $sql->fetchRow($batchInfoR);
 
 $forceQ = $sql->prepare("UPDATE products AS p
         LEFT JOIN batchListTest as l
@@ -100,4 +100,3 @@ $update->logManyUpdates(array_keys($upcs), $updateType);
 
 echo "Batch $batchID has been forced";
 
-?>

@@ -21,6 +21,9 @@
 
 *********************************************************************************/
 
+namespace COREPOS\pos\lib\models\trans;
+use COREPOS\pos\lib\models\BasicModel;
+
 /**
   @class TaxRatesModel
 */
@@ -37,52 +40,12 @@ class TaxRatesModel extends BasicModel
     'description' => array('type'=>'VARCHAR(50)'),
     );
 
-    /* START ACCESSOR FUNCTIONS */
-
-    public function id()
+    public function doc()
     {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["id"])) {
-                return $this->instance["id"];
-            } elseif(isset($this->columns["id"]["default"])) {
-                return $this->columns["id"]["default"];
-            } else {
-                return null;
-            }
-        } else {
-            $this->instance["id"] = func_get_arg(0);
-        }
+        return '
+Use:
+Local tax rates
+        ';
     }
-
-    public function rate()
-    {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["rate"])) {
-                return $this->instance["rate"];
-            } elseif(isset($this->columns["rate"]["default"])) {
-                return $this->columns["rate"]["default"];
-            } else {
-                return null;
-            }
-        } else {
-            $this->instance["rate"] = func_get_arg(0);
-        }
-    }
-
-    public function description()
-    {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["description"])) {
-                return $this->instance["description"];
-            } elseif(isset($this->columns["description"]["default"])) {
-                return $this->columns["description"]["default"];
-            } else {
-                return null;
-            }
-        } else {
-            $this->instance["description"] = func_get_arg(0);
-        }
-    }
-    /* END ACCESSOR FUNCTIONS */
 }
 

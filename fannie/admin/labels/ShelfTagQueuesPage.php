@@ -26,11 +26,13 @@ if (!class_exists('FannieAPI.php')) {
     include_once($FANNIE_ROOT.'classlib2.0/FannieAPI.php');
 }
 
-class ShelfTagQueuesPage extends FannieCRUDPage 
+class ShelfTagQueuesPage extends \COREPOS\Fannie\API\FannieCRUDPage 
 {
     protected $model_name = 'ShelfTagQueuesModel';
     protected $header = 'Shelf Tag Queues';
     protected $title = 'Shelf Tag Queues';
+    public $description = '[Shelf Tag Queues] are named slots where new tags
+    can be queued before printing.';
 
     public function helpContent()
     {

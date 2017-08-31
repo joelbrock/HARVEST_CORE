@@ -36,24 +36,13 @@ class AR extends \COREPOS\Fannie\API\member\MemberModule
         $dbc = $this->db();
         $trans = $FANNIE_TRANS_DB.$dbc->sep();
         
-        $infoQ = $dbc->prepare_statement("SELECT n.balance
+        $infoQ = $dbc->prepare("SELECT n.balance
                 FROM {$trans}ar_live_balance AS n 
                 WHERE n.card_no=?");
-        $infoR = $dbc->exec_statement($infoQ,array($memNum));
+        $infoR = $dbc->execute($infoQ,array($memNum));
         $infoW = $dbc->fetch_row($infoR);
 
-        if (!class_exists("CustdataModel")) {
-            include($FANNIE_ROOT.'classlib2.0/data/models/CustdataModel.php');
-        }
-        $model = new CustdataModel($dbc);
-        $model->CardNo($memNum);
-        $model->personNum(1);
-        $model->load();
-        $limit = $model->ChargeLimit();
-        if ($limit == 0) {
-            $limit = $model->MemDiscountLimit();
-        }
-
+        $account = self::getAccount();
 
         $ret = "<div class=\"panel panel-default\">
             <div class=\"panel-heading\">A/R</div>
@@ -63,7 +52,7 @@ class AR extends \COREPOS\Fannie\API\member\MemberModule
         $ret .= '<span class="label primaryBackground">Limit</span> ';
         $ret .= '<div class="input-group"><span class="input-group-addon">$</span>';
         $ret .= sprintf('<input name="AR_limit" value="%d" class="form-control" />
-                ',$limit);
+                ',$account['chargeLimit']);
         $ret .= '</div>';
         $ret .= '</div>';
 
@@ -86,30 +75,15 @@ class AR extends \COREPOS\Fannie\API\member\MemberModule
         return $ret;
     }
 
-    function saveFormData($memNum)
+    public function saveFormData($memNum, $json=array())
     {
-        global $FANNIE_ROOT;
-        $dbc = $this->db();
-        if (!class_exists("CustdataModel")) {
-            include($FANNIE_ROOT.'classlib2.0/data/models/CustdataModel.php');
+        $limit = FormLib::get_form_value('AR_limit',0);
+        $json['chargeLimit'] = $limit;
+        foreach (array_keys($json['customers']) as $c) {
+            $json['customers'][$c]['chargeAllowed'] = $limit > 0 ? 1 : 0;
         }
 
-        $limit = FormLib::get_form_value('AR_limit',0);
-        $model = new CustdataModel($dbc);
-        $model->CardNo($memNum);
-        $test = false;
-        foreach($model->find() as $obj) {
-            $obj->MemDiscountLimit($limit);
-            $obj->ChargeLimit($limit);
-            $obj->ChargeOk( $limit == 0 ? 0 : 1 );
-            $test = $obj->save();
-        }
-        
-        if ($test === false) {
-            return 'Error: Problme saving A/R limit<br />';
-        } else {
-            return '';
-        }
+        return $json;
     }
 }
 

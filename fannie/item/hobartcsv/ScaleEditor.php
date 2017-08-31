@@ -71,6 +71,9 @@ class ScaleEditor extends FannieRESTfulPage
         $types = FormLib::get('type', array());
         $dept = FormLib::get('scaleDept', array());
         $super = FormLib::get('super', array());
+        $ep_st = FormLib::get('store-no', array());
+        $ep_dept = FormLib::get('dept-no', array());
+        $ep_addr = FormLib::get('address-no', array());
 
         for ($i=0; $i<count($this->id); $i++) {
             $scale->reset();
@@ -93,6 +96,15 @@ class ScaleEditor extends FannieRESTfulPage
                 }
                 $scale->superID($super[$i]);
             }
+            if (isset($ep_st[$i])) {
+                $scale->epStoreNo($ep_st[$i]);
+            }
+            if (isset($ep_dept[$i])) {
+                $scale->epDeptNo($ep_dept[$i]);
+            }
+            if (isset($ep_addr[$i])) {
+                $scale->epScaleAddress($ep_addr[$i]);
+            }
             $scale->save();
         }
 
@@ -113,10 +125,12 @@ class ScaleEditor extends FannieRESTfulPage
             $supers[$row['superID']] = $row['super_name'];
         }
 
-        $ret = '<form action="' . $_SERVER['PHP_SELF'] . '" method="post">';
+        $ret = '<form action="' . filter_input(INPUT_SERVER, 'PHP_SELF') . '" method="post">';
         
         $ret .= '<table class="table">
-            <tr><th>Description</th><th>Host</th><th>Type</th><th>Scale Dept.</th><th>POS Super Dept</th></tr>';
+            <tr><th>Description</th><th>Host</th><th>Type</th><th>Scale Dept.</th><th>POS Super Dept</th>
+            <th>Store # (EP)</th><th>Dept # (EP)</th><th>Address # (EP)</th>
+            </tr>';
         foreach ($scales->find('description') as $scale) {
             $ret .= sprintf('<tr>
                             <input type="hidden" name="id[]" value="%d" />
@@ -127,7 +141,8 @@ class ScaleEditor extends FannieRESTfulPage
                             <td><input type="text" name="type[]" 
                                 class="form-control" value="%s" /></td>
                             <td><input type="text" name="scaleDept[]" 
-                                class="form-control" value="%s" /></td>',
+                                class="form-control" value="%s" /></td>
+                                ',
                             $scale->serviceScaleID(),
                             $scale->description(),
                             $scale->host(),
@@ -141,7 +156,19 @@ class ScaleEditor extends FannieRESTfulPage
                         ($scale->superID() !== null && $scale->superID() == $id ? 'selected' : ''),
                         $id, $name);
             }
-            $ret .= '</select></td></tr>';
+            $ret .= '</select></td>';
+            $ret .= sprintf('
+                        <td><input type="text" name="store-no[]"
+                            class="form-control" value="%d" /></td>
+                        <td><input type="text" name="dept-no[]"
+                            class="form-control" value="%d" /></td>
+                        <td><input type="text" name="address-no[]"
+                            class="form-control" value="%d" /></td>',
+                        $scale->epStoreNo(),
+                        $scale->epDeptNo(),
+                        $scale->epScaleAddress()
+            );
+            $ret .= '</tr>';
         }
 
         $ret .= '</table>';
@@ -162,6 +189,11 @@ class ScaleEditor extends FannieRESTfulPage
             Currently only Hobart Quantums are supported. Data Gate Weigh
             still has to be configured separately with similar information.
             </p>';
+    }
+
+    public function unitTest($phpunit)
+    {
+        $phpunit->assertNotEquals(0, strlen($this->get_view()));
     }
 }
 

@@ -20,8 +20,16 @@
     Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 *********************************************************************************/
-include('../config.php');
-include($FANNIE_ROOT.'classlib2.0/FannieAPI.php');
+if (basename(__FILE__) != basename($_SERVER['PHP_SELF'])) {
+    return;
+}
+include(dirname(__FILE__) . '/../config.php');
+if (!class_exists('FannieAPI')) {
+    include($FANNIE_ROOT.'classlib2.0/FannieAPI.php');
+}
+if (!function_exists('checkLogin')) {
+    include($FANNIE_ROOT.'auth/login.php');
+}
 $dbc = FannieDB::get($FANNIE_OP_DB);
 
 if (isset($_REQUEST['upc'])){
@@ -35,6 +43,7 @@ if (isset($_REQUEST['upc'])){
     $x = 0;
     $y = 0;
     $date = date("m/d/Y");
+    $signage = new COREPOS\Fannie\API\item\FannieSignage(array());
     for($i=0;$i<4;$i++){
         if ($count % 4 == 0){ 
             $pdf->AddPage();
@@ -89,13 +98,13 @@ if (isset($_REQUEST['upc'])){
         $upc = str_pad($_REQUEST['upc'],11,'0',STR_PAD_LEFT);
         $upc = $_REQUEST['upc'];
 
-        $pdf = FannieSignage::drawBarcode($upc, $pdf, $x+30, $y+95, array('height'=>14,'fontsize'=>8));
+        $pdf = $signage->drawBarcode($upc, $pdf, $x+30, $y+95, array('height'=>14,'fontsize'=>8));
         
         $count++;
     }
 
     $pdf->Output();
-    exit;
+    return;
 }
 
 $page_title = "Fannie :: Special Orders";
@@ -115,4 +124,4 @@ echo '<input type="submit" value="Print Tags" />';
 echo '</form>';
 
 include($FANNIE_ROOT.'src/footer.html');
-?>
+

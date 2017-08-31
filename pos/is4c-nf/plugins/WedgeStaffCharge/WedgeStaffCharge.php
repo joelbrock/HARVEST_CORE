@@ -21,12 +21,28 @@
 
 *********************************************************************************/
 
+use COREPOS\pos\plugins\Plugin;
+use COREPOS\pos\lib\Database;
+
 class WedgeStaffCharge extends Plugin {
 
     public $plugin_description = 'Legacy staff charge functionality that does not
                 belong in main code base';
 
-    public function plugin_enable(){
+    public function plugin_transaction_reset()
+    {
+        /**
+          @var casediscount
+          Line item case discount percentage (as
+          integer; 5 = 5%). This feature may be redundant
+          in that it could be handled with the generic
+          line-item discount. It more or less just differs
+          in that the messages say "Case".
+        */
+        CoreLocal::set("casediscount",0);
+    }
+
+    public function pluginEnable(){
         // create database structures
         $db = Database::pDataConnect();
         if (!$db->table_exists('chargecode')){
@@ -44,7 +60,7 @@ class WedgeStaffCharge extends Plugin {
         }
     }
 
-    public function plugin_disable(){
+    public function pluginDisable(){
         $db = Database::pDataConnect();
         // always remove view
         if ($db->table_exists('chargecodeview')){
@@ -58,3 +74,4 @@ class WedgeStaffCharge extends Plugin {
         }
     }
 }
+

@@ -21,6 +21,8 @@
 
 *********************************************************************************/
 
+use COREPOS\pos\plugins\Plugin;
+
 /**
   Plugin class
 
@@ -44,18 +46,5 @@ class PromptForTare extends Plugin
 
     public $plugin_description = 'Prompts the user for tare weight on items. Only ask if there is no default
                                     and if the user has not used the tare key to enter a value.';
-
-    /**
-      Callback. Triggered when plugin is enabled
-    */
-    public function plugin_enable(){
-
-    }
-
-    /**
-      Callback. Triggered when plugin is disabled
-    */
-    public function plugin_disable(){
-
-    }
 }
+

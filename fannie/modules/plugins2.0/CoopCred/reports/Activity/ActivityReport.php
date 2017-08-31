@@ -22,6 +22,8 @@
 
 *********************************************************************************/
 /* TODO
+ * 12Sep2015 Handle date-range parameters.
+ * 12Sep2015 Run without required parameters return empty page, not form_content.
  * 25Mar2015 Re-run for a different date range:
  *           - form_content() and a link to it OR
  *           - a date formlet in the report page.
@@ -126,13 +128,13 @@ class ActivityReport extends FannieReportPage
         $fromSpec = "(SELECT $fromCols FROM CCredHistory " .
             "UNION SELECT $fromCols FROM CCredHistoryToday)";
 
-        $q = $dbc->prepare_statement("SELECT charges,transNum,payments,
+        $q = $dbc->prepare("SELECT charges,transNum,payments,
                 year(tdate) AS year, month(tdate) AS month, day(tdate) AS day
                 FROM $fromSpec AS s 
                 WHERE s.cardNo=? AND programID=?
                 ORDER BY tdate DESC");
         $args=array($this->cardNo,$this->programID);
-        $r = $dbc->exec_statement($q,$args);
+        $r = $dbc->execute($q,$args);
 
         $data = array();
         $rrp  = "{$FANNIE_URL}admin/LookupReceipt/RenderReceiptPage.php";
@@ -146,9 +148,16 @@ class ActivityReport extends FannieReportPage
             if (FormLib::get('excel') !== '') {
                 $record[] = $w['transNum'];
             } else {
-                // Receipt#, linked to Receipt Renderer
-                $record[] = sprintf("<a href='{$rrp}?year=%d&month=%d&day=%d&receipt=%s'>%s</a>",
-                    $w['year'],$w['month'],$w['day'],$w['transNum'],$w['transNum']);
+                // Receipt#, linked to Receipt Renderer, new tab
+                $record[] = sprintf("<a href='{$rrp}?year=%d&month=%d&day=%d&receipt=%s' " .
+                    "target='_CCRA_%s'" .
+                    ">%s</a>",
+                    $w['year'],$w['month'],$w['day'],
+                    $w['transNum'],
+                    $w['transNum'],
+                    $w['transNum']
+                );
+
             }
             // Amount
             $record[] = sprintf('%.2f', ($w['charges'] != 0
@@ -230,7 +239,7 @@ class ActivityReport extends FannieReportPage
          * Would like chained or AJAX <select> of Members in the Program.
          *  Maybe not in v.1
          */
-        $ret .= "<form method='get' action='ActivityReport.php'>
+        $ret .= "<form method='get' action='{$_SERVER['PHP_SELF']}'>
             <b>Member #</b> <input type='text' name='memNum' value='{$this->memNum}'
             size='6' />
             <br />
@@ -245,6 +254,5 @@ class ActivityReport extends FannieReportPage
 
 }
 
-FannieDispatch::conditionalExec(false);
+FannieDispatch::conditionalExec();
 
-?>

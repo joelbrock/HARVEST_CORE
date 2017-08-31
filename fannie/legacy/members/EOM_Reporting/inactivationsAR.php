@@ -13,7 +13,7 @@ if (isset($_GET['excel'])){
 $cached_output = \COREPOS\Fannie\API\data\DataCache::getFile("monthly");
 if (False && $cached_output){
     echo $cached_output;
-    exit;
+    return;
 }
 
 ob_start();
@@ -44,4 +44,3 @@ ob_end_clean();
 \COREPOS\Fannie\API\data\DataCache::putFile('monthly',$output);
 echo $output;
 
-?>

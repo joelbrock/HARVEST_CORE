@@ -39,6 +39,9 @@ class PriceHistoryReport extends FannieReportPage
     public $themed = true;
     public $report_set = 'Operational Data';
 
+    protected $sort_column = 3;
+    protected $sort_direction = 1;
+
     /**
       Report has variable inputs so change
       required fields before calling default preprocess
@@ -62,9 +65,20 @@ class PriceHistoryReport extends FannieReportPage
         return parent::preprocess();
     }
 
+    public function report_description_content()
+    {
+        if ($this->report_format == 'html') {
+            return array(
+                '',
+                '<a href="../ProductHistory/ProductHistoryReport.php?upc=' . FormLib::get('upc') . '">Full History of this Item</a>',
+            );
+        } else {
+            return array();
+        }
+    }
+
     public function fetch_report_data()
     {
-        global $FANNIE_OP_DB;
         /* provide a department range and date range to
            get history for all products in those departments
            for that time period AND current price
@@ -84,54 +98,96 @@ class PriceHistoryReport extends FannieReportPage
 
         $q = "";
         $args = array();
-        $sql = FannieDB::get($FANNIE_OP_DB);
+        $sql = $this->connection;
+        $sql->selectDB($this->config->get('OP_DB'));
         $type = FormLib::get('type');
         if ($type === '') { // not set
-            $q = "select h.upc,p.description,price,h.modified,p.normal_price from prodPriceHistory
-            as h left join products as p on h.upc=p.upc
-              where h.upc = ?
-              order by h.upc,h.modified desc";
+            $q = "
+                SELECT h.upc,
+                    p.description,
+                    price,
+                    h.modified,
+                    p.normal_price 
+                FROM prodPriceHistory AS h 
+                    " . DTrans::joinProducts('h') . "
+                WHERE h.upc = ?
+                ORDER BY h.upc,
+                    h.modified DESC";
             $args = array($upc);
         } else if ($type == 'upc') {
-            $q = "select h.upc,p.description,price,h.modified from prodPriceHistory
-            as h left join products as p on h.upc=p.upc
-              where h.upc = ? and h.modified between ? AND ?
-              order by h.upc,h.modified";
+            $q = "
+                SELECT h.upc,
+                    p.description,
+                    price,
+                    h.modified,
+                    p.normal_price 
+                FROM prodPriceHistory AS h 
+                    " . DTrans::joinProducts('h') . "
+                WHERE h.upc = ?
+                    AND h.modified BETWEEN ? AND ?
+                ORDER BY h.upc,
+                    h.modified DESC";
             $args = array($upc,$start_date.' 00:00:00',$end_date.' 23:59:59');
         } else if ($type == 'department') {
-            $q = "select h.upc,p.description,price,h.modified,p.normal_price from prodPriceHistory
-            as h left join products as p on h.upc=p.upc
-              where department between ? and ? and h.modified BETWEEN ? AND ?
-              order by h.upc, h.modified";
+            $q = "
+                SELECT h.upc,
+                    p.description,
+                    price,
+                    h.modified,
+                    p.normal_price 
+                FROM prodPriceHistory AS h 
+                    " . DTrans::joinProducts('h') . "
+                WHERE department BETWEEN ? AND ?
+                    AND h.modified BETWEEN ? AND ?
+                ORDER BY h.upc,
+                    h.modified DESC";
             $args = array($dept1,$dept2,$start_date.' 00:00:00',$end_date.' 23:59:59');
             $upc = ''; // if UPC and dept submitted, unset UPC
         } else {
             if ($mtype == 'upc') {
-                $q = "select h.upc,p.description,price,h.modified,p.normal_price from prodPriceHistory
-                    as h left join products as p on h.upc=p.upc
-                    where h.upc like ? and h.modified BETWEEN ? AND ?
-                    order by h.upc,h.modified";
+                $q = "
+                    SELECT h.upc,
+                        p.description,
+                        price,
+                        h.modified,
+                        p.normal_price 
+                    FROM prodPriceHistory AS h 
+                        " . DTrans::joinProducts('h') . "
+                    WHERE h.upc LIKE ?
+                        AND h.modified BETWEEN ? AND ?
+                    ORDER BY h.upc,
+                        h.modified DESC";
                 $args = array('%'.$manu.'%',$start_date.' 00:00:00',$end_date.' 23:59:59');
             } else {
-                $q = "select p.upc,b.description,p.price,p.modified,b.normal_price
-                    from prodPriceHistory as p left join products as x
-                    on p.upc = x.upc left join products as b on
-                    p.upc=b.upc where x.brand ? and
-                    p.modified between ? AND ?
-                    order by p.upc,p.modified";
+                $q = "
+                    SELECT h.upc,
+                        p.description,
+                        price,
+                        h.modified,
+                        p.normal_price 
+                    FROM prodPriceHistory AS h 
+                        " . DTrans::joinProducts('h') . "
+                    WHERE x.brand LIKE ?
+                        AND h.modified BETWEEN ? AND ?
+                    ORDER BY h.upc,
+                        h.modified DESC";
                     $args = array($manu,$start_date.' 00:00:00',$end_date.' 23:59:59');
             }
             $upc = ''; // if UPC and manu submitted, unset UPC
         }
-        $p = $sql->prepare_statement($q);
-        $r = $sql->exec_statement($p,$args);
+        $def = $sql->tableDefinition('prodPriceHistory');
+        if (isset($def['storeID']) && $this->config->get('STORE_ID')) {
+            $q = str_replace('h.upc=p.upc', 'h.upc=p.upc AND h.storeID=p.store_id', $q);
+        }
+        $p = $sql->prepare($q);
+        $r = $sql->execute($p,$args);
 
         if ($upc !== '') {
             $this->report_headers[] = 'Current Price';
         }
 
         $data = array();
-        while ($row = $sql->fetch_array($r)) {
+        while ($row = $sql->fetchRow($r)) {
             $record = array(
                     $row['upc'],
                     $row['description'],
@@ -149,13 +205,13 @@ class PriceHistoryReport extends FannieReportPage
 
     public function form_content()
     {
-        global $FANNIE_OP_DB;
-        $sql = FannieDB::get($FANNIE_OP_DB);
+        $sql = $this->connection;
+        $sql->selectDB($this->config->get('OP_DB'));
 
-        $deptsQ = $sql->prepare_statement("select dept_no,dept_name from departments order by dept_no");
-        $deptsR = $sql->exec_statement($deptsQ);
+        $deptsQ = $sql->prepare("select dept_no,dept_name from departments order by dept_no");
+        $deptsR = $sql->execute($deptsQ);
         $deptsList = "";
-        while ($deptsW = $sql->fetch_array($deptsR)) {
+        while ($deptsW = $sql->fetchRow($deptsR)) {
             $deptsList .= "<option value=$deptsW[0]>$deptsW[0] $deptsW[1]</option>";
         }
         

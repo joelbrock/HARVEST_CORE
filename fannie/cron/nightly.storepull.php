@@ -33,8 +33,10 @@
 
 */
 
-include('../config.php');
-include($FANNIE_ROOT.'src/cron_msg.php');
+include(dirname(__FILE__) . '/../config.php');
+if (!function_exists('cron_msg')) {
+    include($FANNIE_ROOT.'src/cron_msg.php');
+}
 
 set_time_limit(0);
 
@@ -55,4 +57,3 @@ curl_setopt($custdata, CURLOPT_RETURNTRANSFER, True);
 $r2 = curl_exec($custdata);
 curl_close($custdata);
 
-?>

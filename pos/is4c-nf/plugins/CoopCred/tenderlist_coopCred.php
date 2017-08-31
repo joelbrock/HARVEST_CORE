@@ -21,9 +21,13 @@
 
 *********************************************************************************/
 
+use COREPOS\pos\lib\gui\NoInputCorePage;
+use COREPOS\pos\lib\Database;
+
 include_once(dirname(__FILE__).'/../../lib/AutoLoader.php');
 
-class tenderlist_coopCred extends NoInputPage {
+class tenderlist_coopCred extends NoInputCorePage 
+{
 
     /**
       Input processing function
@@ -52,9 +56,11 @@ class tenderlist_coopCred extends NoInputPage {
                  * Redirect to main screen
                  */
                 $input = $CORE_LOCAL->get("tenderTotal").$entered;
-                $CORE_LOCAL->set("msgrepeat",1);
-                $CORE_LOCAL->set("strRemembered",$input);
-                $this->change_page($this->page_url."gui-modules/pos2.php");
+                $this->change_page(
+                    $this->page_url
+                    ."gui-modules/pos2.php"
+                    . '?reginput=' . urlencode($input)
+                    . '&repeat=1');
                 return False;
             }
         }
@@ -162,7 +168,5 @@ class tenderlist_coopCred extends NoInputPage {
 
 }
 
-if (basename(__FILE__) == basename($_SERVER['PHP_SELF']))
-    new tenderlist_coopCred();
+AutoLoader::dispatch();
 
-?>

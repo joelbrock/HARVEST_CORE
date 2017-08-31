@@ -161,14 +161,14 @@ if (isset($_REQUEST['submit'])){
     }
     else {
         print "<br />Form variable 'dept' value >{$dept}< is unknown.";
-        exit;
+        return;
     }
 
     // Array in which totals used in the report are accumulated.
     $supers = array();
 
-    $prep = $dbc->prepare_statement($costs);
-    $costsR = $dbc->exec_statement($prep,array($d1.' 00:00:00',$d2.' 23:59:59'));
+    $prep = $dbc->prepare($costs);
+    $costsR = $dbc->execute($prep,array($d1.' 00:00:00',$d2.' 23:59:59'));
     
     $curSuper = 0;
     $grandTotal = 0;
@@ -301,4 +301,4 @@ input[type="checkbox"] {
 <?php
 include($FANNIE_ROOT.'src/footer.html');
 }
-?>
+

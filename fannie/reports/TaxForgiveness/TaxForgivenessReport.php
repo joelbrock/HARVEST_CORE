@@ -33,14 +33,15 @@ class TaxForgivenessReport extends FannieReportPage
     protected $required_fields = array('date1', 'date2');
     public $themed = true;
     public $description = '[Tax Forgiveness] reports transactions where tax was fully or partially forgiven';
+    public $report_set = 'Tax';
     protected $report_headers = array('Date', 'Receipt', '%Discount', 'FS Tender');
 
     public function fetch_report_data()
     {
         $dbc = $this->connection;
         $dbc->setDefaultDB($this->config->get('OP_DB'));
-        $date1 = FormLib::get('date1');
-        $date2 = FormLib::get('date2');
+        $date1 = $this->form->date1;
+        $date2 = $this->form->date2;
 
         $rate_models = new TaxRatesModel($dbc);
         $rates = array();

@@ -60,7 +60,7 @@ class SmartMovementReport extends FannieReportPage
 
         $dates_form = '<form method="post" action="' . $_SERVER['PHP_SELF'] . '">';
         foreach ($_GET as $key => $value) {
-            if ($key != 'date1' && $key != 'date2') {
+            if ($key != 'date1' && $key != 'date2' && $key != 'store') {
                 if (is_array($value)) {
                     foreach ($value as $v) {
                         $dates_form .= sprintf('<input type="hidden" name="%s[]" value="%s" />', $key, $v);
@@ -71,7 +71,7 @@ class SmartMovementReport extends FannieReportPage
             }
         }
         foreach ($_POST as $key => $value) {
-            if ($key != 'date1' && $key != 'date2') {
+            if ($key != 'date1' && $key != 'date2' && $key != 'store') {
                 if (is_array($value)) {
                     foreach ($value as $v) {
                         $dates_form .= sprintf('<input type="hidden" name="%s[]" value="%s" />', $key, $v);
@@ -81,12 +81,14 @@ class SmartMovementReport extends FannieReportPage
                 }
             }
         }
+        $stores = FormLib::storePicker();
         $dates_form .= '
             <label>Start Date</label>
             <input class="date-field" type="text" name="date1" value="' . FormLib::get('date1') . '" /> 
             <label>End Date</label>
             <input class="date-field" type="text" name="date2" value="' . FormLib::get('date2') . '" /> 
             <input type="hidden" name="excel" value="" id="excel" />
+            ' . $stores['html'] . '
             <button type="submit" onclick="$(\'#excel\').val(\'\');return true;">Change Dates</button>
             <button type="submit" onclick="$(\'#excel\').val(\'csv\');return true;">Download</button>
             </form>';
@@ -98,14 +100,15 @@ class SmartMovementReport extends FannieReportPage
 
     public function fetch_report_data()
     {
-        global $FANNIE_OP_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
         $query = '';
         $from_where = FormLib::standardItemFromWhere();
         switch ($this->mode) {
             case 'PLU':
                 $query = "
                     SELECT t.upc,
+                        COALESCE(p.brand, '') AS brand,
                         CASE WHEN p.description IS NULL THEN t.description ELSE p.description END as description, 
                         SUM(CASE WHEN trans_status IN('','0') THEN 1 WHEN trans_status='V' THEN -1 ELSE 0 END) as rings,"
                         . DTrans::sumQuantity('t')." as qty,
@@ -113,9 +116,11 @@ class SmartMovementReport extends FannieReportPage
                         t.department,
                         d.dept_name,
                         m.super_name,
-                        COALESCE(v.vendorName,x.distributor) AS distributor
+                        COALESCE(v.vendorName,x.distributor) AS distributor,
+                        i.sku
                     " . $from_where['query'] . "
                     GROUP BY t.upc,
+                        COALESCE(p.brand, ''),
                         CASE WHEN p.description IS NULL THEN t.description ELSE p.description END,
                         CASE WHEN t.trans_status='R' THEN 'Refund' ELSE 'Sale' END,
                         t.department,
@@ -178,6 +183,7 @@ class SmartMovementReport extends FannieReportPage
                 case 'PLU':
                     $data[] = array(
                         $row['upc'],
+                        $row['brand'],
                         $row['description'],
                         $row['rings'],
                         sprintf('%.2f', $row['qty']),
@@ -186,6 +192,7 @@ class SmartMovementReport extends FannieReportPage
                         $row['dept_name'],
                         $row['super_name'],
                         $row['distributor'],
+                        $row['sku'] == $row['upc'] ? '' : $row['sku'],
                     );
                     break;
                 case 'Department':
@@ -223,19 +230,19 @@ class SmartMovementReport extends FannieReportPage
     {
         switch ($this->mode) {
             case 'PLU':
-                $this->report_headers = array('UPC','Description','Rings','Qty','$',
-                    'Dept#','Department','Super','Vendor');
+                $this->report_headers = array('UPC','Brand','Description','Rings','Qty','$',
+                    'Dept#','Department','Super','Vendor', 'SKU');
                 $this->sort_column = 4;
                 $this->sort_direction = 1;
                 $sumQty = 0.0;
                 $sumSales = 0.0;
                 $sumRings = 0.0;
                 foreach($data as $row) {
-                    $sumRings += $row[2];
-                    $sumQty += $row[3];
-                    $sumSales += $row[4];
+                    $sumRings += $row[3];
+                    $sumQty += $row[4];
+                    $sumSales += $row[5];
                 }
-                return array('Total',null,$sumRings,$sumQty,$sumSales,'',null,null,null);
+                return array('Total',null,null,$sumRings,$sumQty,$sumSales,'',null,null,null);
                 break;
             case 'Weekday':
             case 'Date':
@@ -298,8 +305,8 @@ class SmartMovementReport extends FannieReportPage
             </div>
         </div>
         <p>
-            <button type="submit" class="btn btn-default">Get Report</button>
-            <button type="reset" class="btn btn-default">Reset Form</button>
+            <button type="submit" class="btn btn-default btn-core">Get Report</button>
+            <button type="reset" class="btn btn-default btn-reset">Reset Form</button>
         </p>
         </form>
         <?php

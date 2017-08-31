@@ -54,9 +54,9 @@ class SaScanningPage extends FanniePage {
         if (ini_get('session.auto_start')==0 && !headers_sent() && php_sapi_name() != 'cli' && session_id() == '') {
             @session_start();
         }
-        if (!isset($_SESSION['SaPluginSection']))
-            $_SESSION['SaPluginSection'] = 0;
-        $this->section = $_SESSION['SaPluginSection'];
+        if (!isset($this->SaPluginSection))
+            $this->SaPluginSection = 0;
+        $this->section = $this->SaPluginSection;
 
         $dbc = FannieDB::get($FANNIE_PLUGIN_SETTINGS['ShelfAuditDB']);
         if (!is_object($dbc) || $dbc->connections[$FANNIE_PLUGIN_SETTINGS['ShelfAuditDB']] === False){
@@ -65,14 +65,14 @@ class SaScanningPage extends FanniePage {
         }
 
         if (FormLib::get_form_value('sflag') == 1){
-            $query = $dbc->prepare_statement('SELECT MAX(section) AS new_section FROM sa_inventory');
-            $result = $dbc->exec_statement($query);
+            $query = $dbc->prepare('SELECT MAX(section) AS new_section FROM sa_inventory');
+            $result = $dbc->execute($query);
             $section = 0;
             if ($dbc->num_rows($result) > 0)
                 $section = array_pop($dbc->fetch_row($result));
 
             $this->section = $section + 1;
-            $_SESSION['SaPluginSection'] = $section + 1;
+            $this->session->SaPluginSection = $section + 1;
             $this->status = 'good - section changed';
         } 
         else if (FormLib::get_form_value('minput') !== ''){
@@ -113,9 +113,9 @@ class SaScanningPage extends FanniePage {
             $qty = FormLib::get_form_value('qinput');
             $qty = rtrim($qty,'z');
             $args = array($upc);
-            $stmt = $dbc->prepare_statement('INSERT INTO sa_inventory 
-                    (id,datetime,upc,clear,quantity,section)
-                    VALUES (NULL,'.$dbc->now().',?,0,?,?)');
+            $stmt = $dbc->prepare('INSERT INTO sa_inventory 
+                    (id,datetime,upc,clear,quantity,section,storeID)
+                    VALUES (NULL,'.$dbc->now().',?,0,?,?,0)');
                     
             if ($qty != '' && ctype_digit($qty)){
                 $args[] = $qty;
@@ -131,7 +131,7 @@ class SaScanningPage extends FanniePage {
                 $args[] = $this->section;
             }
 
-            $result = $dbc->exec_statement($stmt, $args);
+            $result = $dbc->execute($stmt, $args);
             if ($result) { $this->status = 'good - scan entered:'.$upc.'';  
             }   else { $this->status = 'bad - strange scan:'.$query; }
         }

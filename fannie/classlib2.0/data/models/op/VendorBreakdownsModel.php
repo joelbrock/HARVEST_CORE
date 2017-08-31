@@ -28,126 +28,48 @@ class VendorBreakdownsModel extends BasicModel
 {
 
     protected $name = "VendorBreakdowns";
+    protected $preferred_db = 'op';
 
     protected $columns = array(
     'vendorID' => array('type'=>'INT', 'primary_key'=>true),
     'sku' => array('type'=>'VARCHAR(13)', 'primary_key'=>true),
     'upc' => array('type'=>'VARCHAR(13)'),
+    'units' => array('type'=>'SMALLINT', 'default'=>1),
     );
 
-
-    /* START ACCESSOR FUNCTIONS */
-
-    public function vendorID()
+    public function getSplit($size)
     {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["vendorID"])) {
-                return $this->instance["vendorID"];
-            } else if (isset($this->columns["vendorID"]["default"])) {
-                return $this->columns["vendorID"]["default"];
-            } else {
-                return null;
-            }
-        } else if (func_num_args() > 1) {
-            $value = func_get_arg(0);
-            $op = $this->validateOp(func_get_arg(1));
-            if ($op === false) {
-                throw new Exception('Invalid operator: ' . func_get_arg(1));
-            }
-            $filter = array(
-                'left' => 'vendorID',
-                'right' => $value,
-                'op' => $op,
-                'rightIsLiteral' => false,
-            );
-            if (func_num_args() > 2 && func_get_arg(2) === true) {
-                $filter['rightIsLiteral'] = true;
-            }
-            $this->filters[] = $filter;
-        } else {
-            if (!isset($this->instance["vendorID"]) || $this->instance["vendorID"] != func_get_args(0)) {
-                if (!isset($this->columns["vendorID"]["ignore_updates"]) || $this->columns["vendorID"]["ignore_updates"] == false) {
-                    $this->record_changed = true;
-                }
-            }
-            $this->instance["vendorID"] = func_get_arg(0);
+        $size = strtoupper($size);
+        $split_factor = false;
+        $unit_size = '';
+        if (preg_match('/^\d+$/', $size)) {
+            $split_factor = $size;
+        } elseif (preg_match('/(\d+)\s*\\/\s*(.+)/', $size, $matches)) {
+            $split_factor = $matches[1];
+            $unit_size = $matches[2];
+        } elseif (preg_match('/(\d+)\s*CT/', $size, $matches)) {
+            $split_factor = $matches[1];
+        } elseif (preg_match('/(\d+)\s*PKT/', $size, $matches)) {
+            $split_factor = $matches[1];
         }
-        return $this;
+
+        return array($split_factor, $unit_size);
     }
 
-    public function sku()
+    public function initUnits()
     {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["sku"])) {
-                return $this->instance["sku"];
-            } else if (isset($this->columns["sku"]["default"])) {
-                return $this->columns["sku"]["default"];
-            } else {
-                return null;
+        $prep = $this->connection->prepare('SELECT size FROM vendorItems WHERE sku=? AND vendorID=?');
+        $size = $this->connection->getValue($prep, array($this->sku(), $this->vendorID()));
+        if ($size) {
+            list($split, $unit_size) = $this->getSplit($size);
+            if ($split) {
+                $this->units($split);
+                return $this->save() ? true : false;
             }
-        } else if (func_num_args() > 1) {
-            $value = func_get_arg(0);
-            $op = $this->validateOp(func_get_arg(1));
-            if ($op === false) {
-                throw new Exception('Invalid operator: ' . func_get_arg(1));
-            }
-            $filter = array(
-                'left' => 'sku',
-                'right' => $value,
-                'op' => $op,
-                'rightIsLiteral' => false,
-            );
-            if (func_num_args() > 2 && func_get_arg(2) === true) {
-                $filter['rightIsLiteral'] = true;
-            }
-            $this->filters[] = $filter;
-        } else {
-            if (!isset($this->instance["sku"]) || $this->instance["sku"] != func_get_args(0)) {
-                if (!isset($this->columns["sku"]["ignore_updates"]) || $this->columns["sku"]["ignore_updates"] == false) {
-                    $this->record_changed = true;
-                }
-            }
-            $this->instance["sku"] = func_get_arg(0);
         }
-        return $this;
+
+        return false;
     }
 
-    public function upc()
-    {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["upc"])) {
-                return $this->instance["upc"];
-            } else if (isset($this->columns["upc"]["default"])) {
-                return $this->columns["upc"]["default"];
-            } else {
-                return null;
-            }
-        } else if (func_num_args() > 1) {
-            $value = func_get_arg(0);
-            $op = $this->validateOp(func_get_arg(1));
-            if ($op === false) {
-                throw new Exception('Invalid operator: ' . func_get_arg(1));
-            }
-            $filter = array(
-                'left' => 'upc',
-                'right' => $value,
-                'op' => $op,
-                'rightIsLiteral' => false,
-            );
-            if (func_num_args() > 2 && func_get_arg(2) === true) {
-                $filter['rightIsLiteral'] = true;
-            }
-            $this->filters[] = $filter;
-        } else {
-            if (!isset($this->instance["upc"]) || $this->instance["upc"] != func_get_args(0)) {
-                if (!isset($this->columns["upc"]["ignore_updates"]) || $this->columns["upc"]["ignore_updates"] == false) {
-                    $this->record_changed = true;
-                }
-            }
-            $this->instance["upc"] = func_get_arg(0);
-        }
-        return $this;
-    }
-    /* END ACCESSOR FUNCTIONS */
 }
 

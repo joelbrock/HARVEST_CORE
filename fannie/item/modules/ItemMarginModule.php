@@ -23,12 +23,13 @@
 
 use \COREPOS\Fannie\API\item\Margin;
 use \COREPOS\Fannie\API\item\PriceRounder;
+use \COREPOS\Fannie\API\lib\Store;
 
 if (!class_exists('FannieAPI')) {
     include_once(dirname(__FILE__).'/../../classlib2.0/FannieAPI.php');
 }
 
-class ItemMarginModule extends ItemModule 
+class ItemMarginModule extends \COREPOS\Fannie\API\item\ItemModule 
 {
     public function showEditForm($upc, $display_mode=1, $expand_mode=1)
     {
@@ -53,13 +54,165 @@ class ItemMarginModule extends ItemModule
                 </a></div>";
         $css = ($expand_mode == 1) ? '' : ' collapse';
         $ret .= '<div id="ItemMarginContents" class="panel-body' . $css . '">';
+        $ret .= '<div class="col-sm-5">';
         $ret .= '<div id="ItemMarginMeter">'; 
         $ret .= $this->calculateMargin($product->normal_price(),$product->cost(),$product->department(), $upc);
+        $ret .= '</div>';
+        $ret .= '</div>';
+        $ret .= '<div class="col-sm-6">';
+        $ret .= '<div class="form-group form-inline">
+                    <label>Pricing Rule</label>
+                    <select name="price_rule_id" class="form-control input-sm"
+                        onchange="if(this.value>=0)$(\'#custom-pricing-fields :input\').prop(\'disabled\', true);
+                        else $(\'#custom-pricing-fields :input\').prop(\'disabled\', false);">
+                        <option value="0" ' . ($product->price_rule_id() == 0 ? 'selected' : '') . '>Normal</option>
+                        <option value="1" ' . ($product->price_rule_id() == 1 ? 'selected' : '') . '>Variable</option>
+                        <option value="-1" ' . ($product->price_rule_id() > 1 ? 'selected' : '') . '>Custom</option>
+                    </select>
+                    <input type="hidden" name="current_price_rule_id" value="' . $product->price_rule_id() . '" />
+                    &nbsp;
+                    <label>Avg. Daily Movement</label> ' . sprintf('%.2f', $this->avgSales($upc)) . '
+                 </div>';
+        $rule = new PriceRulesModel($db);
+        if ($product->price_rule_id() > 1) {
+            $rule->priceRuleID($product->price_rule_id());
+            $rule->load();
+        }
+        $disabled = $product->price_rule_id() <= 1 ? 'disabled' : '';
+        $ret .= '<div id="custom-pricing-fields" class="form-group form-inline">
+                    <label>Custom</label>
+                    <select ' . $disabled . ' name="price_rule_type" class="form-control input-sm">
+                    {{RULE_TYPES}}
+                    </select>
+                    <input type="text" class="form-control date-field input-sm" name="rule_review_date"
+                        ' . $disabled . ' placeholder="Review Date" title="Review Date" value="{{REVIEW_DATE}}" />
+                    <input type="text" class="form-control input-sm" name="rule_details"
+                        ' . $disabled . ' placeholder="Details" title="Details" value="{{RULE_DETAILS}}" />
+                 </div>';
+        $types = new PriceRuleTypesModel($db);
+        $ret = str_replace('{{RULE_TYPES}}', $types->toOptions($rule->priceRuleTypeID()), $ret);
+        $ret = str_replace('{{REVIEW_DATE}}', $rule->reviewDate(), $ret);
+        $ret = str_replace('{{RULE_DETAILS}}', $rule->details(), $ret);
         $ret .= '</div>';
         $ret .= '</div>';
         $ret .= '</div>';
 
         return $ret;
+    }
+
+    public function avgSales($upc)
+    {
+        $config = FannieConfig::factory();
+        $dbc = FannieDB::get($config->get('OP_DB'));
+        $store = Store::getIdByIp();
+        $prodP = $dbc->prepare('SELECT auto_par FROM products WHERE upc=? AND store_id=?');
+        $avg = $dbc->getValue($prodP, array($upc, $store));
+        if ($avg) {
+            return $avg;
+        }
+        $dbc = FannieDB::get($config->get('ARCHIVE_DB'));
+        $avg = 0.0;
+        $store = Store::getIdByIp();
+        if ($dbc->tableExists('productWeeklyLastQuarter')) {
+            $maxP = $dbc->prepare('SELECT MAX(weekLastQuarterID) FROM productWeeklyLastQuarter WHERE upc=?'); 
+            $maxR = $dbc->execute($maxP, $upc);
+            if ($maxR && $dbc->numRows($maxR)) {
+                $maxW = $dbc->fetchRow($maxR);
+                $avgP = $dbc->prepare('
+                    SELECT SUM((?-weekLastQuarterID)*quantity) / SUM(weekLastQuarterID)
+                    FROM productWeeklyLastQuarter
+                    WHERE upc=?
+                        AND storeID=?');
+                $avgR = $dbc->execute($avgP, array($maxW[0], $upc, $store));
+                $avgW = $dbc->fetchRow($avgR);
+                $avg = $avgW[0] / 7.0;
+            }
+        } else {
+            $dbc = FannieDB::get($config->get('TRANS_DB'));
+            $avgP = $dbc->prepare('
+                SELECT MIN(tdate) AS min,
+                    MAX(tdate) AS max,
+                    ' . DTrans::sumQuantity() . ' AS qty
+                FROM dlog_90_view
+                WHERE upc=?
+                    AND store_id=?');
+            $avgR = $dbc->execute($avgP, array($upc, $store));
+            if ($avgR && $dbc->numRows($avgR)) {
+                $avgW = $dbc->fetchRow($avgR);
+                $d1 = new DateTime($avgW['max']);
+                $d2 = new DateTime($avgW['min']);
+                $num_days = $d1->diff($d2)->format('%a') + 1;
+                $avg = $avgW['qty'] / $num_days;
+            }
+        }
+        // put the database back where we found it (probably)
+        $dbc = FannieDB::get($config->get('OP_DB'));
+
+        return $avg;
+    }
+
+    public function saveFormData($upc)
+    {
+        $dbc = $this->db();
+        try {
+            $new_rule = $this->form->price_rule_id;
+            $old_rule = $this->form->current_price_rule_id;
+        } catch (Exception $ex) {
+            $new_rule = 0;
+            $old_rule = 0;
+        }
+
+        if ($new_rule != $old_rule) {
+            $prod = new ProductsModel($dbc);
+            $prod->upc(BarcodeLib::padUPC($upc));
+            $rule = new PriceRulesModel($dbc);
+            switch ($new_rule) {
+                case 0: // no custom rule
+                case 1: // generic variable pricing
+                    /**
+                      Update the product with the generic rule ID
+                      If it was previously set to a custom rule,
+                      that custom rule can be deleted
+                    */
+                    $prod->price_rule_id($new_rule);
+                    if ($old_rule > 1) {
+                        $rule->priceRuleID($old_rule);
+                        $rule->delete();
+                    }
+                    break;
+                default: // custom rule
+                    /**
+                      If the product is already using a custom rule,
+                      just update that rule record. Otherwise create
+                      a new one.
+                    */
+                    try {
+                        $rule->reviewDate($this->form->rule_review_date);
+                        $rule->details($this->form->rule_details);
+                        $rule->priceRuleTypeID($this->form->price_rule_type);
+                    } catch (Exception $ex) {}
+                    if ($old_rule > 1) {
+                        $rule->priceRuleID($old_rule);
+                        $prod->price_rule_id($old_rule); // just in case
+                        $rule->save();
+                    } else {
+                        $new_rule_id = $rule->save();
+                        $prod->price_rule_id($new_rule_id);
+                    }
+            }
+            $prod->enableLogging(false);
+            if (FannieConfig::config('STORE_MODE') === 'HQ') {
+                $res = $dbc->query('SELECT storeID FROM Stores WHERE hasOwnItems=1');
+                while ($row = $dbc->fetchRow($res)) {
+                    $prod->store_id($row['storeID']);
+                    $prod->save();
+                }
+            } else {
+                $prod->save();
+            }
+        }
+
+        return true;
     }
 
     private function getSRP($cost,$margin)
@@ -88,19 +241,26 @@ class ItemMarginModule extends ItemModule
 
         $vendorP = $dbc->prepare('
             SELECT d.margin,
-                n.vendorName
+                n.vendorName,
+                d.name,
+                s.margin AS specialMargin
             FROM products AS p
                 INNER JOIN vendorItems AS v ON p.upc=v.upc AND v.vendorID=p.default_vendor_id
                 INNER JOIN vendorDepartments AS d ON v.vendorID=d.vendorID AND v.vendorDept=d.deptID
                 INNER JOIN vendors AS n ON v.vendorID=n.vendorID
+                LEFT JOIN VendorSpecificMargins AS s ON p.department=s.deptID AND p.default_vendor_id=s.vendorID
             WHERE p.upc = ?
         ');
         $vendorR = $dbc->execute($vendorP, array($upc));
         if ($vendorR && $dbc->num_rows($vendorR) > 0) {
             $w = $dbc->fetch_row($vendorR);
             $desired_margin = $w['margin'] * 100;
+            if ($w['specialMargin']) {
+                $desired_margin = 100* $w['specialMargin'];
+                $w['name'] = 'Custom';
+            }
             $ret .= sprintf('Desired margin for this vendor category (%s) is %.2f%%<br />',
-                    $w['vendorName'],
+                    $w['vendorName'] . ':' . $w['name'],
                     $desired_margin);
         }
 
@@ -120,11 +280,13 @@ class ItemMarginModule extends ItemModule
                 $ret .= sprintf('Discount rate for this vendor (%s) is %.2f%%<br />',
                         $w['vendorName'],
                         ($w['discountRate']*100));
+                $vendor_discount = $w['discountRate'];
             }
             if ($w['shippingMarkup'] > 0) {
                 $ret .= sprintf('Shipping markup for this vendor (%s) is %.2f%%<br />',
                         $w['vendorName'],
                         ($w['shippingMarkup']*100));
+                $shipping_markup = $w['shippingMarkup'];
             }
         }
         $cost = Margin::adjustedCost($cost, $vendor_discount, $shipping_markup);
@@ -140,7 +302,7 @@ class ItemMarginModule extends ItemModule
                 $actual_margin);
             $srp = $this->getSRP($cost, $desired_margin/100.0);
             $ret .= sprintf("Suggested price: \$%.2f ",$srp);
-            $ret .= sprintf("(<a href=\"\" onclick=\"\$('#price').val(%.2f); updateMarginMod(); return false;\">Use this price</a>)",$srp);
+            $ret .= sprintf("(<a href=\"\" onclick=\"\$('.price-input').val(%.2f); \$('.price-input:visible').trigger('change'); return false;\">Use this price</a>)",$srp);
         }
 
         return $ret;
@@ -151,13 +313,13 @@ class ItemMarginModule extends ItemModule
         ob_start();
         ?>
         function updateMarginMod(){
+            var store_id = $(this).data('store-id');
             $.ajax({
                 url: '<?php echo FannieConfig::config('URL'); ?>item/modules/ItemMarginModule.php',
-                data: 'p='+$('#price').val()+'&d='+$('#department').val()+'&c='+$('#cost').val()+'&u=<?php echo $upc; ?>',
-                cache: false,
-                success: function(data){
-                    $('#ItemMarginMeter').html(data);
-                }
+                data: 'p='+$('#price'+store_id).val()+'&d='+$('#department'+store_id).val()+'&c='+$('#cost'+store_id).val()+'&u=<?php echo $upc; ?>',
+                cache: false
+            }).done(function(data){
+                $('#ItemMarginMeter').html(data);
             });
         }
         function nosubmit(event)

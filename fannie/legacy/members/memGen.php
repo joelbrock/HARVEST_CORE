@@ -8,7 +8,7 @@ include($FANNIE_ROOT.'auth/login.php');
 if (!validateUserQuiet('editmembers') && !validateUserQuiet('editmembers_csc') && !validateUserQuiet('viewmembers')){
     $url = $FANNIE_URL.'auth/ui/loginform.php?redirect='.$_SERVER['PHP_SELF'];
     header('Location: '.$url);
-    exit;
+    return;
 }
 
 include('memAddress.php');
@@ -48,7 +48,7 @@ $row = "";
 $query_drop = "";
 $result = prefetch_result($memID,$lName,$fName,$query_drop);
 if ($sql->num_rows($result) > 0){
-  $row = $sql->fetch_array($result);
+  $row = $sql->fetchRow($result);
   $memID = $row[0];
 }
 
@@ -310,3 +310,4 @@ function prefetch_result($memID,$lName,$fName,&$qd){
     return $result;
   }
 }
+

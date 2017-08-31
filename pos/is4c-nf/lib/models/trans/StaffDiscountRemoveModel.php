@@ -21,14 +21,19 @@
 
 *********************************************************************************/
 
-if (!class_exists('LocalTransModel')) {
+namespace COREPOS\pos\lib\models\trans;
+use COREPOS\pos\lib\models\BasicModel;
+
+/*
+if (!class_exists('\\COREPOS\\pos\lib\\models\\trans\\LocalTransModel')) {
     include_once(dirname(__FILE__).'/LocalTransModel.php');
 }
+*/
 
 /**
   @class StaffDiscountRemoveModel
 */
-class StaffDiscountRemoveModel extends LocalTransModel
+class StaffDiscountRemoveModel extends \COREPOS\pos\lib\models\trans\LocalTransModel
 {
 
     protected $name = "staffdiscountremove";
@@ -100,11 +105,21 @@ class StaffDiscountRemoveModel extends LocalTransModel
         return ($try === false) ? false : true;
     }
 
+    public function doc()
+    {
+        return '
+Use:
+This view is the opposite of staffdiscountadd.
+It calculates the reverse of all currently
+applied staff discounts on items. These records
+are inserted into localtemptrans to remove
+staff discounts if needed.
+        ';
+    }
+
     public function delete(){ return false; }
     public function save(){ return false; }
     public function normalize($db_name, $mode=BasicModel::NORMALIZE_MODE_CHECK, $doCreate=False){ return 0; }
 
-    /* START ACCESSOR FUNCTIONS */
-    /* END ACCESSOR FUNCTIONS */
 }
 

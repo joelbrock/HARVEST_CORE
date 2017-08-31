@@ -24,99 +24,22 @@
 class FannieDispatch 
 {
 
-    private static $logger;
-
-    static public function setLogger($l)
-    {
-        self::$logger = $l;
-    }
-
     /**
-      Error handler function. Can register as PHP's error
-      handling function and use Fannie's output format
+      Lookup custom permissions for a page 
     */
-    static public function errorHandler($errno, $errstr, $errfile='', $errline=0, $errcontext=array())
+    static protected function authOverride(SQLManager $dbc, $op_db, $page_class)
     {
-        $msg = $errstr . ' Line '
-                . $errline
-                . ', '
-                . $errfile;
-        self::$logger->debug($msg);
+        $prep = $dbc->prepare('
+            SELECT authClass
+            FROM PagePermissons
+            WHERE pageClass=?',
+            $op_db);
+        $auth = $dbc->getValue($prep, array($page_class), $op_db);
 
-        return true;
+        return $auth ? $auth : false;
     }
 
-    /**
-      Exception handler function. Can register as PHP's exception
-      handling function and use Fannie's output format
-    */
-    static public function exceptionHandler($exception)
-    {
-        $msg = $exception->getMessage()
-                . " Line "
-                . $exception->getLine()
-                . ", "
-                . $exception->getFile();
-        self::$logger->debug($msg);
-    }
-    
-    /**
-      Try to print a call stack on fatal errors
-      if the environment / configuration permits
-    */
-    static public function catchFatal()
-    {
-        $error = error_get_last();
-        if ($error["type"] == E_ERROR) {
-            self::errorHandler($error["type"], $error["message"], $error["file"], $error["line"]);
-            /**
-              Put fatals in the error log as well as the debug log
-              For good measure, put them in STDERR too. Try to
-              ensure somebody notices.
-            */
-            $msg = $error['message']
-                . ' Line ' . $error['line']
-                . ', File ' . $error['file'];
-            self::$logger->error($msg);
-            file_put_contents('php://stderr', $msg, FILE_APPEND);
-        }
-    }
-
-    /**
-      Log page load in usageStats table
-      @param $dbc [SQLManager] database connection
-      @return [boolean] success / fail
-    */
-    static public function logUsage(SQLManager $dbc, $op_db)
-    {
-        if (php_sapi_name() === 'cli') {
-            // don't log cli usage
-            return false;
-        }
-
-        if (!$dbc || !isset($dbc->connections[$op_db]) || $dbc->connections[$op_db] == false) {
-            // database unavailable
-            return false;
-        }
-
-        $user = FannieAuth::checkLogin();
-        if ($user === false) {
-            $user = 'n/a';
-        }
-
-        $model = new UsageStatsModel($dbc);
-        $model->tdate(date('Y-m-d H:i:s'));
-        $model->pageName(basename($_SERVER['PHP_SELF']));
-        $referrer = isset($_SERVER['HTTP_REFERER']) ? basename($_SERVER['HTTP_REFERER']) : 'n/a';
-        $model->referrer($referrer);
-        $model->userHash(sha1($user));
-        $ip = isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : 'n/a';
-        $model->ipHash(sha1($ip));
-        
-        return $model->save();
-    }
-
-    static public function i18n()
+    static protected function i18n()
     {
         if (function_exists('bindtextdomain') && defined('LC_MESSAGES')) {
             setlocale(LC_MESSAGES, "en_US");
@@ -126,11 +49,64 @@ class FannieDispatch
         }
     }
 
-    static public function setErrorHandlers()
+    static public function runPage($class)
     {
-        set_error_handler(array('FannieDispatch','errorHandler'));
-        set_exception_handler(array('FannieDispatch','exceptionHandler'));
-        register_shutdown_function(array('FannieDispatch','catchFatal'));
+        $config = FannieConfig::factory();
+        $logger = FannieLogger::factory();
+        if ($config->get('SYSLOG_SERVER')) {
+            $logger->setRemoteSyslog(
+                $config->get('SYSLOG_SERVER'),
+                $config->get('SYSLOG_PORT'),
+                $config->get('SYSLOG_PROTOCOL')
+            );
+        }
+        $op_db = $config->get('OP_DB');
+        $dbc = FannieDB::get($op_db);
+
+        // setup error logging
+        COREPOS\common\ErrorHandler::setLogger($logger);
+        COREPOS\common\ErrorHandler::setErrorHandlers();
+        // initialize locale & gettext
+        self::i18n();
+
+        $obj = new $class();
+        if ($dbc && $dbc->isConnected($op_db)) {
+            /*
+            $auth = self::authOverride($dbc, $op_db, $class);
+            if ($auth) {
+                $obj->setPermissions($auth);
+            }
+            */
+        }
+        $obj->setConfig($config);
+        $obj->setLogger($logger);
+        if (is_a($obj, 'FannieReportPage')) {
+            $dbc = FannieDB::getReadOnly($op_db);
+        }
+        $obj->setConnection($dbc);
+        $obj = self::twig($obj);
+        $obj->draw_page();
+    }
+
+    static public function twig($obj)
+    {
+        if (!class_exists('Twig_Environment') || !method_exists($obj, 'setTwig')) {
+            return $obj;
+        }
+
+        $refl = new ReflectionClass($obj);
+        $path = dirname($refl->getFileName());
+        $paths = array($path . DIRECTORY_SEPARATOR . 'twig', $path);
+        if (!is_dir($paths[0])) {
+            $paths = $paths[1];
+        }
+        $loader = new Twig_Loader_Filesystem($paths);
+        $temp = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'core.twig';
+        $twig = new Twig_Environment($loader, array('cache'=>$temp));
+        $twig->addExtension(new Twig_Extensions_Extension_I18n());
+        $obj->setTwig($twig);
+
+        return $obj;
     }
 
     /**
@@ -147,38 +123,14 @@ class FannieDispatch
     */
     static public function conditionalExec($custom_errors=true)
     {
-        $bt = debug_backtrace();
+        $frames = debug_backtrace();
         // conditionalExec() is the only function on the stack
-        if (count($bt) == 1) {
-            $config = FannieConfig::factory();
-            $logger = new FannieLogger();
-            if ($config->get('SYSLOG_SERVER')) {
-                $logger->setRemoteSyslog(
-                    $config->get('SYSLOG_SERVER'),
-                    $config->get('SYSLOG_PORT'),
-                    $config->get('SYSLOG_PROTOCOL')
-                );
-            }
-            $op_db = $config->get('OP_DB');
-            $dbc = FannieDB::get($op_db);
-            self::setLogger($logger);
-
-            // setup error logging
-            self::setErrorHandlers();
-            // initialize locale & gettext
-            self::i18n();
-            // write URL log
-            self::logUsage($dbc, $op_db);
-
+        if (count($frames) == 1) {
             // draw current page
-            $page = basename($_SERVER['PHP_SELF']);
+            $page = basename(filter_input(INPUT_SERVER, 'PHP_SELF'));
             $class = substr($page,0,strlen($page)-4);
             if ($class != 'index' && class_exists($class)) {
-                $obj = new $class();
-                $obj->setConfig($config);
-                $obj->setLogger($logger);
-                $obj->setConnection($dbc);
-                $obj->draw_page();
+                self::runPage($class);
             } else {
                 trigger_error('Missing class '.$class, E_USER_NOTICE);
             }

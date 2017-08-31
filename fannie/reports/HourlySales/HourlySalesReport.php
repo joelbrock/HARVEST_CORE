@@ -39,6 +39,7 @@ class HourlySalesReport extends FannieReportPage
 
     protected $sortable = false;
     protected $no_sort_but_style = true;
+    protected $new_tablesorter = true;
 
     public function preprocess()
     {
@@ -57,6 +58,7 @@ class HourlySalesReport extends FannieReportPage
     {
         $deptStart = FormLib::get('deptStart');
         $deptEnd = FormLib::get('deptEnd');
+        $deptMulti = FormLib::get('departments', array());
         $weekday = FormLib::get('weekday', 0);
         $buyer = FormLib::get('buyer', '');
     
@@ -77,7 +79,7 @@ class HourlySalesReport extends FannieReportPage
 
         if ($this->report_format == 'html') {
             $ret[] = sprintf(' <a href="../HourlyTrans/HourlyTransReport.php?%s">Transaction Counts for Same Period</a>', 
-                            $_SERVER['QUERY_STRING']);
+                            filter_input(INPUT_SERVER, 'QUERY_STRING'));
         }
 
         return $ret;
@@ -105,14 +107,16 @@ class HourlySalesReport extends FannieReportPage
 
     public function fetch_report_data()
     {
-        global $FANNIE_OP_DB, $FANNIE_COOP_ID;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
 
-        $date1 = FormLib::get('date1', date('Y-m-d'));
-        $date2 = FormLib::get('date2', date('Y-m-d'));
+        $date1 = $this->form->date1;
+        $date2 = $this->form->date2;
         $deptStart = FormLib::get('deptStart');
         $deptEnd = FormLib::get('deptEnd');
+        $deptMulti = FormLib::get('departments', array());
         $weekday = FormLib::get('weekday', 0);
+        $store = FormLib::get('store', 0);
     
         $buyer = FormLib::get('buyer', '');
 
@@ -122,16 +126,17 @@ class HourlySalesReport extends FannieReportPage
         $where = ' 1=1 ';
         if ($buyer !== '') {
             if ($buyer == -2) {
-                $where = ' s.superID != 0 ';
+                $where .= ' AND s.superID != 0 ';
             } elseif ($buyer != -1) {
-                $where = ' s.superID=? ';
+                $where .= ' AND s.superID=? ';
                 $args[] = $buyer;
             }
-        } else {
-            $where = ' d.department BETWEEN ? AND ? ';
-            $args[] = $deptStart;
-            $args[] = $deptEnd;
         }
+        if ($buyer != -1) {
+            list($conditional, $args) = DTrans::departmentClause($deptStart, $deptEnd, $deptMulti, $args);
+            $where .= $conditional;
+        }
+        $args[] = $store;
 
         $date_selector = 'year(tdate), month(tdate), day(tdate)';
         $day_names = array();
@@ -161,14 +166,15 @@ class HourlySalesReport extends FannieReportPage
         $query .= "WHERE d.trans_type IN ('I','D')
                     AND d.tdate BETWEEN ? AND ?
                     AND $where ";
-        if ($FANNIE_COOP_ID == 'WFC_Duluth') {
+        if ($this->config->get('COOP_ID') == 'WFC_Duluth') {
             $query .= ' AND d.department NOT IN (993, 998, 703) ';
         }
-        $query .= " GROUP BY $date_selector, $hour
+        $query .= " AND " . DTrans::isStoreID($store, 'd') . "
+                   GROUP BY $date_selector, $hour
                    ORDER BY $date_selector, $hour";
 
-        $prep = $dbc->prepare_statement($query);
-        $result = $dbc->exec_statement($query, $args);
+        $prep = $dbc->prepare($query);
+        $result = $dbc->execute($query, $args);
 
         $dataset = array();
         $minhour = 24;
@@ -195,6 +201,12 @@ class HourlySalesReport extends FannieReportPage
             if ($hour > $maxhour) {
                 $maxhour = $hour;
             }
+        }
+
+        if (isset($dataset['Sun'])) {
+            $sunday = $dataset['Sun'];
+            unset($dataset['Sun']);
+            $dataset['Sun'] = $sunday;
         }
 
         /**
@@ -323,67 +335,12 @@ function showGraph(i) {
 
     public function form_content()
     {
-        global $FANNIE_OP_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
-
-        $deptsQ = $dbc->prepare_statement("select dept_no,dept_name from departments order by dept_no");
-        $deptsR = $dbc->exec_statement($deptsQ);
-        $deptsList = "";
-
-        $deptSubQ = $dbc->prepare_statement("SELECT superID,super_name FROM superDeptNames
-                WHERE superID <> 0 
-                ORDER BY superID");
-        $deptSubR = $dbc->exec_statement($deptSubQ);
-
-        $deptSubList = "";
-        while($deptSubW = $dbc->fetch_array($deptSubR)) {
-            $deptSubList .=" <option value=$deptSubW[0]>$deptSubW[1]</option>";
-        }
-        while ($deptsW = $dbc->fetch_array($deptsR)) {
-            $deptsList .= "<option value=$deptsW[0]>$deptsW[0] $deptsW[1]</option>";
-        }
-
         ob_start();
         ?>
-<div class="well">Selecting a Buyer/Dept overrides Department Start/Department End, but not Date Start/End.
-        To run reports for a specific department(s) leave Buyer/Dept or set it to 'blank'
-</div>
-<form method="get" action="HourlySalesReport.php" class="form-horizontal">
+<form method="get" class="form-horizontal">
 <div class="row">
-    <div class="col-sm-5">
-        <div class="form-group">
-            <label class="control-label col-sm-4">Select Buyer/Dept</label>
-            <div class="col-sm-8">
-            <select id=buyer name=buyer class="form-control">>
-               <option value="" >
-               <?php echo $deptSubList; ?>
-               <option value=-2 >All Retail</option>
-               <option value=-1 >All</option>
-           </select>
-           </div>
-        </div>
-        <div class="form-group">
-            <label class="control-label col-sm-4">Department Start</label>
-            <div class="col-sm-6">
-            <select id=deptStartSel onchange="$('#deptStart').val(this.value);" class="form-control col-sm-6">
-                <?php echo $deptsList ?>
-            </select>
-            </div>
-            <div class="col-sm-2">
-            <input type=number name=deptStart id=deptStart size=5 value=1 class="form-control col-sm-2" />
-            </div>
-        </div>
-        <div class="form-group">
-            <label class="control-label col-sm-4">Department End</label>
-            <div class="col-sm-6">
-                <select id=deptEndSel onchange="$('#deptEnd').val(this.value);" class="form-control">
-                    <?php echo $deptsList ?>
-                </select>
-            </div>
-            <div class="col-sm-2">
-                <input type=number name=deptEnd id=deptEnd size=5 value=1 class="form-control" />
-            </div>
-        </div>
+    <div class="col-sm-6">
+        <?php echo FormLib::standardDepartmentFields('buyer'); ?>
         <div class="form-group">
             <label class="col-sm-4 control-label">
                 Group by weekday?
@@ -419,11 +376,13 @@ function showGraph(i) {
     </div>
 </div>
     <p>
-        <button type=submit name=submit value="Submit" class="btn btn-default">Submit</button>
-        <button type=reset name=reset class="btn btn-default">Start Over</button>
+        <button type=submit name=submit value="Submit" class="btn btn-default btn-core">Submit</button>
+        <button type=reset name=reset class="btn btn-default btn-reset"
+            onclick="$('#super-id').val('').trigger('change');">Start Over</button>
     </p>
 </form>
         <?php
+        $this->addOnloadCommand("\$('#subdepts').closest('.form-group').hide();");
 
         return ob_get_clean();
     }

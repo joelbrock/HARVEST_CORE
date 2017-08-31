@@ -21,7 +21,7 @@
 
 *********************************************************************************/
 
-namespace COREPOS\Common\mvc;
+namespace COREPOS\common\mvc;
 
 class ValueContainer implements \Iterator
 {
@@ -40,6 +40,16 @@ class ValueContainer implements \Iterator
         } else {
             throw new \Exception("Unknown value {$name}");
         }
+    }
+
+    public function tryGet($name, $default='')
+    {
+        return isset($this->values[$name]) ? $this->values[$name] : $default;
+    }
+
+    public function __isset($name)
+    {
+        return isset($this->values[$name]);
     }
 
     public function __unset($name)

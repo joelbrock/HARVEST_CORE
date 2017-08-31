@@ -21,47 +21,29 @@
 
 *********************************************************************************/
 
-if (!class_exists('FannieAuth')) {
-    include(dirname(__FILE__).'/auth/FannieAuth.php');
-}
-
 /**
   @class FanniePage
   Class for drawing screens
 */
-class FanniePage 
+class FanniePage extends \COREPOS\common\ui\CorePage 
 {
-
-    public $required = True;
-
-    public $description = "
-    Base class for creating HTML pages.
-    ";
-
-    public $discoverable = true;
-
-    public $page_set = 'Misc';
-
-    public $doc_link = '';
-
     /**
-      Page has been updated to support themeing
+      Page uses newer bootstrap based UI
     */
-    public $themed = false;
+    public $themed = true;
 
     /** force users to login immediately */
-    protected $must_authenticate = False;
+    protected $must_authenticate = false;
     /** name of the logged in user (or False is no one is logged in) */
-    protected $current_user = False;
+    protected $current_user = false;
     /** list of either auth_class(es) or array(auth_class, start, end) tuple(s) */
     protected $auth_classes = array();
 
     protected $title = 'Page window title';
     protected $header = 'Page displayed header';
-    protected $window_dressing = True;
-    protected $onload_commands = array();
-    protected $scripts = array();
-    protected $css_files = array();
+
+    /** wrapper around $_SESSION superglobal **/
+    protected $session;
 
     /**
       Include javascript necessary to integrate linea
@@ -69,25 +51,10 @@ class FanniePage
     */
     protected $enable_linea = false;
 
-    protected $error_text;
-
-    /**
-      Instance of configuration object
-    */
-    protected $config;
-
-    /**
-      Instance of logging object
-    */
-    protected $logger;
-
-    /**
-      Instance of DB connection object
-    */
-    protected $connection;
-
     public function __construct()
     {
+        $this->start_timestamp = microtime(true);
+
         $auth_default = FannieConfig::config('AUTH_DEFAULT', false);
         $coop_id = FannieConfig::config('COOP_ID');
         if ($auth_default && !$this->must_authenticate) {
@@ -96,49 +63,23 @@ class FanniePage
         if (isset($coop_id) && $coop_id == 'WEFC_Toronto') {
             $this->auth_classes[] = 'admin';
         }
-        /*
+
+        $path = realpath(__DIR__ . '/../');
+        $this->session = new COREPOS\common\NamedSession($path);
+    }
+
+    public function preprocess()
+    {
+        $ret = parent::preprocess();
+        /**
+          Global setting overrides default behavior
+          to force the menu to appear.
         */
-    }
+        if ($this->config->get('WINDOW_DRESSING')) {
+            $this->window_dressing = true;
+        }
 
-    /**
-      DI Setter method for configuration
-      @param $fc [FannieConfig] configuration object
-    */
-    public function setConfig(FannieConfig $fc)
-    {
-        $this->config = $fc;
-    }
-
-    /**
-      DI Setter method for logging
-      @param $fl [FannieLogger] logging object
-    */
-    public function setLogger(FannieLogger $fl)
-    {
-        $this->logger = $fl;
-    }
-
-    /**
-      DI Setter method for database
-      @param $sql [SQLManager] database object
-    */
-    public function setConnection(SQLManager $sql)
-    {
-        $this->connection = $sql;
-    }
-
-    /**
-      Toggle using menus
-      @param $menus boolean
-    */
-    public function hasMenus($menus)
-    {
-        $this->window_dressing = ($menus) ? true : false;
-    }
-
-    public function has_menus($menus)
-    {
-        $this->hasMenus($menus);
+        return $ret;
     }
 
     /**
@@ -159,9 +100,20 @@ class FanniePage
             if (!$this->addBootstrap()) {
                 echo '<em>Warning: bootstrap does not appear to be installed. Try running composer update</em>';
             }
-            $this->addScript($url . 'src/javascript/jquery-ui.js');
+            if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+                // windows has trouble with symlinks
+                $this->addScript($url . 'src/javascript/jquery-ui-1.10.4/js/jquery-ui-1.10.4.min.js');
+            } else {
+                $this->addScript($url . 'src/javascript/jquery-ui.js');
+            }
             $this->addScript($url . 'src/javascript/calculator.js');
-            $this->addCssFile($url . 'src/javascript/jquery-ui.css?id=20140625');
+            $this->addScript($url . 'src/javascript/core.js');
+            if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+                // windows has trouble with symlinks
+                $this->addCssFile($url . 'src/javascript/jquery-ui-1.10.4/css/smoothness/jquery-ui.min.css?id=20140625');
+            } else {
+                $this->addCssFile($url . 'src/javascript/jquery-ui.css?id=20140625');
+            }
             $this->addCssFile($url . 'src/css/configurable.php');
             $this->addCssFile($url . 'src/css/core.css');
             $this->addCssFile($url . 'src/css/print.css');
@@ -173,6 +125,8 @@ class FanniePage
         if ($this->enable_linea) {
             $this->addScript($url . 'src/javascript/linea/cordova-2.2.0.js');
             $this->addScript($url . 'src/javascript/linea/ScannerLib-Linea-2.0.0.js');
+            $this->addScript($url . 'src/javascript/linea/WebHub.js');
+            $this->addScript($url . 'src/javascript/linea/core.js');
         }
 
         return ob_get_clean();
@@ -212,6 +166,9 @@ class FanniePage
         $path2 = dirname(__FILE__) . '/../src/javascript/';
         if (file_exists($path1 . 'jquery/jquery.min.js')) {
             $this->addFirstScript($url . 'src/javascript/composer-components/jquery/jquery.min.js');
+        } elseif (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            // windows has trouble with symlinks
+            $this->addFirstScript($url . 'src/javascript/jquery-1.11.1/jquery-1.11.1.min.js');
         } elseif (file_exists($path2 . 'jquery.js')) {
             $this->addFirstScript($url . 'src/javascript/jquery.js');
         } else {
@@ -235,6 +192,7 @@ class FanniePage
         $FANNIE_AUTH_ENABLED = $this->config->get('AUTH_ENABLED');
         $FANNIE_URL = $this->config->get('URL');
         ob_start();
+        $START_TIMESTAMP = $this->start_timestamp;
         if ($this->themed) {
             include(dirname(__FILE__) . '/../src/footer.bootstrap.html');
             $modal = $this->helpModal();
@@ -252,56 +210,25 @@ class FanniePage
         return $this->getFooter();
     }
 
-    /**
-      Handle pre-display tasks such as input processing
-      @return
-       - True if the page should be displayed
-       - False to stop here
-
-      Common uses include redirecting to a different module
-      and altering body content based on input
-    */
-    public function preprocess()
-    {
-        return true;
-    }
-    
-    /**
-      Define the main displayed content
-      @return An HTML string
-    */
-    public function body_content()
-    {
-
-    }
-
-    public function bodyContent()
-    {
-        return $this->body_content();
-    }
-
-    public function errorContent()
-    {
-        return $this->error_text;
-    }
-
-    /**
-      Define any javascript needed
-      @return A javascript string
-    */
-    public function javascript_content(){
-
-    }
-
-    public function javascriptContent()
-    {
-        return $this->javascript_content();
-    }
-
     protected function lineaJS()
     {
         ob_start();
         ?>
+function lineaBarcode(upc, selector, callback) {
+    upc = upc.substring(0,upc.length-1);
+    if ($(selector).length > 0){
+        $(selector).val(upc);
+        if (typeof callback === 'function') {
+            callback();
+        } else {
+            $(selector).closest('form').submit();
+        }
+    }
+}
+var IPC_PARAMS = { selector: false, callback: false };
+function ipcWrapper(upc, typeID, typeStr) {
+    lineaBarcode(upc, IPC_PARAMS.selector, IPC_PARAMS.callback);
+}
 /**
   Enable linea scanner on page
   @param selector - jQuery selector for the element where
@@ -315,8 +242,11 @@ class FanniePage
 function enableLinea(selector, callback)
 {
     Device = new ScannerDevice({
-        barcodeData: function (data, type){
+        barcodeData: function(data, type) {
             var upc = data.substring(0,data.length-1);
+            if (upc.length == 6) {
+                upc = '0' + upc;
+            }
             if ($(selector).length > 0){
                 $(selector).val(upc);
                 if (typeof callback === 'function') {
@@ -338,71 +268,44 @@ function enableLinea(selector, callback)
         }
     });
     ScannerDevice.registerListener(Device);
+
+    if (typeof WebBarcode == 'object') {
+        WebBarcode.onBarcodeScan(function(ev) {
+            var data = ev.value;
+            lineaBarcode(data, selector, callback);
+        });
+    }
+
+    // for webhub
+    WebHub.Settings.set({
+        barcodeFunction: function (upc, typeID, typeStr) {
+            upc = upc.substring(0,upc.length-1);
+            if ($(selector).length > 0){
+                $(selector).val(upc);
+                if (typeof callback === 'function') {
+                    callback();
+                } else {
+                    $(selector).closest('form').submit();
+                }
+            }
+        }
+    });
+
+    function lineaSilent()
+    {
+        if (typeof cordova.exec != 'function') {
+            setTimeout(lineaSilent, 100);
+        } else {
+            if (Device) {
+                Device.setScanBeep(false, []);
+            }
+        }
+    }
+    lineaSilent();
 }
         <?php
 
         return ob_get_clean();
-    }
-
-    /**
-      Add a script to the page using <script> tags
-      @param $file_url the script URL
-      @param $type the script type
-    */
-    public function addScript($file_url, $type='text/javascript')
-    {
-        $this->scripts[$file_url] = $type;
-    }
-
-    private function addFirstScript($file_url, $type='text/javascript')
-    {
-        $new = array($file_url => $type);
-        foreach ($this->scripts as $url => $t) {
-            $new[$url] = $t;
-        }
-        $this->scripts = $new;
-    }
-
-    public function add_script($file_url,$type="text/javascript")
-    {
-        $this->addScript($file_url, $type);
-    }
-
-    public function add_css_file($file_url)
-    {
-        $this->css_files[] = $file_url;
-    }
-
-    public function addCssFile($file_url)
-    {
-        $this->add_css_file($file_url);
-    }
-
-    /**
-      Define any CSS needed
-      @return A CSS string
-    */
-    public function css_content()
-    {
-
-    }
-
-    public function cssContent()
-    {
-        return $this->css_content();
-    }
-
-    /**
-      Queue javascript commands to run on page load
-    */
-    public function add_onload_command($str)
-    {
-        $this->onload_commands[] = $str;    
-    }
-
-    public function addOnloadCommand($str)
-    {
-        $this->add_onload_command($str);
     }
 
     /**
@@ -451,72 +354,6 @@ function enableLinea(selector, callback)
         return $this->checkAuth();
     }
 
-    public function draw_page()
-    {
-        $this->drawPage();
-    }
-
-    /**
-      Check if there are any problems
-      that might prevent the page from working
-      properly.
-    */
-    public function readinessCheck()
-    {
-        return true;
-    }
-
-    /**
-      Helper method
-      Check if a given table exists. Sets an appropriate message
-      in $error_text if the table is not present.
-      @param $database [string] database name
-      @param $table [string] table name
-      @return [boolean]
-    */
-    public function tableExistsReadinessCheck($database, $table)
-    {
-        $url = $this->config->get('URL');
-        $dbc = FannieDB::get($database);
-        if (!$dbc->tableExists($table)) {
-            $this->error_text = "<p>Missing table {$database}.{$table}
-                            <br /><a href=\"{$url}install/\">Click Here</a> to
-                            create necessary tables.</p>";
-            return false;
-        }
-
-        return true;
-    }
-
-    /**
-      Helper method
-      Check if a given table has a specific column. 
-      Sets an appropriate message
-      in $error_text if the column (or table) is not present.
-      @param $database [string] database name
-      @param $table [string] table name
-      @param $column [string] column name
-      @return [boolean]
-    */
-    public function tableHasColumnReadinessCheck($database, $table, $column)
-    {
-        $url = $this->config->get('URL');
-        if ($this->tableExistsReadinessCheck($database, $table) === false) {
-            return false;
-        }
-
-        $dbc = FannieDB::get($database);
-        $definition = $dbc->tableDefinition($table);
-        if (!isset($definition[$column])) {
-            $this->error_text = "<p>Table {$database}.{$table} needs to be updated.
-                            <br /><a href=\"{$url}install/InstallUpdatesPage.php\">Click Here</a> to
-                            run updates.</p>";
-            return false;
-        }
-
-        return true;
-    }
-
     /**
       Helper method to wrap helpContent()
       in markup for a bootstrap modal dialog.
@@ -543,7 +380,33 @@ function enableLinea(selector, callback)
                             </h4>
                         </div>
                         <div class="modal-body">' . $help . '</div>
+                        <div id="help-feedback" class="container col-sm-6 collapse">
+                            <input type="hidden" name="page" class="help-feedback" value="' . filter_input(INPUT_SERVER, 'PHP_SELF') . '" />
+                            <div class="form-group">
+                                <label>Email</label>
+                                <input type="email" name="email" class="help-feedback form-control" 
+                                    placeholder="Optional; if blank you won\'t get a response" />
+                            </div>
+                            <div class="form-group">
+                                <label>How could "Help" on this page be improved</label>
+                                <textarea name="comments" class="form-control help-feedback" rows="10"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <button type="button" class="btn btn-default" onclick="
+                                    $.ajax({ method: \'post\', url: \'' . $this->config->URL . 'admin/HelpPopup.php\',
+                                        data: $(\'.help-feedback\').serialize() })
+                                    .always(function() { $(\'#help-feedback\').hide(); $(\'#help-feedback-done\').show(); });
+                                ">
+                                    Send Feedback
+                                </button>
+                            </div>
+                        </div>
+                        <div id="help-feedback-done" class="collapse">
+                            <div class="alert alert-success">Feedback submitted</div>
+                        </div>
                         <div class="modal-footer">
+                            <button type="button" id="feedback-btn" class="btn btn-default" 
+                                onclick="$(\'#help-feedback\').show();$(this).hide();">Feedback</button>
                             <button type="button" class="btn btn-default" data-dismiss="modal"
                                 onclick="var helpWindow=window.open(\''. $this->config->URL . 'admin/HelpPopup.php\',
                                 \'CORE Help\', \'height=500,width=300,scrollbars=1,resizable=1\');"
@@ -567,15 +430,7 @@ function enableLinea(selector, callback)
             <p>This page hasn\'t been documented</p>';
     }
 
-    public function unitTest($phpunit)
-    {
-
-    }
-
-    /**
-      Check for input and display the page
-    */
-    public function drawPage()
+    public function preFlight()
     {
         if (!($this->config instanceof FannieConfig)) {
             $this->config = FannieConfig::factory();
@@ -584,124 +439,18 @@ function enableLinea(selector, callback)
         if (!$this->checkAuth() && $this->must_authenticate) {
             $this->loginRedirect();
             exit;
-        } elseif ($this->preprocess()) {
-
-            /**
-              Global setting overrides default behavior
-              to force the menu to appear.
-            */
-            if ($this->config->get('WINDOW_DRESSING')) {
-                $this->window_dressing = true;
-            }
-            
-            if ($this->window_dressing) {
-                echo $this->getHeader();
-            }
-            
-            if ($this->readinessCheck() !== false) {
-                $body = $this->bodyContent();
-            } else {
-                $body = $this->errorContent();
-            }
-
-            if ($this->window_dressing) {
-                echo $body;
-                $footer = $this->getFooter();
-                $footer = str_ireplace('</html>','',$footer);
-                $footer = str_ireplace('</body>','',$footer);
-                echo $footer;
-            } else {
-                $body = str_ireplace('</html>','',$body);
-                $body = str_ireplace('</body>','',$body);
-                echo $body;
-            }
-
-            foreach($this->scripts as $s_url => $s_type) {
-                printf('<script type="%s" src="%s"></script>',
-                    $s_type, $s_url);
-                echo "\n";
-            }
-            
-            $js_content = $this->javascriptContent();
-            if (!empty($js_content) || !empty($this->onload_commands) || $this->themed) {
-                echo '<script type="text/javascript">';
-                echo $js_content;
-                echo "\n\$(document).ready(function(){\n";
-                foreach($this->onload_commands as $oc)
-                    echo $oc."\n";
-                echo "});\n";
-                if ($this->themed) {
-                    ?>
-function showBootstrapAlert(selector, type, msg)
-{
-    var alertbox = '<div class="alert alert-' + type + '" role="alert">';
-    alertbox += '<button type="button" class="close" data-dismiss="alert">';
-    alertbox += '<span>&times;</span></button>';
-    alertbox += msg + '</div>';
-    $(selector).append(alertbox);
-}
-function showBootstrapPopover(element, original_value, error_message)
-{
-    var timeout = 1500;
-    if (error_message == '') {
-        error_message = 'Saved!';
-    } else {
-        element.val(original_value);
-        timeout = 3000;
-    }
-    var t = element.attr('title');
-    element.attr('title', '');
-    element.popover({
-        html: true,
-        content: error_message,
-        placement: 'auto bottom'
-    });
-    element.popover('show');
-    setTimeout(function(){element.popover('destroy');element.attr('title', t);}, timeout);
-}
-function mathField(elem)
-{
-    try {
-        console.log(elem);
-        console.log(elem.value);
-        var newval = calculator.parse(elem.value);
-        elem.value = newval;
-    } catch (e) { }
-}
-function standardFieldMarkup()
-{
-    $('input.date-field').datepicker({
-        dateFormat: 'yy-mm-dd',    
-        changeYear: true,
-        yearRange: "c-10:c+10",
-    });
-    $('input.math-field').change(function (event) {
-        mathField(event.target);
-    });
-}
-                    <?php
-                }
-                if ($this->enable_linea) {
-                    echo $this->lineaJS();
-                }
-                echo '</script>';
-            }
-
-            foreach($this->css_files as $css_url) {
-                printf('<link rel="stylesheet" type="text/css" href="%s">',
-                    $css_url);
-                echo "\n";
-            }
-            
-            $page_css = $this->css_content();
-            if (!empty($page_css)) {
-                echo '<style type="text/css">';
-                echo $page_css;
-                echo '</style>';
-            }
-
-            echo '</body></html>';
         }
+    }
+
+    public function setPermissions($p)
+    {
+        $this->auth_classes = array($p);
+    }
+
+    protected $twig = null;
+    public function setTwig($t)
+    {
+        $this->twig = $t;
     }
 }
 

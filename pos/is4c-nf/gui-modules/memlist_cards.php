@@ -33,11 +33,14 @@
     *                       in body_content() using temp_message.
 
 */
+use COREPOS\pos\lib\gui\NoInputCorePage;
+use COREPOS\pos\lib\Database;
+use COREPOS\pos\lib\PrehLib;
 
 include_once(dirname(__FILE__).'/../lib/AutoLoader.php');
 
-class memlist_cards extends NoInputPage {
-
+class memlist_cards extends NoInputCorePage 
+{
     var $temp_result;
     var $temp_num_rows;
     var $entered;
@@ -109,7 +112,7 @@ class memlist_cards extends NoInputPage {
         if ( ($num_rows == 1 && $entered == CoreLocal::get("defaultNonMem"))
                 ||
             (is_numeric($entered) && is_numeric($personNum) && $selected_name) ) {
-            $row = $db_a->fetch_array($result);
+            $row = $db_a->fetchRow($result);
             // Don't want to affect the current trans.  Will it still work?
             // PrehLib::setMember($row["CardNo"], $personNum);
 
@@ -200,7 +203,7 @@ class memlist_cards extends NoInputPage {
             // /WEFC_Toronto bit.
             }
 
-            if ($entered != CoreLocal::get("defaultNonMem") && PrehLib::check_unpaid_ar($row["CardNo"]))
+            if ($entered != CoreLocal::get("defaultNonMem") && COREPOS\pos\lib\MemberLib::checkUnpaidAR($row["CardNo"]))
                 $this->change_page($this->page_url."gui-modules/UnpaidAR.php");
             else
                 $this->change_page($this->page_url."gui-modules/memlist_cards.php");
@@ -286,7 +289,7 @@ class memlist_cards extends NoInputPage {
             }
 
             for ($i = 0; $i < $num_rows; $i++) {
-                $row = $db->fetch_array($result);
+                $row = $db->fetchRow($result);
                 if( $i == 0 && $selectFlag == 0) {
                     $selected = "selected";
                 } else {
@@ -317,7 +320,5 @@ class memlist_cards extends NoInputPage {
 // /class memlist
 }
 
-if (basename(__FILE__) == basename($_SERVER['PHP_SELF']))
-    new memlist_cards();
+AutoLoader::dispatch();
 
-?>

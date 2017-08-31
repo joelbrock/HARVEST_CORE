@@ -21,6 +21,9 @@
 
 *********************************************************************************/
 
+namespace COREPOS\pos\lib\models\trans;
+use COREPOS\pos\lib\models\ViewModel;
+
 /**
   @class TaxViewModel
 */
@@ -72,112 +75,48 @@ class TaxViewModel extends ViewModel
             GROUP BY r.id,r.description";
     }
 
-    /* START ACCESSOR FUNCTIONS */
-
-    public function id()
+    public function doc()
     {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["id"])) {
-                return $this->instance["id"];
-            } elseif(isset($this->columns["id"]["default"])) {
-                return $this->columns["id"]["default"];
-            } else {
-                return null;
-            }
-        } else {
-            $this->instance["id"] = func_get_arg(0);
-        }
-    }
+        return '
+Use:
+This view is a revised, BETA way of dealing
+with taxes. Rather than generate the tax total
+(including foodstamp exemptions) with a series of
+cascading views, this single view provides a
+record for each available tax rate. Exemption 
+calculations then occur on the code side in a
+far-easier-to-read imperative style.
 
-    public function description()
-    {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["description"])) {
-                return $this->instance["description"];
-            } elseif(isset($this->columns["description"]["default"])) {
-                return $this->columns["description"]["default"];
-            } else {
-                return null;
-            }
-        } else {
-            $this->instance["description"] = func_get_arg(0);
-        }
-    }
+id is the tax rate\'s identifier and description
+is its description.
 
-    public function taxTotal()
-    {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["taxTotal"])) {
-                return $this->instance["taxTotal"];
-            } elseif(isset($this->columns["taxTotal"]["default"])) {
-                return $this->columns["taxTotal"]["default"];
-            } else {
-                return null;
-            }
-        } else {
-            $this->instance["taxTotal"] = func_get_arg(0);
-        }
-    }
+taxTotal is the total tax due for this particular
+rate. SUM(taxTotal) over the view would be the total
+tax due with all rates.
 
-    public function fsTaxable()
-    {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["fsTaxable"])) {
-                return $this->instance["fsTaxable"];
-            } elseif(isset($this->columns["fsTaxable"]["default"])) {
-                return $this->columns["fsTaxable"]["default"];
-            } else {
-                return null;
-            }
-        } else {
-            $this->instance["fsTaxable"] = func_get_arg(0);
-        }
-    }
+fsTaxable is the *retail* cost of goods taxed at this rate.
+fsTaxTotal is tax due on those items at this rate.
 
-    public function fsTaxTotal()
-    {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["fsTaxTotal"])) {
-                return $this->instance["fsTaxTotal"];
-            } elseif(isset($this->columns["fsTaxTotal"]["default"])) {
-                return $this->columns["fsTaxTotal"]["default"];
-            } else {
-                return null;
-            }
-        } else {
-            $this->instance["fsTaxTotal"] = func_get_arg(0);
-        }
-    }
+foodstampTender is the total amount tendered in foodstamps
+for the transaction. This will be the same for all records
+in this view and is provided as a convenience to avoid a 
+second look-up query.
 
-    public function foodstampTender()
-    {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["foodstampTender"])) {
-                return $this->instance["foodstampTender"];
-            } elseif(isset($this->columns["foodstampTender"]["default"])) {
-                return $this->columns["foodstampTender"]["default"];
-            } else {
-                return null;
-            }
-        } else {
-            $this->instance["foodstampTender"] = func_get_arg(0);
-        }
-    }
+rate is this tax rate as a decimal - i.e., 1% is 0.01.
 
-    public function taxrate()
-    {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["taxrate"])) {
-                return $this->instance["taxrate"];
-            } elseif(isset($this->columns["taxrate"]["default"])) {
-                return $this->columns["taxrate"]["default"];
-            } else {
-                return null;
-            }
-        } else {
-            $this->instance["taxrate"] = func_get_arg(0);
-        }
+----------------------------------------------
+In calculating exemptions, foodstampTender and fsTaxable
+are important. If foodstampTender is >= fsTaxable then
+all foodstampable, taxable items were purchased with foodstamps
+and you can subtract fsTaxTotal from taxTotal. On the other
+hand if foodstampTender is < fsTaxable then you should reduce
+taxTotal by a proportional pro-rated amount.
+
+When dealing with multiple tax rates, it is important to
+reduce foodstampTender each time it is used. The value in the
+view is the same for all records and POS has to decide where
+to apply that tender more than once.
+        ';
     }
-    /* END ACCESSOR FUNCTIONS */
 }
 

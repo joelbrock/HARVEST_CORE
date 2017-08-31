@@ -101,14 +101,28 @@ class HouseCouponEditor extends FanniePage
             echo $this->couponItemTable($id);
 
             return false;
-
+        } elseif (FormLib::get('u', '') !== '') {
+            $this->display_function = 'addUPCs';
+        } elseif (FormLib::get('add-to-coupon') !== '') {
+            $hci = new HouseCouponItemsModel($this->connection);
+            $hci->coupID(FormLib::get('add-to-coupon'));
+            $hci->type(FormLib::get('add-to-as'));
+            $this->connection->startTransaction();
+            foreach (FormLib::get('add-to-upc') as $upc) {
+                $upc = BarcodeLib::padUPC($upc);
+                $hci->upc($upc);
+                $hci->save();
+            }
+            $this->connection->finishTransaction();
+            header('Location: ' . filter_input(INPUT_SERVER, 'PHP_SELF') . '?edit_id=' . $hci->coupID());
+            return false;
         } elseif (FormLib::get_form_value('edit_id','') !== '') {
             $this->coupon_id = (int)FormLib::get_form_value('edit_id',0);
             $this->display_function = 'editCoupon';
         } elseif (FormLib::get_form_value('new_coupon_submit') !== '') {
             $dbc = FannieDB::get($this->config->get('OP_DB'));
 
-            $maxQ = $dbc->prepare_statement("SELECT max(coupID) from houseCoupons");
+            $maxQ = $dbc->prepare("SELECT max(coupID) from houseCoupons");
             $maxR = $dbc->execute($maxQ);
             $max = 0;
             if ($maxR && $dbc->numRows($maxR)) {
@@ -117,8 +131,8 @@ class HouseCouponEditor extends FanniePage
             }
             $this->coupon_id = $max+1;
             
-            $insQ = $dbc->prepare_statement("INSERT INTO houseCoupons (coupID) values (?)");
-            $dbc->exec_statement($insQ,array($this->coupon_id));
+            $insQ = $dbc->prepare("INSERT INTO houseCoupons (coupID) values (?)");
+            $dbc->execute($insQ,array($this->coupon_id));
 
             $this->display_function='editCoupon';
 
@@ -175,10 +189,10 @@ class HouseCouponEditor extends FanniePage
                 /**
                   Delete UPCs and departments
                 */
-                $query = $dbc->prepare_statement("DELETE FROM houseCouponItems
+                $query = $dbc->prepare("DELETE FROM houseCouponItems
                     WHERE upc=? AND coupID=?");
                 foreach (FormLib::get_form_value('del',array()) as $upc) {
-                    $dbc->exec_statement($query,array($upc,$this->coupon_id));
+                    $dbc->execute($query,array($upc,$this->coupon_id));
                     $msgs[] = array('type'=>'success', 'text'=>'Deleted ' . $upc);
                 }
             }
@@ -205,6 +219,7 @@ class HouseCouponEditor extends FanniePage
     private function listHouseCoupons()
     {
         $FANNIE_URL = $this->config->get('URL');
+
         $this->add_script($FANNIE_URL . 'src/javascript/fancybox/jquery.fancybox-1.3.4.js?v=1');
         $this->add_css_file($FANNIE_URL . 'src/javascript/fancybox/jquery.fancybox-1.3.4.css');
         $dbc = FannieDB::get($this->config->get('OP_DB'));
@@ -220,9 +235,14 @@ class HouseCouponEditor extends FanniePage
         $ret .= '</p>';
         $ret .= '</form>';
         $ret .= '<table class="table">';
-        $ret .= '<tr><th>ID</th><th>Name</th><th>Value</th><th>Expires</th></tr>';
+        $ret .= '<tr><th>ID</th><th>Name</th><th>Value</th>';
+        $ret .= '<th>Begins</th><th>Expires</th></tr>';
         $model = new HouseCouponsModel($dbc);
         foreach($model->find('coupID') as $obj) {
+            if (strstr($obj->startDate(), ' ')) {
+                $tmp = explode(' ', $obj->startDate());
+                $obj->startDate($tmp[0]);
+            }
             if (strstr($obj->endDate(), ' ')) {
                 $tmp = explode(' ', $obj->endDate());
                 $obj->endDate($tmp[0]);
@@ -239,22 +259,35 @@ class HouseCouponEditor extends FanniePage
                 $report_dates = array(date('Y-m-01'), date('Y-m-t'));
             }
             $ret .= sprintf('<tr><td>#%d <a href="HouseCouponEditor.php?edit_id=%d">Edit</a></td>
-                    <td>%s</td><td>%.2f%s</td><td>%s</td>
+                    <td>%s</td><td>%.2f%s</td><td>%s</td><td>%s</td>
                     <td>
                         <a href="%sws/barcode-pdf/?upc=%s&name=%s"
-                        class="btn btn-default">Print Barcode</a>
+                        class="btn btn-default btn-sm">Print Barcode</a>
                         <a href="%sreports/ProductMovement/ProductMovementModular.php?upc=%s&date1=%s&date2=%s"
-                        class="btn btn-default">Usage Report</a>
+                        class="btn btn-default btn-sm">Usage Report</a>
+                        <a href="HcBasketReport.php?upc=%s&date1=%s&date2=%s"
+                        class="btn btn-default btn-sm">Simple Baskets</a>
+                        <a href="%smodules/plugins2.0/CoreWarehouse/reports/CWCouponReport.php?coupon-id=%d&date1=%s&date2=%s"
+                        class="btn btn-default btn-sm %s">Member Baskets</a>
                     </tr>',
                     $obj->coupID(),$obj->coupID(),$obj->description(),
-                    $obj->discountValue(), $obj->discountType(), $obj->endDate(),
+                    $obj->discountValue(), $obj->discountType(),
+                    $obj->startDate(), $obj->endDate(),
                     $FANNIE_URL,
                     ('499999' . str_pad($obj->coupID(), 5, '0', STR_PAD_LEFT)),
                     urlencode($obj->description()),
                     $FANNIE_URL,
                     ('499999' . str_pad($obj->coupID(), 5, '0', STR_PAD_LEFT)),
                     $report_dates[0],
-                    $report_dates[1]
+                    $report_dates[1],
+                    ('499999' . str_pad($obj->coupID(), 5, '0', STR_PAD_LEFT)),
+                    $report_dates[0],
+                    $report_dates[1],
+                    $FANNIE_URL,
+                    $obj->coupID(),
+                    $report_dates[0],
+                    $report_dates[1],
+                    (\COREPOS\Fannie\API\FanniePlugin::isEnabled('CoreWarehouse') ? '' : 'collapse')
                 );
         }
         $ret .= '</table>';
@@ -269,8 +302,8 @@ class HouseCouponEditor extends FanniePage
         $dbc = FannieDB::get($this->config->get('OP_DB'));
         
         $depts = array();
-        $query = $dbc->prepare_statement("SELECT dept_no,dept_name FROM departments ORDER BY dept_no");
-        $result = $dbc->exec_statement($query);
+        $query = $dbc->prepare("SELECT dept_no,dept_name FROM departments ORDER BY dept_no");
+        $result = $dbc->execute($query);
         while($row = $dbc->fetch_row($result)){
             $depts[$row[0]] = $row[1];
         }
@@ -359,6 +392,11 @@ class HouseCouponEditor extends FanniePage
         $mts = array(
             'Q'=>'Quantity (at least)',
             'Q+'=>'Quantity (more than)',
+            'Q-'=>'Quantity (Per-Item Max)',
+            'C'=>'Department (at least qty)',
+            'C+'=>'Department (more than qty)',
+            'C!'=>'Dept w/o sales (at least qty)',
+            'C^'=>'Dept w/o sales (more than qty)',
             'D'=>'Department (at least $)',
             'D+'=>'Department (more than $)',
             'M'=>'Mixed (Item+Item)',
@@ -383,18 +421,29 @@ class HouseCouponEditor extends FanniePage
              </div>";
 
         $dts = array('Q'=>'Quantity Discount',
+            'QD' => 'Quantity Discount (Department)',
             'P'=>'Set Price Discount',
             'FI'=>'Scaling Discount (Item)',
             'FD'=>'Scaling Discount (Department)',
             'MD'=>'Capped Discount (Department)',
             'F'=>'Flat Discount',
             'PI'=>'Per-Item Discount',
+            'PS'=>'Per-Set Discount',
+            'BG'=>'BOGO (Buy one get one)',
+            'BQ'=>'BOGO (Qty limited)',
             '%'=>'Percent Discount (End of transaction)',
+            '%B' => 'Percent Discount (Coupon discount OR member discount)',
+            '%I'=>'Percent Discount (Specific Items)',
             '%D'=>'Percent Discount (Department)',
+            '%S'=>'Percent Discount (Department excludes sale items)',
             'PD'=>'Percent Discount (Anytime)',
-            '%C'=>'Percent Discount (Capped)',
             'AD'=>'All Discount (Department)',
         );
+        if ($mType != '') {
+            unset($dts['%']);
+            unset($dts['%B']);
+            unset($dts['PD']);
+        }
         $ret .= '<div class="row">
             <label class="col-sm-1 control-label">Discount Type</label>
             <div class="col-sm-3">
@@ -410,18 +459,20 @@ class HouseCouponEditor extends FanniePage
             class=\"form-control\" /></div>
             </div>";
 
-        $ret .= "<br /><button type=submit name=submit_save value=Save class=\"btn btn-default\">Save</button>";
-        $ret .= ' | <button type="button" value="Back" class="btn btn-default" 
-            onclick="location=\'HouseCouponEditor.php\';return false;">Back</button>';
+        $ret .= "<br /><button type=submit name=submit_save value=Save class=\"btn btn-default btn-core\">
+            Save Settings</button>";
+        $ret .= ' <button type="button" value="Back" class="btn btn-default btn-reset" 
+            onclick="location=\'HouseCouponEditor.php\';return false;">Back to List of Coupons</button>';
 
         $ret .= "<hr />";
         $ret .= '<div class="container-fluid">';
         $ret .= '<div class="form-group form-inline" id="add-item-form">';
         if ($mType == "Q" || $mType == "Q+" || $mType == "M" || $mType == 'MX') {
             $ret .= '<label class="control-label">Add UPC</label>
-                <input type=text class="form-control add-item-field" name=new_upc /> ';
+                <input type=text class="form-control add-item-field" name=new_upc 
+                    onkeydown="addSubmitDown(event);" />';
         } 
-        if ($mType == "D" || $mType == "D+" || $dType == '%D' || $mType == 'MX') {
+        if ($mType == "D" || $mType == "D+" || $mType == 'C' || $mType == 'C+' || $dType == '%D' || $dType == 'S' || $mType == 'MX' || $mType == 'C!' || $mType == 'C^') {
             $ret .= '
                 <label class="control-label">Add Dept</label>
                 <select class="form-control add-item-field" name=new_dept>
@@ -470,6 +521,16 @@ class HouseCouponEditor extends FanniePage
                 }
             });
         }
+        function addSubmitDown(ev) {
+            var keyCode = ev.which ? ev.which : ev.keyCode; 
+            if (keyCode == 13) {
+                ev.preventDefault();
+                addItemToCoupon();
+                return false;
+            }
+
+            return true;
+        }
         <?php
         return ob_get_clean();
     }
@@ -482,10 +543,10 @@ class HouseCouponEditor extends FanniePage
         $hc->load();
         $query = '
             SELECT h.upc,
-                p.description,
+                COALESCE(p.description, \'Unknown item\') AS description,
                 h.type
             FROM houseCouponItems AS h
-                INNER JOIN products AS p ON p.upc=h.upc
+                ' . DTrans::joinProducts('h') . '
             WHERE h.coupID=?';
         if ($hc->minType() == 'MX') {
             $query = "
@@ -496,13 +557,13 @@ class HouseCouponEditor extends FanniePage
                     LEFT JOIN products AS p ON p.upc=h.upc AND h.type='DISCOUNT'
                     LEFT JOIN departments AS d ON h.upc=d.dept_no AND h.type='QUALIFIER'
                 WHERE h.coupID=?";
-        } elseif ($hc->minType() == "D" || $hc->minType() == "D+" || $hc->discountType() == '%D') {
+        } elseif ($hc->minType() == "D" || $hc->minType() == "D+" || $hc->minType() == 'C' || $hc->minType() == 'C+' || $hc->discountType() == '%D' || $hc->discountType() == 'S' || $hc->minType() == 'C!' || $hc->minType() == 'C^') {
             $query = '
                 SELECT h.upc,
-                    d.dept_name AS description,
+                    COALESCE(d.dept_name, \'Unknown department\') AS description,
                     h.type
                 FROM houseCouponItems AS h
-                    INNER JOIN departments AS d ON d.dept_no=h.upc
+                    LEFT JOIN departments AS d ON d.dept_no=h.upc
                 WHERE h.coupID=?';
         }
         $prep = $dbc->prepare($query);
@@ -520,6 +581,45 @@ class HouseCouponEditor extends FanniePage
                 $w['type'],
                 $w['upc']);
         }
+
+        return $ret;
+    }
+
+    protected function addUPCs()
+    {
+        $ret = '<h3>Add Items to Coupon</h3>
+            <form method="post">
+            <div class="form-group">
+                <label>Coupon</label>
+                <select class="form-control" name="add-to-coupon">
+                    <option value="">Select...</option>';
+        $dbc = $this->connection;
+        $coupons = new HouseCouponsModel($dbc);
+        foreach ($coupons->find() as $coupon) {
+            $ret .= sprintf('<option value="%d">%s</option>', $coupon->coupID(), $coupon->description());
+        }
+        $ret .= '</select></div>
+            <div class="form-group">
+                <label>As</label>
+                <select class="form-control" name="add-to-as">
+                    <option>BOTH</option>
+                    <option>QUALIFIER</option>
+                    <option>DISCOUNT</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <button type="submit" class="btn btn-default">Add Items</button>
+            </div>
+            <table class="table table-bordered">';
+        $upcs = FormLib::get('u', array());
+        $prep = $dbc->prepare('SELECT description FROM products WHERE upc=?');
+        foreach ($upcs as $upc) {
+            $upc = BarcodeLib::padUPC($upc);
+            $desc = $dbc->getValue($prep, array($upc));
+            $ret .= '<tr><td>' . $upc . '</td><td>' . $desc . '</td></tr>';
+            $ret .= '<input type="hidden" name="add-to-upc[]" value="' . $upc . '" />';
+        }
+        $ret .= '</table></form>';
 
         return $ret;
     }

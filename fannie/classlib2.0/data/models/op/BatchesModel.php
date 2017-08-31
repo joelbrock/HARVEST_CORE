@@ -40,26 +40,14 @@ class BatchesModel extends BasicModel
     'priority' => array('type'=>'INT'),
     'owner' => array('type'=>'VARCHAR(50)'),
     'transLimit' => array('type'=>'TINYINT', 'default'=>0),
+    'notes' => array('type'=>'TEXT'),
     );
 
     public function doc()
     {
         return '
-Table: batches
-
-Columns:
-    batchID int
-    startDate datetime
-    endDate datetime
-    batchName varchar
-    batchType int
-    discountType int
-    priority int
-    owner varchar
-    transLimit int
-
 Depends on:
-    batchType
+* batchType
 
 Use:
 This table contains basic information
@@ -85,7 +73,7 @@ those same items revert to normal pricing.
     {
         $batchInfoQ = $this->connection->prepare("SELECT batchType,discountType FROM batches WHERE batchID = ?");
         $batchInfoR = $this->connection->execute($batchInfoQ,array($id));
-        $batchInfoW = $this->connection->fetch_array($batchInfoR);
+        $batchInfoW = $this->connection->fetchRow($batchInfoR);
 
         $forceQ = "";
         $forceLCQ = "";
@@ -93,14 +81,16 @@ those same items revert to normal pricing.
         $b_def = $this->connection->tableDefinition($this->name);
         $p_def = $this->connection->tableDefinition('products');
         $has_limit = (isset($b_def['transLimit']) && isset($p_def['special_limit'])) ? true : false;
+        $isHQ = FannieConfig::config('STORE_MODE') == 'HQ' ? true : false;
         if ($batchInfoW['discountType'] != 0) { // item is going on sale
             $forceQ="
                 UPDATE products AS p
                     INNER JOIN batchList AS l ON p.upc=l.upc
                     INNER JOIN batches AS b ON l.batchID=b.batchID
-                SET p.start_date = b.startDate, 
+                    " . ($isHQ ? ' INNER JOIN StoreBatchMap AS m ON b.batchID=m.batchID and p.store_id=m.storeID ' : '') . "
+                SET p.start_date = b.startDate,
                     p.end_date=b.endDate,
-                    p.special_price=l.salePrice,
+                    p.special_price=CASE WHEN l.pricemethod=2 THEN p.normal_price ELSE l.salePrice END,
                     p.specialgroupprice=CASE WHEN l.salePrice < 0 THEN -1*l.salePrice ELSE l.salePrice END,
                     p.specialpricemethod=l.pricemethod,
                     p.specialquantity=l.quantity,
@@ -121,9 +111,10 @@ those same items revert to normal pricing.
                     INNER JOIN upcLike AS v ON v.upc=p.upc
                     INNER JOIN batchList as l ON l.upc=concat('LC',convert(v.likecode,char))
                     INNER JOIN batches AS b ON b.batchID=l.batchID
-                SET p.special_price = l.salePrice,
-                    p.end_date = b.endDate,
-                    p.start_date=b.startDate,
+                    " . ($isHQ ? ' INNER JOIN StoreBatchMap AS m ON b.batchID=m.batchID and p.store_id=m.storeID ' : '') . "
+                SET p.start_date = b.startDate,
+                    p.end_date=b.endDate,
+                    p.special_price=CASE WHEN l.pricemethod=2 THEN p.normal_price ELSE l.salePrice END,
                     p.specialgroupprice=CASE WHEN l.salePrice < 0 THEN -1*l.salePrice ELSE l.salePrice END,
                     p.specialpricemethod=l.pricemethod,
                     p.specialquantity=l.quantity,
@@ -139,7 +130,7 @@ those same items revert to normal pricing.
                 WHERE l.upc LIKE 'LC%'
                     AND l.batchID = ?";
 
-            if ($this->connection->dbms_name() == 'mssql') {
+            if ($this->connection->dbmsName() == 'mssql') {
                 $forceQ="UPDATE products
                     SET start_date = b.startDate, 
                     end_date=b.endDate,
@@ -187,7 +178,8 @@ those same items revert to normal pricing.
         } else { // normal price is changing
             $forceQ = "
                 UPDATE products AS p
-                      INNER JOIN batchList AS l ON l.upc=p.upc
+                    INNER JOIN batchList AS l ON l.upc=p.upc
+                    " . ($isHQ ? ' INNER JOIN StoreBatchMap AS m ON l.batchID=m.batchID and p.store_id=m.storeID ' : '') . "
                 SET p.normal_price = l.salePrice,
                     p.modified = now()
                 WHERE l.upc not like 'LC%'
@@ -205,12 +197,13 @@ those same items revert to normal pricing.
                 UPDATE products AS p
                     INNER JOIN upcLike AS v ON v.upc=p.upc 
                     INNER JOIN batchList as b on b.upc=concat('LC',convert(v.likecode,char))
+                    " . ($isHQ ? ' INNER JOIN StoreBatchMap AS m ON b.batchID=m.batchID and p.store_id=m.storeID ' : '') . "
                 SET p.normal_price = b.salePrice,
                     p.modified=now()
-                WHERE l.upc LIKE 'LC%'
-                    AND l.batchID = ?";
+                WHERE b.upc LIKE 'LC%'
+                    AND b.batchID = ?";
 
-            if ($this->connection->dbms_name() == 'mssql') {
+            if ($this->connection->dbmsName() == 'mssql') {
                 $forceQ = "UPDATE products
                       SET normal_price = l.salePrice,
                       modified = getdate()
@@ -266,6 +259,26 @@ those same items revert to normal pricing.
         $p_def = $this->connection->tableDefinition('products');
         $has_limit = (isset($b_def['transLimit']) && isset($p_def['special_limit'])) ? true : false;
 
+        $batchP = $this->connection->prepare('
+            SELECT b.discountType,
+                CASE WHEN ' . $this->connection->curdate() . ' BETWEEN b.startDate AND b.endDate
+                THEN 1 ELSE 0 END AS current
+            FROM batches AS b
+            WHERE batchID=?');
+        $self = $this->connection->getRow($batchP, array($id));
+        if ($self == false) {
+            // cannot find batch. do not change products
+            return false;
+        }
+        if ($self['discountType'] == 0) {
+            // price change batch. nothing to stop.
+            return true;
+        }
+        if ($self['current'] == 0) {
+            // batch is not currently running. nothing to stop.
+            return true;
+        }
+
         // unsale regular items
         $unsaleQ = "
             UPDATE products AS p 
@@ -280,7 +293,7 @@ those same items revert to normal pricing.
                 end_date='1900-01-01'
             WHERE b.upc NOT LIKE '%LC%'
                 AND b.batchID=?";
-        if ($this->connection->dbms_name() == "mssql") {
+        if ($this->connection->dbmsName() == "mssql") {
             $unsaleQ = "UPDATE products SET special_price=0,
                 specialpricemethod=0,specialquantity=0,
                 specialgroupprice=0,discounttype=0,
@@ -307,7 +320,7 @@ those same items revert to normal pricing.
                 end_date='1900-01-01'
             WHERE l.upc LIKE '%LC%'
                 AND l.batchID=?";
-        if ($this->connection->dbms_name() == "mssql") {
+        if ($this->connection->dbmsName() == "mssql") {
             $unsaleLCQ = "UPDATE products
                 SET special_price=0,
                 specialpricemethod=0,specialquantity=0,
@@ -356,7 +369,8 @@ those same items revert to normal pricing.
                 p.end_date
             FROM products AS p
                 INNER JOIN batchList AS b ON p.upc=b.upc
-            WHERE b.batchID=?');
+            WHERE b.batchID=?
+                AND p.store_id=?');
         $lcColumnsP = $this->connection->prepare('
             SELECT p.upc,
                 p.normal_price,
@@ -374,20 +388,24 @@ those same items revert to normal pricing.
                 INNER JOIN upcLike AS u ON p.upc=u.upc
                 INNER JOIN batchList AS b 
                     ON b.upc = ' . $this->connection->concat("'LC'", $this->connection->convert('u.likeCode', 'CHAR'), '') . '
-            WHERE b.batchID=?');
+            WHERE b.batchID=?
+                AND p.store_id=?');
 
         /**
           Get changed columns for each product record
         */
         $upcs = array();
-        $columnsR = $this->connection->execute($columnsP, array($id));
+        $columnsR = $this->connection->execute($columnsP, array($id, FannieConfig::config('STORE_ID')));
         while ($w = $this->connection->fetch_row($columnsR)) {
             $upcs[$w['upc']] = $w;
         }
-        $columnsR = $this->connection->execute($lcColumnsP, array($id));
+        $columnsR = $this->connection->execute($lcColumnsP, array($id, FannieConfig::config('STORE_ID')));
         while ($w = $this->connection->fetch_row($columnsR)) {
             $upcs[$w['upc']] = $w;
         }
+
+        $update = new ProdUpdateModel($this->connection);
+        $update->logManyUpdates(array_keys($upcs), $updateType);
 
         $updateQ = '
             UPDATE products AS p SET
@@ -441,8 +459,17 @@ those same items revert to normal pricing.
             }
         }
 
-        $update = new ProdUpdateModel($this->connection);
-        $update->logManyUpdates(array_keys($upcs), $updateType);
+        if (FannieConfig::config('STORE_MODE') === 'HQ' && class_exists('\\Datto\\JsonRpc\\Http\\Client')) {
+            $prep = $this->connection->prepare('
+                SELECT webServiceUrl FROM Stores WHERE hasOwnItems=1 AND storeID<>?
+                ');
+            $res = $this->connection->execute($prep, array(\FannieConfig::config('STORE_ID')));
+            while ($row = $this->connection->fetchRow($res)) {
+                $client = new \Datto\JsonRpc\Http\Client($row['webServiceUrl']);
+                $client->query(time(), 'COREPOS\\Fannie\\API\\webservices\\FannieItemLaneSync', array('upc'=>array_keys($upcs), 'fast'=>true));
+                $client->send();
+            }
+        }
     }
 
     /**
@@ -511,341 +538,5 @@ those same items revert to normal pricing.
             }
         }
     }
-
-    /* START ACCESSOR FUNCTIONS */
-
-    public function batchID()
-    {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["batchID"])) {
-                return $this->instance["batchID"];
-            } else if (isset($this->columns["batchID"]["default"])) {
-                return $this->columns["batchID"]["default"];
-            } else {
-                return null;
-            }
-        } else if (func_num_args() > 1) {
-            $value = func_get_arg(0);
-            $op = $this->validateOp(func_get_arg(1));
-            if ($op === false) {
-                throw new Exception('Invalid operator: ' . func_get_arg(1));
-            }
-            $filter = array(
-                'left' => 'batchID',
-                'right' => $value,
-                'op' => $op,
-                'rightIsLiteral' => false,
-            );
-            if (func_num_args() > 2 && func_get_arg(2) === true) {
-                $filter['rightIsLiteral'] = true;
-            }
-            $this->filters[] = $filter;
-        } else {
-            if (!isset($this->instance["batchID"]) || $this->instance["batchID"] != func_get_args(0)) {
-                if (!isset($this->columns["batchID"]["ignore_updates"]) || $this->columns["batchID"]["ignore_updates"] == false) {
-                    $this->record_changed = true;
-                }
-            }
-            $this->instance["batchID"] = func_get_arg(0);
-        }
-        return $this;
-    }
-
-    public function startDate()
-    {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["startDate"])) {
-                return $this->instance["startDate"];
-            } else if (isset($this->columns["startDate"]["default"])) {
-                return $this->columns["startDate"]["default"];
-            } else {
-                return null;
-            }
-        } else if (func_num_args() > 1) {
-            $value = func_get_arg(0);
-            $op = $this->validateOp(func_get_arg(1));
-            if ($op === false) {
-                throw new Exception('Invalid operator: ' . func_get_arg(1));
-            }
-            $filter = array(
-                'left' => 'startDate',
-                'right' => $value,
-                'op' => $op,
-                'rightIsLiteral' => false,
-            );
-            if (func_num_args() > 2 && func_get_arg(2) === true) {
-                $filter['rightIsLiteral'] = true;
-            }
-            $this->filters[] = $filter;
-        } else {
-            if (!isset($this->instance["startDate"]) || $this->instance["startDate"] != func_get_args(0)) {
-                if (!isset($this->columns["startDate"]["ignore_updates"]) || $this->columns["startDate"]["ignore_updates"] == false) {
-                    $this->record_changed = true;
-                }
-            }
-            $this->instance["startDate"] = func_get_arg(0);
-        }
-        return $this;
-    }
-
-    public function endDate()
-    {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["endDate"])) {
-                return $this->instance["endDate"];
-            } else if (isset($this->columns["endDate"]["default"])) {
-                return $this->columns["endDate"]["default"];
-            } else {
-                return null;
-            }
-        } else if (func_num_args() > 1) {
-            $value = func_get_arg(0);
-            $op = $this->validateOp(func_get_arg(1));
-            if ($op === false) {
-                throw new Exception('Invalid operator: ' . func_get_arg(1));
-            }
-            $filter = array(
-                'left' => 'endDate',
-                'right' => $value,
-                'op' => $op,
-                'rightIsLiteral' => false,
-            );
-            if (func_num_args() > 2 && func_get_arg(2) === true) {
-                $filter['rightIsLiteral'] = true;
-            }
-            $this->filters[] = $filter;
-        } else {
-            if (!isset($this->instance["endDate"]) || $this->instance["endDate"] != func_get_args(0)) {
-                if (!isset($this->columns["endDate"]["ignore_updates"]) || $this->columns["endDate"]["ignore_updates"] == false) {
-                    $this->record_changed = true;
-                }
-            }
-            $this->instance["endDate"] = func_get_arg(0);
-        }
-        return $this;
-    }
-
-    public function batchName()
-    {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["batchName"])) {
-                return $this->instance["batchName"];
-            } else if (isset($this->columns["batchName"]["default"])) {
-                return $this->columns["batchName"]["default"];
-            } else {
-                return null;
-            }
-        } else if (func_num_args() > 1) {
-            $value = func_get_arg(0);
-            $op = $this->validateOp(func_get_arg(1));
-            if ($op === false) {
-                throw new Exception('Invalid operator: ' . func_get_arg(1));
-            }
-            $filter = array(
-                'left' => 'batchName',
-                'right' => $value,
-                'op' => $op,
-                'rightIsLiteral' => false,
-            );
-            if (func_num_args() > 2 && func_get_arg(2) === true) {
-                $filter['rightIsLiteral'] = true;
-            }
-            $this->filters[] = $filter;
-        } else {
-            if (!isset($this->instance["batchName"]) || $this->instance["batchName"] != func_get_args(0)) {
-                if (!isset($this->columns["batchName"]["ignore_updates"]) || $this->columns["batchName"]["ignore_updates"] == false) {
-                    $this->record_changed = true;
-                }
-            }
-            $this->instance["batchName"] = func_get_arg(0);
-        }
-        return $this;
-    }
-
-    public function batchType()
-    {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["batchType"])) {
-                return $this->instance["batchType"];
-            } else if (isset($this->columns["batchType"]["default"])) {
-                return $this->columns["batchType"]["default"];
-            } else {
-                return null;
-            }
-        } else if (func_num_args() > 1) {
-            $value = func_get_arg(0);
-            $op = $this->validateOp(func_get_arg(1));
-            if ($op === false) {
-                throw new Exception('Invalid operator: ' . func_get_arg(1));
-            }
-            $filter = array(
-                'left' => 'batchType',
-                'right' => $value,
-                'op' => $op,
-                'rightIsLiteral' => false,
-            );
-            if (func_num_args() > 2 && func_get_arg(2) === true) {
-                $filter['rightIsLiteral'] = true;
-            }
-            $this->filters[] = $filter;
-        } else {
-            if (!isset($this->instance["batchType"]) || $this->instance["batchType"] != func_get_args(0)) {
-                if (!isset($this->columns["batchType"]["ignore_updates"]) || $this->columns["batchType"]["ignore_updates"] == false) {
-                    $this->record_changed = true;
-                }
-            }
-            $this->instance["batchType"] = func_get_arg(0);
-        }
-        return $this;
-    }
-
-    public function discountType()
-    {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["discountType"])) {
-                return $this->instance["discountType"];
-            } else if (isset($this->columns["discountType"]["default"])) {
-                return $this->columns["discountType"]["default"];
-            } else {
-                return null;
-            }
-        } else if (func_num_args() > 1) {
-            $value = func_get_arg(0);
-            $op = $this->validateOp(func_get_arg(1));
-            if ($op === false) {
-                throw new Exception('Invalid operator: ' . func_get_arg(1));
-            }
-            $filter = array(
-                'left' => 'discountType',
-                'right' => $value,
-                'op' => $op,
-                'rightIsLiteral' => false,
-            );
-            if (func_num_args() > 2 && func_get_arg(2) === true) {
-                $filter['rightIsLiteral'] = true;
-            }
-            $this->filters[] = $filter;
-        } else {
-            if (!isset($this->instance["discountType"]) || $this->instance["discountType"] != func_get_args(0)) {
-                if (!isset($this->columns["discountType"]["ignore_updates"]) || $this->columns["discountType"]["ignore_updates"] == false) {
-                    $this->record_changed = true;
-                }
-            }
-            $this->instance["discountType"] = func_get_arg(0);
-        }
-        return $this;
-    }
-
-    public function priority()
-    {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["priority"])) {
-                return $this->instance["priority"];
-            } else if (isset($this->columns["priority"]["default"])) {
-                return $this->columns["priority"]["default"];
-            } else {
-                return null;
-            }
-        } else if (func_num_args() > 1) {
-            $value = func_get_arg(0);
-            $op = $this->validateOp(func_get_arg(1));
-            if ($op === false) {
-                throw new Exception('Invalid operator: ' . func_get_arg(1));
-            }
-            $filter = array(
-                'left' => 'priority',
-                'right' => $value,
-                'op' => $op,
-                'rightIsLiteral' => false,
-            );
-            if (func_num_args() > 2 && func_get_arg(2) === true) {
-                $filter['rightIsLiteral'] = true;
-            }
-            $this->filters[] = $filter;
-        } else {
-            if (!isset($this->instance["priority"]) || $this->instance["priority"] != func_get_args(0)) {
-                if (!isset($this->columns["priority"]["ignore_updates"]) || $this->columns["priority"]["ignore_updates"] == false) {
-                    $this->record_changed = true;
-                }
-            }
-            $this->instance["priority"] = func_get_arg(0);
-        }
-        return $this;
-    }
-
-    public function owner()
-    {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["owner"])) {
-                return $this->instance["owner"];
-            } else if (isset($this->columns["owner"]["default"])) {
-                return $this->columns["owner"]["default"];
-            } else {
-                return null;
-            }
-        } else if (func_num_args() > 1) {
-            $value = func_get_arg(0);
-            $op = $this->validateOp(func_get_arg(1));
-            if ($op === false) {
-                throw new Exception('Invalid operator: ' . func_get_arg(1));
-            }
-            $filter = array(
-                'left' => 'owner',
-                'right' => $value,
-                'op' => $op,
-                'rightIsLiteral' => false,
-            );
-            if (func_num_args() > 2 && func_get_arg(2) === true) {
-                $filter['rightIsLiteral'] = true;
-            }
-            $this->filters[] = $filter;
-        } else {
-            if (!isset($this->instance["owner"]) || $this->instance["owner"] != func_get_args(0)) {
-                if (!isset($this->columns["owner"]["ignore_updates"]) || $this->columns["owner"]["ignore_updates"] == false) {
-                    $this->record_changed = true;
-                }
-            }
-            $this->instance["owner"] = func_get_arg(0);
-        }
-        return $this;
-    }
-
-    public function transLimit()
-    {
-        if(func_num_args() == 0) {
-            if(isset($this->instance["transLimit"])) {
-                return $this->instance["transLimit"];
-            } else if (isset($this->columns["transLimit"]["default"])) {
-                return $this->columns["transLimit"]["default"];
-            } else {
-                return null;
-            }
-        } else if (func_num_args() > 1) {
-            $value = func_get_arg(0);
-            $op = $this->validateOp(func_get_arg(1));
-            if ($op === false) {
-                throw new Exception('Invalid operator: ' . func_get_arg(1));
-            }
-            $filter = array(
-                'left' => 'transLimit',
-                'right' => $value,
-                'op' => $op,
-                'rightIsLiteral' => false,
-            );
-            if (func_num_args() > 2 && func_get_arg(2) === true) {
-                $filter['rightIsLiteral'] = true;
-            }
-            $this->filters[] = $filter;
-        } else {
-            if (!isset($this->instance["transLimit"]) || $this->instance["transLimit"] != func_get_args(0)) {
-                if (!isset($this->columns["transLimit"]["ignore_updates"]) || $this->columns["transLimit"]["ignore_updates"] == false) {
-                    $this->record_changed = true;
-                }
-            }
-            $this->instance["transLimit"] = func_get_arg(0);
-        }
-        return $this;
-    }
-    /* END ACCESSOR FUNCTIONS */
 }
 

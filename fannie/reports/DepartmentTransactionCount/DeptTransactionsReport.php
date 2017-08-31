@@ -42,13 +42,14 @@ class DeptTransactionsReport extends FannieReportPage
 
     public function fetch_report_data()
     {
-        global $FANNIE_OP_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
 
-        $date1 = FormLib::get('date1', date('Y-m-d'));
-        $date2 = FormLib::get('date2', date('Y-m-d'));
+        $date1 = $this->form->date1;
+        $date2 = $this->form->date2;
         $deptStart = FormLib::get('deptStart');
         $deptEnd = FormLib::get('deptEnd');
+        $deptMulti = FormLib::get('departments', array());
     
         $buyer = FormLib::get('buyer', '');
 
@@ -65,32 +66,38 @@ class DeptTransactionsReport extends FannieReportPage
         $querySelected = "SELECT YEAR(tdate) AS year, MONTH(tdate) AS month, DAY(tdate) AS day,
             COUNT(DISTINCT trans_num) as trans_count
             FROM $dlog AS d ";
-        if ($buyer !== '') {
+        if ($buyer !== '' && $buyer > -1) {
             $querySelected .= " LEFT JOIN superdepts AS s ON d.department=s.dept_ID ";
+        } elseif ($buyer !== '' && $buyer == -2) {
+            $query .= 'LEFT JOIN MasterSuperDepts AS s ON d.department=s.dept_ID ';
         }
         $querySelected .= " WHERE tdate BETWEEN ? AND ? ";
         $argsSel = $argsAll;
         if ($buyer !== '') {
-            $querySelected .= " AND s.superID=? ";
-            $argsSel[] = $buyer;
-        } else {
-            $querySelected .= " AND department BETWEEN ? AND ?";
-            $argsSel[] = $deptStart;
-            $argsSel[] = $deptEnd;
+            if ($buyer == -2) {
+                $querySelected .= ' AND s.superID != 0 ';
+            } elseif ($buyer != -1) {
+                $querySelected .= ' AND s.superID=? ';
+                $argsSel[] = $buyer;
+            }
+        }
+        if ($buyer != -1) {
+            list($conditional, $argsSel) = DTrans::departmentClause($deptStart, $deptEnd, $deptMulti, $argsSel);
+            $querySelected .= $conditional;
         }
         $querySelected .= " GROUP BY YEAR(tdate), MONTH(tdate), DAY(tdate)";
 
         $dataset = array();
 
-        $prep = $dbc->prepare_statement($queryAll);
-        $result = $dbc->exec_statement($prep,$argsAll);
+        $prep = $dbc->prepare($queryAll);
+        $result = $dbc->execute($prep,$argsAll);
         while($row = $dbc->fetch_row($result)) {
             $datestr = sprintf("%d/%d/%d",$row['month'],$row['day'],$row['year']);
             $dataset[$datestr] = array('ttl'=>$row['trans_count'],'sub'=>0);
         }
 
-        $prep = $dbc->prepare_statement($querySelected);
-        $result = $dbc->exec_statement($prep,$argsSel);
+        $prep = $dbc->prepare($querySelected);
+        $result = $dbc->execute($prep,$argsSel);
         while($row = $dbc->fetch_row($result)) {
             $datestr = sprintf("%d/%d/%d",$row['month'],$row['day'],$row['year']);
             if (isset($dataset[$datestr])) {
@@ -110,18 +117,7 @@ class DeptTransactionsReport extends FannieReportPage
 
     public function form_content()
     {
-        global $FANNIE_OP_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
-
-        $depts = new DepartmentsModel($dbc);
-        $d_list = $depts->find('dept_no');
-        $supers = new SuperDeptNamesModel($dbc);
-        $supers->superID(0, '>');
-        $s_list = $supers->find('superID');
-
-        $form = FormLib::dateAndDepartmentForm($d_list, $s_list);
-
-        return $form;
+        return FormLib::dateAndDepartmentForm();
     }
 
     public function helpContent()
@@ -135,4 +131,3 @@ class DeptTransactionsReport extends FannieReportPage
 
 FannieDispatch::conditionalExec();
 
-?>

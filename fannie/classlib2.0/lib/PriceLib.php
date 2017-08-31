@@ -21,7 +21,7 @@
 
 *********************************************************************************/
 
-namespace COREPOS\Fannie\API\lib {
+namespace COREPOS\Fannie\API\lib;
 
 /**
   @class PriceLib
@@ -63,6 +63,9 @@ class PriceLib
         }
         $num = (float)$num;
         $num = $num*$mult;
+        if ($num == 0) {
+            return '';
+        }
 
         switch($unit) {
             case '#':
@@ -128,11 +131,5 @@ class PriceLib
 
         return "";
     }
-}
-
-}
-
-namespace {
-    class PriceLib extends \COREPOS\Fannie\API\lib\PriceLib {}
 }
 

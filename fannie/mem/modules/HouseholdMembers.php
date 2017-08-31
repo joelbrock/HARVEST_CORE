@@ -30,22 +30,17 @@ class HouseholdMembers extends \COREPOS\Fannie\API\member\MemberModule {
 
     function showEditForm($memNum, $country="US")
     {
-        global $FANNIE_URL;
-
-        $dbc = $this->db();
-        
-        $infoQ = $dbc->prepare_statement("SELECT c.FirstName,c.LastName
-                FROM custdata AS c 
-                WHERE c.CardNo=? AND c.personNum > 1
-                ORDER BY c.personNum");
-        $infoR = $dbc->exec_statement($infoQ,array($memNum));
+        $account = self::getAccount();
 
         $ret = "<div class=\"panel panel-default\">
             <div class=\"panel-heading\">Household Members</div>
             <div class=\"panel-body\">";
         
         $count = 0; 
-        while($infoW = $dbc->fetch_row($infoR)){
+        foreach ($account['customers'] as $infoW) {
+            if ($infoW['accountHolder']) {
+                continue;
+            }
             $ret .= sprintf('
                 <div class="form-inline form-group">
                 <span class="label primaryBackground">Name</span>
@@ -53,8 +48,9 @@ class HouseholdMembers extends \COREPOS\Fannie\API\member\MemberModule {
                     maxlength="30" value="%s" class="form-control" />
                 <input name="HouseholdMembers_ln[]" placeholder="Last"
                     maxlength="30" value="%s" class="form-control" />
+                <input name="HouseholdMembers_ID[]" type="hidden" value="%d" />
                 </div>',
-                $infoW['FirstName'],$infoW['LastName']);
+                $infoW['firstName'],$infoW['lastName'],$infoW['customerID']);
             $count++;
         }
 
@@ -66,6 +62,7 @@ class HouseholdMembers extends \COREPOS\Fannie\API\member\MemberModule {
                     maxlength="30" value="" class="form-control" />
                 <input name="HouseholdMembers_ln[]" placeholder="Last"
                     maxlength="30" value="" class="form-control" />
+                <input name="HouseholdMembers_ID[]" type="hidden" value="0" />
                 </div>');
             $count++;
         }
@@ -76,57 +73,48 @@ class HouseholdMembers extends \COREPOS\Fannie\API\member\MemberModule {
         return $ret;
     }
 
-    function saveFormData($memNum)
+    public function saveFormData($memNum, $json=array())
     {
-        $dbc = $this->db();
-        if (!class_exists("CustdataModel")) {
-            include(dirname(__FILE__) . '/../../classlib2.0/data/models/CustdataModel.php');
+        $primary = array('discount'=>0, 'staff'=>0, 'lowIncomeBenefits'=>0, 'chargeAllowed'=>0, 'checksAllowed'=>0);
+        foreach ($json['customers'] as $c) {
+            if ($c['accountHolder']) {
+                $primary = $c;
+                break;
+            }
         }
 
-        /**
-          Use primary member for default column values
-        */
-        $custdata = new CustdataModel($dbc);
-        $custdata->CardNo($memNum);
-        $custdata->personNum(1);
-        if (!$custdata->load()) {
-            return "Error: Problem saving household members<br />"; 
-        }
-
-        $fns = FormLib::get_form_value('HouseholdMembers_fn',array());
-        $lns = FormLib::get_form_value('HouseholdMembers_ln',array());
-        $pn = 2;
-        $errors = false;
+        $fns = FormLib::get('HouseholdMembers_fn',array());
+        $lns = FormLib::get('HouseholdMembers_ln',array());
+        $ids = FormLib::get('HouseholdMembers_ID', array());
         for ($i=0; $i<count($lns); $i++) {
-            if (empty($fns[$i]) && empty($lns[$i])) {
-                continue;
+            if ($ids[$i] == 0) { // add new name
+                $json['customers'][] = array(
+                    'customerID' => $ids[$i],
+                    'firstName' => $fns[$i],
+                    'lastName' => $lns[$i],
+                    'accountHolder' => 0,
+                    'discount' => $primary['discount'],
+                    'staff' => $primary['staff'],
+                    'lowIncomeBenefits' => $primary['lowIncomeBenefits'],
+                    'chargeAllowed' => $primary['chargeAllowed'],
+                    'checksAllowed' => $primary['checksAllowed'],
+                );
+            } else { // update or remove existing name
+                for ($j=0; $j<count($json['customers']); $j++) {
+                    if ($json['customers'][$j]['customerID'] == $ids[$i]) {
+                        if ($fns[$i] == '' && $lns[$i] == '') {
+                            unset($json['customers'][$j]);
+                        } else {
+                            $json['customers'][$j]['firstName'] = $fns[$i];
+                            $json['customers'][$j]['lastName'] = $lns[$i];
+                            $json['customers'][$j]['accountHolder'] = 0;
+                        }
+                    }
+                }
             }
-
-            $custdata->personNum($pn);
-            $custdata->FirstName($fns[$i]);
-            $custdata->LastName($lns[$i]);
-            if (!$custdata->save()) {
-                $errors = true;
-            }
-
-            $pn++;
         }
 
-        /**
-          Remove any names outside the set that just saved
-        */
-        $clearP = $dbc->prepare('
-            DELETE FROM custdata
-            WHERE CardNo=?
-                AND personNum >= ?');
-        $clearR = $dbc->execute($clearP, array($memNum, $pn));
-
-        if ($errors) {
-            return "Error: Problem saving household members<br />"; 
-        }
-
-        return '';
+        return $json;
     }
 }
 
-?>

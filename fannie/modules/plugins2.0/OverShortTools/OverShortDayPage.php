@@ -57,15 +57,17 @@ class OverShortDayPage extends FanniePage
             $user = FormLib::get_form_value('user');
             $resolved = FormLib::get_form_value('resolved');
             $notes = FormLib::get_form_value('notes');
+            $store = FormLib::get('store');
     
             $model = new OverShortsLogModel($dbc);
             $model->date($date);
             $model->username($user);
             $model->resolved($resolved);
+            $model->storeID($store);
             $model->save();
             
-            $this->save($date,$data);
-            $this->saveNotes($date,$notes);
+            $this->save($date,$store,$data);
+            $this->saveNotes($date,$store,$notes);
             echo "saved";
             break;
 
@@ -74,12 +76,20 @@ class OverShortDayPage extends FanniePage
             if (empty($date)) {
                 $date = date('Y-m-d');
             }
-            $store = FormLib::get('store', 0);
+            $store = FormLib::get('store', 1);
             $dlog = DTransactionsModel::selectDlog($date);
-            $args = array($date . ' 00:00:00', $date . ' 23:59:59');
-            if ($store != 0) {
-                $args[] = $store;
-            }
+            $args = array($date . ' 00:00:00', $date . ' 23:59:59', $store);
+
+            /**
+              Mode toggles how totals are calculated. Cashier mode lists totals for
+              each cashier. Drawer mode lists a total for each register. Some of the code that
+              follows (and underlying database) uses "emp_no" when it really means "whichever 
+              identifier we're grouping by".
+            */
+            $mode = FormLib::get('mode', 'cashier');
+            $name_field = $mode == 'cashier' ? 'e.firstname' : $dbc->concat("'Register '", 'd.register_no', '');
+            $id_field = $mode == 'cashier' ? 'd.emp_no' : 'd.register_no';
+            $id_field_name = $mode == 'cashier' ? 'emp_no' : 'register_no';
             
             $empsR = null;
             if (FormLib::get_form_value('emp_no') !== ''){
@@ -87,24 +97,30 @@ class OverShortDayPage extends FanniePage
                 $empsQ = "SELECT e.firstname, e.emp_no FROM "
                     .$FANNIE_OP_DB.$dbc->sep()."employees AS e
                     WHERE emp_no=?";
-                $empsP = $dbc->prepare_statement($empsQ);
-                $empsR = $dbc->exec_statement($empsP,array(FormLib::get_form_value('emp_no')));
-            }
-            else {
+                $empsP = $dbc->prepare($empsQ);
+                $empsR = $dbc->execute($empsP,array(FormLib::get_form_value('emp_no')));
+            } else {
                 /* determine who worked that day (and their first names) */
-                $empsQ = "select e.firstname,d.emp_no from $dlog as d,$FANNIE_OP_DB".$dbc->sep()."employees as e 
+                $empsQ = "
+                    SELECT $name_field,
+                        $id_field 
+                    FROM $dlog AS d
+                        LEFT JOIN $FANNIE_OP_DB".$dbc->sep()."employees AS e ON d.emp_no=e.emp_no
                     WHERE d.tdate BETWEEN ? AND ? 
                         AND trans_type='T' 
-                        AND d.emp_no = e.emp_no
-                        AND d.upc NOT IN ('0049999900001', '0049999900002')";
-                if ($store != 0) {
-                    $empsQ .= ' AND d.store_id = ? ';
+                        AND d.store_id = ? ";
+                if ($this->config->get('COOP_ID') == 'WFC_Duluth') {
+                    $empsQ .= " AND d.upc NOT IN ('0049999900001', '0049999900002') ";
                 }
-                $empsQ .= " GROUP BY d.emp_no,e.firstname order by e.firstname";
-                $empsP = $dbc->prepare_statement($empsQ);
-                $empsR=$dbc->exec_statement($empsP,$args);
+                $empsQ .= " 
+                    GROUP BY $id_field,
+                        $name_field 
+                    ORDER BY $name_field";
+                $empsP = $dbc->prepare($empsQ);
+                $empsR=$dbc->execute($empsP,$args);
             }
             $output = "<h3 id=currentdate>$date</h3>";
+            $output .= '<input type="hidden" id="currentstore" value="' . $store . '" />';
 
             $output .= "<form onsubmit=\"save(); return false;\">";
             $output .= "<table class=\"table table-striped\"><tr>";
@@ -113,15 +129,15 @@ class OverShortDayPage extends FanniePage
             $tQ = "SELECT d.trans_subtype,t.TenderName FROM $dlog as d, "
                 .$FANNIE_OP_DB.$dbc->sep()."tenders AS t 
                 WHERE d.tdate BETWEEN ? AND ? AND trans_type='T'
-                    AND d.trans_subtype = t.TenderCode
-                    AND d.upc NOT IN ('0049999900001', '0049999900002')";
-            if ($store != 0) {
-                $tQ .= ' AND d.store_id = ? ';
+                    AND d.trans_subtype = t.TenderCode 
+                    AND d.store_id=? ";
+            if ($this->config->get('COOP_ID') == 'WFC_Duluth') {
+                $tQ .= " AND d.upc NOT IN ('0049999900001', '0049999900002') ";
             }
             $tQ .= " GROUP BY d.trans_subtype, t.TenderName, t.tenderID
                 ORDER BY t.TenderID";
-            $tP = $dbc->prepare_statement($tQ);
-            $tR=$dbc->exec_statement($tP,$args);
+            $tP = $dbc->prepare($tQ);
+            $tR=$dbc->execute($tP,$args);
 
             $tender_info = array();
             while($tW = $dbc->fetch_row($tR)){
@@ -139,6 +155,15 @@ class OverShortDayPage extends FanniePage
                 );
                 $tender_info[$tW['trans_subtype']] = $record;
             }
+            if ($this->config->get('COOP_ID') == 'WFC_Duluth' && !isset($tender_info['CK'])) {
+                $tender_info['CK'] = array(
+                    'name' => 'Check',
+                    'posTtl' => 0.0,
+                    'countTtl' => 0.0,
+                    'osTtl' => 0.0,
+                    'perEmp' => array(),
+                );
+            }
     
             $overallTotal = 0;
             $overallCountTotal = 0;
@@ -146,52 +171,52 @@ class OverShortDayPage extends FanniePage
 
             /* get cash, check, and credit totals for each employee
             print them in a table along with input boxes for over/short */
-            $q = "SELECT -1*sum(total) AS total,emp_no,
+            $q = "SELECT -1*sum(total) AS total,$id_field,
                 CASE WHEN trans_subtype IN ('CC','AX') THEN 'CC' ELSE trans_subtype END
                 AS trans_subtype
                 FROM $dlog AS d
                 WHERE tdate BETWEEN ? AND ? 
-                AND d.upc NOT IN ('0049999900001', '0049999900002')
-                AND trans_type='T' ";
-            if ($store != 0) {
-                $q .= ' AND d.store_id = ? ';
+                AND trans_type='T' 
+                AND d.store_id=? ";
+            if ($this->config->get('COOP_ID') == 'WFC_Duluth') {
+                $q .= " AND d.upc NOT IN ('0049999900001', '0049999900002') ";
             }
             if (FormLib::get_form_value('emp_no') !== ''){
-                $q .= ' AND emp_no=? ';
+                $q .= ' AND ' . $id_field . '=? ';
                 $args[] = FormLib::get_form_value('emp_no');
             }
-            $q .= "GROUP BY emp_no,
+            $q .= "GROUP BY $id_field,
                 CASE WHEN trans_subtype IN ('CC','AX') THEN 'CC' ELSE trans_subtype END";
-            $p = $dbc->prepare_statement($q);
-            $r = $dbc->exec_statement($p, $args);
+            $p = $dbc->prepare($q);
+            $r = $dbc->execute($p, $args);
             $posttl = array();
             while($w = $dbc->fetch_row($r)){
                 if (in_array($w['trans_subtype'], OverShortTools::$EXCLUDE_TENDERS)) {
                     continue;
                 }
-                $tender_info[$w['trans_subtype']]['perEmp'][$w['emp_no']] = $w['total'];
+                $tender_info[$w['trans_subtype']]['perEmp'][$w[1]] = $w['total'];
             }
 
-            $noteP = $dbc->prepare_statement('SELECT note FROM dailyNotes WHERE emp_no=? AND date=?');
-            $scaP = $dbc->prepare_statement('SELECT amt FROM dailyCounts WHERE date=? AND emp_no=?
+            $noteP = $dbc->prepare('SELECT note FROM dailyNotes WHERE emp_no=? AND date=? AND storeID=?');
+            $scaP = $dbc->prepare('SELECT amt FROM dailyCounts WHERE date=? AND emp_no=? AND storeID=?
                             AND tender_type=\'SCA\'');
-            $countP = $dbc->prepare_statement("select amt from dailyCounts where date=? and emp_no=? and tender_type=?");
+            $countP = $dbc->prepare("select amt from dailyCounts where date=? and emp_no=? and tender_type=? AND storeID=?");
 
-            while ($row = $dbc->fetch_array($empsR)){
+            while ($row = $dbc->fetchRow($empsR)){
                 $emp_no = $row[1];
                 $perCashierTotal = 0;
                 $perCashierCountTotal = 0;
                 $perCashierOSTotal = 0;
 
-                $noteR = $dbc->exec_statement($noteP, array($emp_no, $date));   
-                $noteW = $dbc->fetch_array($noteR);
+                $noteR = $dbc->execute($noteP, array($emp_no, $date, $store));
+                $noteW = $dbc->fetchRow($noteR);
                 $note = stripslashes($noteW[0]);
 
                 $output .= "<input type=hidden class=\"cashier\" value=\"$row[1]\" />";
       
                 $output .= "<tr><td><a href=OverShortDayPage.php?action=date&arg=$date&emp_no=$row[1] target={$date}_{$row[1]}>$row[0]</a></td>";
                 $output .= "<td>Starting cash</td><td>n/a</td>";
-                $fetchR = $dbc->exec_statement($scaP, array($date, $emp_no));
+                $fetchR = $dbc->execute($scaP, array($date, $emp_no, $store));
                 $startcash = 0;
                 if ($dbc->num_rows($fetchR) != 0) {
                     $fetchW = $dbc->fetch_row($fetchR);
@@ -214,11 +239,13 @@ class OverShortDayPage extends FanniePage
                         <td id=dlog$code$row[1]>$posAmt</td>";
                     $output .= "<input type=\"hidden\" class=\"tcode$emp_no\" value=\"$code\" />";
 
-                    $fetchR = $dbc->exec_statement($countP, array($date, $emp_no, $code));
+                    $fetchR = $dbc->execute($countP, array($date, $emp_no, $code, $store));
                     $value = '';
                     if ($dbc->num_rows($fetchR) != 0) {
                         $fetchW = $dbc->fetch_row($fetchR);
                         $value = $fetchW[0];
+                    } elseif ($code !== 'CA' && $code !== 'CK' && $code !== 'WT') {
+                        $value = $posAmt;
                     }
                     $output .= "<td><div class=\"input-group\">
                         <span class=\"input-group-addon\">\$</span>
@@ -291,8 +318,8 @@ class OverShortDayPage extends FanniePage
             $output .= "<td id=overallCountTotal>$overallCountTotal</td>";
             $output .= "<td id=overallOSTotal>$overallOSTotal</td></tr>";
 
-            $noteR = $dbc->exec_statement($noteP, array(-1, $date));
-            $noteW = $dbc->fetch_array($noteR);
+            $noteR = $dbc->execute($noteP, array(-1, $date));
+            $noteW = $dbc->fetchRow($noteR);
             $note = $noteW[0];
             $output .= "<tr><td>&nbsp;</td><td>Notes</td><td colspan=3</td>";
             $output .= "<textarea class=\"form-control\" rows=5 cols=35 id=totalsnote>$note</textarea></td></tr>";
@@ -316,13 +343,14 @@ class OverShortDayPage extends FanniePage
         }
     }
 
-    function save($date,$data){
+    function save($date,$store,$data){
         global $FANNIE_OP_DB, $FANNIE_PLUGIN_SETTINGS;
         $dbc = FannieDB::get($FANNIE_PLUGIN_SETTINGS['OverShortDatabase']);
         $bycashier = explode(',',$data);
 
         $model = new DailyCountsModel($dbc);
         $model->date($date);
+        $model->storeID($store);
         foreach ($bycashier as $c){
             $temp = explode(':',$c);
             if (count($temp) != 2) continue;
@@ -342,12 +370,13 @@ class OverShortDayPage extends FanniePage
         }
     }
 
-    function saveNotes($date,$notes){
+    function saveNotes($date,$store,$notes){
         global $FANNIE_OP_DB, $FANNIE_PLUGIN_SETTINGS;
         $dbc = FannieDB::get($FANNIE_PLUGIN_SETTINGS['OverShortDatabase']);
         $noteIDs = explode('`',$notes);
         $model = new DailyNotesModel($dbc);
         $model->date($date);
+        $model->storeID($store);
         foreach ($noteIDs as $n){
             $temp = explode('|',$n);
             $emp = $temp[0];
@@ -490,6 +519,7 @@ function save(){
     notes += "-1|"+escape(note);
     
     var curDate = $('#currentdate').html();
+    var store = $('#currentstore').val();
     var user = $('#user').val();
     var resolved = 0;
     if (document.getElementById('resolved').checked)
@@ -500,7 +530,7 @@ function save(){
     $.ajax({
         url: 'OverShortDayPage.php',
         type: 'post',
-        data: 'action=save&curDate='+curDate+'&data='+outstr+'&user='+user+'&resolved='+resolved+'&notes='+notes,
+        data: 'action=save&curDate='+curDate+'&data='+outstr+'&user='+user+'&resolved='+resolved+'&notes='+notes+'&store='+store,
         success: function(data){
             if (data == "saved")
                 alert('Data saved successfully');
@@ -537,9 +567,12 @@ body, table, td, th {
         <form style='margin-top:1.0em;' id="osForm" onsubmit="setdate(); return false;" >
         <div class="form-group form-inline">
         <label>Date</label>:<input class="form-control date-field" type=text id=date name=arg />
+        <select class="form-control" name="mode">
+            <option value="drawer">Drawer</option>
+            <option value="cashier">Cashier</option>
+        </select>
         <?php
-        $_REQUEST['store'] = 1;
-        $sp = FormLib::storePicker();
+        $sp = FormLib::storePicker('store', false);
         echo $sp['html'];
         ?>
         <button type=submit class="btn btn-default">Set</button>

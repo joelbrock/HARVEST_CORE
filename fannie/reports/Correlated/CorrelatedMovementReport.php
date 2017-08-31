@@ -43,24 +43,19 @@ class CorrelatedMovementReport extends FannieReportPage
     public function fetch_report_data()
     {
         global $FANNIE_OP_DB, $FANNIE_SERVER_DBMS;
+        // creates a temporary table so requesting a writable connection
+        // does make sense here
         $dbc = FannieDB::get($FANNIE_OP_DB);
 
         $depts = FormLib::get('depts', array());
         $upc = FormLib::get('upc');
-        $date1 = FormLib::get('date1', date('Y-m-d'));
-        $date2 = FormLib::get('date2', date('Y-m-d'));
+        $date1 = $this->form->date1;
+        $date2 = $this->form->date2;
         $filters = FormLib::get('filters', array());
 
-        $dClause = "";
-        $dArgs = array();
-        foreach($depts as $d){
-            $dClause .= "?,";
-            $dArgs[] = $d;
-        }
-        $dClause = "(".rtrim($dClause,",").")";
-
-        $where = "d.department IN $dClause";
-        $inv = "d.department NOT IN $dClause";
+        list($dClause, $dArgs) = $dbc->safeInClause($depts);
+        $where = "d.department IN ($dClause)";
+        $inv = "d.department NOT IN ($dClause)";
         if ($upc != "") {
             $upc = BarcodeLib::padUPC($upc);
             $where = "d.upc = ?";
@@ -72,7 +67,7 @@ class CorrelatedMovementReport extends FannieReportPage
 
         $filter = "";
         $fArgs = array();
-        if (is_array($filters)){
+        if (is_array($filters) && count($filters) > 0) {
             $fClause = "";
             foreach($filters as $f){
                 $fClause .= "?,";
@@ -82,21 +77,21 @@ class CorrelatedMovementReport extends FannieReportPage
             $filter = "AND d.department IN $fClause";
         }
 
-        $query = $dbc->prepare_statement("CREATE TABLE groupingTemp (tdate varchar(11), emp_no int, register_no int, trans_no int)");
-        $dbc->exec_statement($query);
+        $query = $dbc->prepare("CREATE TABLE groupingTemp (tdate varchar(11), emp_no int, register_no int, trans_no int)");
+        $dbc->execute($query);
 
         $dateConvertStr = ($FANNIE_SERVER_DBMS=='MSSQL')?'convert(char(11),d.tdate,110)':'convert(date(d.tdate),char)';
 
-        $loadQ = $dbc->prepare_statement("INSERT INTO groupingTemp
+        $loadQ = $dbc->prepare("INSERT INTO groupingTemp
             SELECT $dateConvertStr as tdate,
             emp_no,register_no,trans_no FROM $dlog AS d
             WHERE $where AND tdate BETWEEN ? AND ?
             GROUP BY $dateConvertStr, emp_no,register_no,trans_no");
         $dArgs[] = $date1.' 00:00:00';
         $dArgs[] = $date2.' 23:59:59';
-        $dbc->exec_statement($loadQ,$dArgs);
+        $dbc->execute($loadQ,$dArgs);
 
-        $dataQ = $dbc->prepare_statement("
+        $dataQ = $dbc->prepare("
             SELECT d.upc,
                 p.description,
                 t.dept_no,
@@ -121,7 +116,7 @@ class CorrelatedMovementReport extends FannieReportPage
                 t.dept_name
             ORDER BY SUM(d.quantity) DESC");
         foreach($fArgs as $f) $dArgs[] = $f;
-        $dataR = $dbc->exec_statement($dataQ,$dArgs);
+        $dataR = $dbc->execute($dataQ,$dArgs);
 
         $data = array();
         while($dataW = $dbc->fetch_row($dataR)){
@@ -132,8 +127,8 @@ class CorrelatedMovementReport extends FannieReportPage
             $data[] = $record;
         }
 
-        $drop = $dbc->prepare_statement("DROP TABLE groupingTemp");
-        $dbc->exec_statement($drop);
+        $drop = $dbc->prepare("DROP TABLE groupingTemp");
+        $dbc->execute($drop);
 
         return $data;
     }
@@ -144,7 +139,7 @@ class CorrelatedMovementReport extends FannieReportPage
         $line = 'Corresponding sales for: ';
         if (FormLib::get('upc') === '') {
             $line .= 'departments ';
-            foreach(FormLib::get('depts') as $d) {
+            foreach (FormLib::get('depts', array()) as $d) {
                 $line .= $d.', ';
             }
             $line = substr($line, 0, strlen($line)-1);
@@ -205,19 +200,19 @@ function flipover(opt){
 
     public function form_content()
     {
-        global $FANNIE_OP_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
 
-        $deptQ = $dbc->prepare_statement("select dept_no,dept_name from departments order by dept_no");
-        $deptR = $dbc->exec_statement($deptQ);
+        $deptQ = $dbc->prepare("select dept_no,dept_name from departments order by dept_no");
+        $deptR = $dbc->execute($deptQ);
         $depts = array();
-        while ($deptW = $dbc->fetch_array($deptR)){
+        while ($deptW = $dbc->fetchRow($deptR)){
             $depts[$deptW[0]] = $deptW[1];
         }
 
         ob_start();
         ?>
-<form action="CorrelatedMovementReport.php" method=post>
+<form action="CorrelatedMovementReport.php" method="get">
 <div class="row">
     <div class="col-sm-6">
         <ul class="nav nav-tabs" role="tablist">

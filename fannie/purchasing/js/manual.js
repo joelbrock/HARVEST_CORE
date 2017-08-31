@@ -1,8 +1,5 @@
-function addInvoiceLine()
+function skuField(row, vendor_id)
 {
-    var vendor_id = $('#vendor-id').val();
-    var row = $('<tr>');
-
     var sku = $('<input type="text" name="sku[]" required />')
         .addClass('form-control')
         .addClass('item-sku')
@@ -19,7 +16,10 @@ function addInvoiceLine()
             skuLookup($(this).val(), $(this));
         });
     row.append($('<td>').append(sku));
+}
 
+function upcField(row, vendor_id)
+{
     var upc = $('<input type="text" name="upc[]" required />')
         .addClass('form-control')
         .addClass('item-upc')
@@ -36,34 +36,49 @@ function addInvoiceLine()
             upcLookup($(this).val(), $(this));
         });
     row.append($('<td>').append(upc));
+}
 
+function qtyField(row)
+{
     var qty = $('<input type="text" name="cases[]" required />')
         .val(1)
         .addClass('input-sm')
         .addClass('item-cases')
         .addClass('form-control');
     row.append($('<td>').addClass('col-sm-1').append(qty));
+}
 
+function caseSizeField(row)
+{
     var caseSize = $('<input type="text" name="case-size[]" required />')
         .val(1)
         .addClass('item-units')
         .addClass('input-sm')
         .addClass('form-control');
     row.append($('<td>').addClass('col-sm-1').append(caseSize));
+}
 
+function totalField(row)
+{
     var total = $('<input type="text" name="total[]" required />')
         .addClass('price-field')
         .addClass('input-sm')
         .addClass('form-control');
     row.append($('<td>').append(total));
+}
 
+function brandField(row)
+{
     var brand = $('<input type="text" name="brand[]" required />')
         .val($('#vendor-name strong').html())
         .addClass('item-brand')
         .addClass('input-sm')
         .addClass('form-control');
     row.append($('<td>').append(brand));
+}
 
+function descriptionField(row)
+{
     var description = $('<input type="text" name="description[]" required />')
         .hover(function() {
             $(this).prop('title', $(this).val());
@@ -72,7 +87,10 @@ function addInvoiceLine()
         .addClass('input-sm')
         .addClass('form-control');
     row.append($('<td>').append(description));
+}
 
+function removeButton(row)
+{
     var remove = $('<button type="button">')
         .addClass('btn')
         .addClass('btn-default')
@@ -83,6 +101,21 @@ function addInvoiceLine()
             $(this).closest('tr').remove();
         });
     row.append($('<td>').append(remove));
+}
+
+function addInvoiceLine()
+{
+    var vendor_id = $('#vendor-id').val();
+    var row = $('<tr>');
+
+    skuField(row, vendor_id);
+    upcField(row, vendor_id);
+    qtyField(row);
+    caseSizeField(row);
+    totalField(row);
+    brandField(row);
+    descriptionField(row);
+    removeButton(row);
 
     row.prependTo('#invoice-table tbody');
 
@@ -111,10 +144,10 @@ function doLookup(mode, term, elem)
         return;
     }
     var vendor_id = $('#vendor-id').val();
-    p = { type: 'vendor', vendor_id: vendor_id };
-    if (mode == 'sku') {
+    var p = { type: 'vendor', vendor_id: vendor_id };
+    if (mode === 'sku') {
         p.sku = term;
-    } else if (mode == 'upc') {
+    } else if (mode === 'upc') {
         p.upc = term;
     }
 
@@ -130,27 +163,26 @@ function doLookup(mode, term, elem)
         type: 'post',
         data: JSON.stringify(req),
         dataType: 'json',
-        contentType: 'application/json',
-        success: function(data) {
-            if (data.result && (data.result.sku || data.result.upc)) {
-                if (mode == 'sku' && data.result.upc != '0000000000000') {
-                    elem.closest('tr').find('.item-upc').val(data.result.upc);
-                } else if (mode == 'sku') {
-                    elem.closest('tr').find('.item-upc').val('');
-                } else if (mode == 'upc') {
-                    elem.closest('tr').find('.item-sku').val(data.result.sku);
-                }
-                if (data.result.units != '') {
-                    elem.closest('tr').find('.item-units').val(data.result.units);
-                }
-                if (data.result.brand != '') {
-                    elem.closest('tr').find('.item-brand').val(data.result.brand);
-                }
-                if (data.result.description != '') {
-                    elem.closest('tr').find('.item-description').val(data.result.description);
-                }
+        contentType: 'application/json'
+    }).done(function(data) {
+        if (data.result && (data.result.sku || data.result.upc)) {
+            if (mode === 'sku' && data.result.upc !== '0000000000000') {
+                elem.closest('tr').find('.item-upc').val(data.result.upc);
+            } else if (mode === 'sku') {
+                elem.closest('tr').find('.item-upc').val('');
+            } else if (mode === 'upc') {
+                elem.closest('tr').find('.item-sku').val(data.result.sku);
             }
-        },
+            if (data.result.units !== '') {
+                elem.closest('tr').find('.item-units').val(data.result.units);
+            }
+            if (data.result.brand !== '') {
+                elem.closest('tr').find('.item-brand').val(data.result.brand);
+            }
+            if (data.result.description !== '') {
+                elem.closest('tr').find('.item-description').val(data.result.description);
+            }
+        }
     });
 }
 
@@ -168,15 +200,13 @@ function vendorAutoComplete(ws_url, field_name, search_term, vendor_id, callback
         type: 'post',
         data: JSON.stringify(req),
         dataType: 'json',
-        contentType: 'application/json',
-        success: function(data) {
-            if (data.result) {
-                callback(data.result);
-            }
-        },
-        error: function() {
-            callback([]);
+        contentType: 'application/json'
+    }).done(function(data) {
+        if (data.result) {
+            callback(data.result);
         }
+    }).fail(function() {
+        callback([]);
     });
 }
 
@@ -187,14 +217,13 @@ function saveOrder()
     $.ajax({
         type: 'post',
         data: dataStr,
-        dataType: 'json',
-        success: function(resp) {
-            if (resp.error) {
-                showBootstrapAlert('#alert-area', 'danger', resp.message);
-                $('#save-btn').prop('disabled', false);
-            } else {
-                location = 'ViewPurchaseOrders.php?id=' + resp.order_id;
-            }
+        dataType: 'json'
+    }).done(function(resp) {
+        if (resp.error) {
+            showBootstrapAlert('#alert-area', 'danger', resp.message);
+            $('#save-btn').prop('disabled', false);
+        } else {
+            window.location = 'ViewPurchaseOrders.php?id=' + resp.order_id;
         }
     });
 }
@@ -216,16 +245,14 @@ function existingOrder(orderJSON, itemsJSON)
     }
 
     loading = true;
-    for (var i=0; i<items.length; i++) {
-        var item = items[i];
+    items.forEach(function(item) {
         var total = Number(item.receivedTotalCost);
         var unit = Number(item.unitCost);
         var cases = Number(item.quantity);
+        var caseSize = Number(item.caseSize);
 
-        var caseCost = total / cases;
-        var caseSize = Math.round(caseCost / unit);
-        if (isNaN(caseSize)) {
-            caseSize = 0;
+        if (isNaN(total)) {
+            total = unit * cases * caseSize;
         }
 
         addInvoiceLine();
@@ -236,7 +263,7 @@ function existingOrder(orderJSON, itemsJSON)
         $('input.price-field:first').val(total);
         $('input.item-brand:first').val(item.brand);
         $('input.item-description:first').val(item.description);
-    }
+    });
 
     var name = $('#vendor-name').html();
     name = name.replace('New <', 'Existing <');
@@ -246,5 +273,5 @@ function existingOrder(orderJSON, itemsJSON)
     var idField = $('<input type="hidden" name="order-id" />').val(order.orderID);
     $('#order-form').append(idField);
     
-    setTimeout('stopLoading()', 250);
+    setTimeout(stopLoading, 250);
 }

@@ -31,7 +31,6 @@ class DiscountsReport extends FannieReportPage {
     public $description = '[Discounts Reports] lists member percentage discounts by member type for a
         a given date range.';
     public $report_set = 'Membership';
-    public $themed = true;
 
     protected $report_headers = array('Type', 'Total');
     protected $title = "Fannie : Discounts Report";
@@ -50,33 +49,39 @@ class DiscountsReport extends FannieReportPage {
 
     public function fetch_report_data()
     {
-        global $FANNIE_OP_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
 
         $d1 = FormLib::get('date1', date('Y-m-d'));
         $d2 = FormLib::get('date2', date('Y-m-d'));
 
         $dlog = DTransactionsModel::selectDlog($d1,$d2);
 
-        $query = $dbc->prepare_statement("SELECT m.memDesc,sum(total) as total FROM $dlog AS d
-            LEFT JOIN custdata AS c ON d.card_no=c.CardNo
-            AND c.personNum=1 LEFT JOIN memtype AS m ON
-            c.memType=m.memtype
+        $query = $dbc->prepare("
+            SELECT m.memDesc,
+                SUM(total) AS total 
+            FROM $dlog AS d
+                LEFT JOIN memtype AS m ON d.memType=m.memtype
             WHERE d.upc='DISCOUNT'
-            AND tdate BETWEEN ? AND ?
+                AND tdate BETWEEN ? AND ?
             GROUP BY m.memDesc
             ORDER BY m.memDesc");
-        $result = $dbc->exec_statement($query, array($d1.' 00:00:00', $d2.' 23:59:59'));
+        $result = $dbc->execute($query, array($d1.' 00:00:00', $d2.' 23:59:59'));
 
         $data = array();
-        while($row = $dbc->fetch_row($result)){
-            $data[] = array(
-                        $row['memDesc'],
-                        sprintf('%.2f', $row['total'])
-                        );
+        while ($row = $dbc->fetchRow($result)) {
+            $data[] = $this->rowToRecord($row);
         }
 
         return $data;
+    }
+
+    private function rowToRecord($row)
+    {
+        return array(
+            $row['memDesc'],
+            sprintf('%.2f', $row['total']),
+        );
     }
 
     public function form_content()
@@ -110,8 +115,8 @@ class DiscountsReport extends FannieReportPage {
     <label>Excel <input type=checkbox name=excel value="xls" /></label>
     </p>
     <p>
-    <button type=submit name=submit class="btn btn-default">Submit</button>
-    <button type=reset name=reset class="btn btn-default">Start Over</button>
+    <button type=submit name=submit class="btn btn-default btn-core">Submit</button>
+    <button type=reset name=reset class="btn btn-default btn-reset">Start Over</button>
     </p>
 </div>
 <div class="col-sm-4">
@@ -132,8 +137,14 @@ class DiscountsReport extends FannieReportPage {
             </p>';
     }
 
+    public function unitTest($phpunit)
+    {
+        $data = array('memDesc'=>'test', 'total'=>1);
+        $phpunit->assertInternalType('array', $this->rowToRecord($data));
+        $phpunit->assertInternalType('array', $this->calculate_footers($this->dekey_array(array($data))));
+    }
+
 }
 
 FannieDispatch::conditionalExec();
 
-?>

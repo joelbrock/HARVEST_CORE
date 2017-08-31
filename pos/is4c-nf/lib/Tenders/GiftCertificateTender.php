@@ -21,6 +21,9 @@
 
 *********************************************************************************/
 
+namespace COREPOS\pos\lib\Tenders;
+use \CoreLocal;
+
 /**
   @class GiftCertificateTender
   Tender module for gift certificates
@@ -42,8 +45,6 @@ class GiftCertificateTender extends TenderModule
     */
     public function preReqCheck()
     {
-        CoreLocal::set("autoReprint",1);
-
         if (CoreLocal::get("enableFranking") != 1) {
             return true;
         }
@@ -57,37 +58,16 @@ class GiftCertificateTender extends TenderModule
 
     public function defaultPrompt()
     {
-        if (CoreLocal::get("enableFranking") != 1) {
-            return parent::defaultPrompt();
+        return parent::frankingPrompt();
+    }
+
+    public function add()
+    {
+        // rewrite WIC as checks
+        if (CoreLocal::get("store")=="wfc" && $this->tender_code='WT'){
+            $this->tender_code = "CK";
         }
-
-        CoreLocal::set('RepeatAgain', false);
-
-        $ref = trim(CoreLocal::get("CashierNo"))."-"
-            .trim(CoreLocal::get("laneno"))."-"
-            .trim(CoreLocal::get("transno"));
-
-        if ($this->amount === false) {
-            $this->amount = $this->defaultTotal();
-        }
-
-        $msg = "<br />"._("insert")." ".$this->name_string.
-            ' for $'.sprintf('%.2f',$this->amount). '<br />';
-        if (CoreLocal::get("LastEquityReference") == $ref){
-            $msg .= "<div style=\"background:#993300;color:#ffffff;
-                margin:3px;padding: 3px;\">
-                There was an equity sale on this transaction. Did it get
-                endorsed yet?</div>";
-        }
-
-        CoreLocal::set('strEntered', (100*$this->amount).$this->tender_code);
-        CoreLocal::set("boxMsg",$msg);
-        CoreLocal::set('boxMsgButtons', array(
-            'Endorse [enter]' => '$(\'#reginput\').val(\'\');submitWrapper();',
-            'Cancel [clear]' => '$(\'#reginput\').val(\'CL\');submitWrapper();',
-        ));
-
-        return MiscLib::base_url().'gui-modules/boxMsg2.php?endorse=check&endorseAmt='.$this->amount;
+        parent::add();
     }
 }
 

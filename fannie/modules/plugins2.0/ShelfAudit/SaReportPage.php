@@ -39,6 +39,7 @@ class SaReportPage extends FanniePage {
     protected $header = '';
 
     private $status = '';
+    private $store = false;
     private $sql_actions = '';
     private $scans = array();
 
@@ -50,109 +51,141 @@ class SaReportPage extends FanniePage {
             return True;
         }
         if (FormLib::get_form_value('delete') == 'yes'){
-            $query=$dbc->prepare_statement('delete from sa_inventory where id=?');
-            $result=$dbc->exec_statement($query,array(FormLib::get_form_value('id')));
+            $query=$dbc->prepare('delete from sa_inventory where id=?');
+            $result=$dbc->execute($query,array(FormLib::get_form_value('id')));
             if ($result) {
                 $this->sql_actions='Deleted record.';
             } else {
                 $this->sql_actions='Unable to delete record, please try again. <!-- '.$query.' -->';
             }
-        } else if (FormLib::get_form_value('clear') == 'yes'){
-            $query=$dbc->prepare_statement('update sa_inventory set clear=1;');
-            $result=$dbc->exec_statement($query);
+        } elseif (FormLib::get_form_value('clear') == 'yes'){
+            $query=$dbc->prepare('update sa_inventory set clear=1;');
+            $result=$dbc->execute($query);
             if ($result) {
                 $this->sql_actions='Cleared old scans.';
                 header ("Location: SaReportPage.php");
                 return False;
-            } else {
-                $this->sql_actions='Unable to clear old scans, try again. <!-- '.$query.' -->';
             }
-        } else if (FormLib::get('change')=='yes') {
+            $this->sql_actions='Unable to clear old scans, try again. <!-- '.$query.' -->';
         }
 
-        if (FormLib::get_form_value('view') == 'dept'){
-            $order='d.dept_no,s.section,s.datetime';
-        }
-        elseif(FormLib::get_form_value('excel') == 'yes'){
-            $order='salesCode, d.dept_no, s.datetime';
-        } 
-        else {
-            $order='s.section,d.dept_no,s.datetime';
+        $order='dept_no,s.section,s.datetime';
+        if(FormLib::get_form_value('excel') == 'yes'){
+            $order='salesCode, dept_no, s.datetime';
         }
     
-        /* omitting wedge-specific temp tables Andy 29Mar2013
-        $t=true;
-        
-        $q='START TRANSACTION';
-        $r=mysql_query($q, $link);
-        $t=&$r;
-        
-        $q='CREATE TEMPORARY TABLE `shelfaudit`.`tLastModified` (`upc` VARCHAR(13) NOT NULL, 
-            `modified` DATETIME NOT NULL, KEY `upc_modified` (`upc`,`modified`)) 
-            ENGINE = MYISAM';
-        $r=mysql_query($q, $link);
-        $t=&$r;
-                    
-        $q='SELECT `upc`, `datetime` FROM `shelfaudit`.`hbc_inventory` WHERE CLEAR!=1';
-        $r=mysql_query($q, $link);
-        $t=&$r;
-                    
-        $scans=array();
-        
-        while ($row=mysql_fetch_assoc($r)) {
-            array_push($scans, array($row['upc'], $row['datetime']));
+        $this->store = FormLib::get('store', false);
+        if ($this->store === false ) {
+            $this->store = COREPOS\Fannie\API\lib\Store::getIdByIp();
         }
-            
-        foreach ($scans as $scan) {
-            $q='INSERT INTO `shelfaudit`.`tLastModified` 
-                SELECT \''.$scan[0].'\', MAX(`modified`) 
-                FROM `wedgepos`.`itemTableLog` WHERE `upc`=\''.$scan[0].'\'';
-            $r=mysql_query($q, $link);
-            $t=&$r;
+        if ($this->config->get('STORE_MODE') !== 'HQ') {
+            $store = 0;
         }
-        */
-            
-        $q= $dbc->prepare_statement('SELECT
+        $soP = $dbc->prepare("
+            SELECT s.id,
+                s.datetime,
+                s.upc,
+                1 AS quantity,
+                CASE
+                    WHEN s.section=0 THEN 'Backstock'
+                    WHEN s.section=1 THEN 'Floor'
+                    ELSE 'Unknown'
+                END AS section,
+                o.description,
+                d.dept_no,
+                d.dept_name,
+                d.salesCode,
+                0 AS cost,
+                o.total AS normal_retail,
+                o.total AS actual_retail,
+                '' AS retailstatus,
+                o.mixMatch AS vendor,
+                COALESCE(c.margin, d.margin, 0) AS margin
+            FROM sa_inventory AS s LEFT JOIN ".
+                $this->config->get('TRANS_DB') . $dbc->sep() . "PendingSpecialOrder AS o
+                ON o.order_id=? AND o.trans_id=? LEFT JOIN " .
+                $FANNIE_OP_DB.$dbc->sep().'departments AS d
+                ON o.department=d.dept_no LEFT JOIN '.
+                $FANNIE_OP_DB.$dbc->sep().'vendorItems AS v
+                ON o.upc=v.upc AND v.vendorID=1 LEFT JOIN '.
+                $FANNIE_OP_DB.$dbc->sep().'vendorDepartments AS c
+                ON v.vendorID=c.vendorID AND v.vendorDept=c.deptID 
+            WHERE clear!=1
+                AND s.upc=?
+                AND s.storeID=?');
+
+            $OPDB = $this->config->get('OP_DB') . $dbc->sep();
+            $q= $dbc->prepare("SELECT
             s.id,
             s.datetime,
             s.upc,
             s.quantity,
-            s.section,
+            CASE
+                WHEN s.section=0 THEN 'Backstock'
+                WHEN s.section=1 THEN 'Floor'
+                ELSE 'Unknown'
+            END AS section,
             CASE 
-                WHEN p.description IS NULL AND v.description IS NULL THEN \'Not in POS\' 
+                WHEN p.description IS NULL AND v.description IS NULL THEN 'Not in POS' 
                 WHEN p.description IS NULL AND v.description IS NOT NULL THEN v.description
                 ELSE p.description END as description,
-            CASE WHEN d.dept_name IS NULL THEN \'Unknown\' ELSE d.dept_name END as dept_name,
-            CASE WHEN d.dept_no IS NULL THEN \'n/a\' ELSE d.dept_no END as dept_no,
-            CASE WHEN d.salesCode IS NULL THEN \'n/a\' ELSE d.salesCode END as salesCode,
+            CASE
+                WHEN d.dept_name IS NOT NULL THEN d.dept_name
+                WHEN z.dept_name IS NOT NULL THEN z.dept_name
+                ELSE 'Unknown'
+            END as dept_name,
+            CASE
+                WHEN d.dept_no IS NOT NULL THEN d.dept_no
+                WHEN z.dept_no IS NOT NULL THEN z.dept_no
+                ELSE -999
+            END AS dept_no,
+            CASE
+                WHEN d.salesCode IS NOT NULL THEN d.salesCode
+                WHEN z.salesCode IS NOT NULL THEN z.salesCode
+                ELSE 'n/a'
+            END AS salesCode,
+            CASE WHEN p.cost IS NULL AND v.cost IS NOT NULL THEN v.cost ELSE p.cost END as cost,
+            CASE WHEN p.normal_price IS NULL AND v.srp IS NOT NULL THEN v.srp ELSE p.normal_price END as normal_retail,
+            CASE 
+                WHEN p.discounttype IS NULL AND v.srp IS NOT NULL THEN v.srp
+                WHEN p.discounttype > 0 THEN p.special_price 
+                ELSE p.normal_price 
+            END AS actual_retail,
+            CASE WHEN p.discounttype = 2 THEN 'M' ELSE '' END AS retailstatus,
+            COALESCE(b.vendorName,'n/a') AS vendor,
+            COALESCE(c.margin, d.margin, 0) AS margin
 
-            CASE WHEN p.cost = 0 AND v.cost IS NOT NULL THEN v.cost ELSE p.cost END as cost,
-
-            p.normal_price as normal_retail,
-
-            CASE WHEN p.discounttype > 0 THEN p.special_price
-            ELSE p.normal_price END AS actual_retail,
-
-            CASE WHEN p.discounttype = 2 THEN \'M\'
-            ELSE \'\' END AS retailstatus
-
-            FROM sa_inventory AS s LEFT JOIN '.
-            $FANNIE_OP_DB.$dbc->sep().'products AS p
-            ON s.upc=p.upc LEFT JOIN '.
-            $FANNIE_OP_DB.$dbc->sep().'departments AS d
-            ON p.department=d.dept_no LEFT JOIN '.
-            $FANNIE_OP_DB.$dbc->sep().'vendorItems AS v
-            ON s.upc=v.upc AND v.vendorID=1
+            FROM sa_inventory AS s 
+                LEFT JOIN {$OPDB}products AS p ON s.upc=p.upc AND p.store_id=1 
+                LEFT JOIN {$OPDB}departments AS d ON p.department=d.dept_no
+                LEFT JOIN {$OPDB}vendorItems AS v ON s.upc=v.upc AND v.vendorID=1
+                LEFT JOIN {$OPDB}vendorDepartments AS y ON v.vendorDept=y.deptID AND v.vendorID=y.vendorID
+                LEFT JOIN {$OPDB}departments AS z ON y.posDeptID=z.dept_no
+                LEFT JOIN {$OPDB}vendorItems AS a ON p.upc=a.upc AND p.default_vendor_id=a.vendorID 
+                LEFT JOIN {$OPDB}vendors AS b ON a.vendorID=b.vendorID
+                LEFT JOIN {$OPDB}vendorDepartments AS c ON a.vendorID=c.vendorID AND a.vendorDept=c.deptID
             WHERE clear!=1
-            ORDER BY '.$order);
-        $r=$dbc->exec_statement($q);
+                AND s.storeID=?
+            ORDER BY ".$order);
+        $r=$dbc->execute($q, array($this->store));
+        $upcs = array();
         if ($r) {
             $this->status = 'Good - Connected';
-            $num_rows=$dbc->num_rows($r);
+            $num_rows=$dbc->numRows($r);
             if ($num_rows>0) {
                 $this->scans=array();
-                while($row = $dbc->fetch_row($r)){
-                    $this->scans[] = $row;
+                while ($row = $dbc->fetchRow($r)){
+                    if (substr($row['upc'], 0, 5) == '00454') {
+                        $orderID = substr($row['upc'], 5, 6);
+                        $transID = substR($row['upc'], -2);
+                        $args = array($orderID, $transID, $row['upc'], $this->store);
+                        $row = $dbc->getRow($soP, $args);
+                    }
+                    $key = $row['upc'] . $row['section'];
+                    if (!isset($upcs[$key])) {
+                        $this->scans[$key] = $row;
+                        $upcs[$key] = true;
+                    }
                 }
             } else {
                 $this->status = 'Good - No scans';
@@ -237,39 +270,68 @@ table.shelf-audit tr:hover {
     }
 
     function csv_content(){
-        $ret = "UPC,Description,Account#,Dept#,\"Dept Name\",Qty,Cost,Unit Cost Total,Normal Retail,Current Retail,Status,Current Retail Total\r\n";
+        $ret = "UPC,Description,Vendor,Account#,Dept#,\"Dept Name\",Qty,Cost,Unit Cost Total,Normal Retail,Status,Normal Retail Total\r\n";
         $totals = array();
-        foreach($this->scans as $row){
-            $ret .= sprintf("%s,\"%s\",%s,%s,%s,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%.2f\r\n",
-                $row['upc'],$row['description'],$row['salesCode'],$row['dept_no'],
+        $vendors = array();
+        foreach($this->scans as $row) {
+            if ($row['cost'] == 0 && $row['margin'] != 0) {
+                $row['cost'] = $row['normal_retail'] - ($row['margin'] * $row['normal_retail']);
+                $row['retailstatus'] .= '*';
+            }
+            $ret .= sprintf("%s,\"%s\",\"%s\",%s,%s,%s,%.2f,%.2f,%.2f,%.2f,%s,%.2f,\r\n",
+                $row['upc'],$row['description'],$row['vendor'],$row['salesCode'],$row['dept_no'],
                 $row['dept_name'],$row['quantity'],$row['cost'], ($row['quantity']*$row['cost']),
-                $row['normal_retail'], $row['actual_retail'],
-                $row['retailstatus'],($row['quantity']*$row['actual_retail'])
+                $row['normal_retail'],
+                $row['retailstatus'],
+                ($row['quantity']*$row['normal_retail'])
             );
             if (!isset($totals[$row['salesCode']]))
-                $totals[$row['salesCode']] = array('qty'=>0.0,'ttl'=>0.0,'costTtl'=>0.0);
+                $totals[$row['salesCode']] = array('qty'=>0.0,'ttl'=>0.0,'normalTtl'=>0.0,'costTtl'=>0.0);
             $totals[$row['salesCode']]['qty'] += $row['quantity'];
             $totals[$row['salesCode']]['ttl'] += ($row['quantity']*$row['actual_retail']);
+            $totals[$row['salesCode']]['normalTtl'] += ($row['quantity']*$row['normal_retail']);
             $totals[$row['salesCode']]['costTtl'] += ($row['quantity']*$row['cost']);
+            if ($row['vendor'] != 'UNFI') {
+                $row['vendor'] = 'Non-UNFI';
+            }
+            if (!isset($vendors[$row['vendor']])) {
+                $vendors[$row['vendor']] = array();
+            }
+            if (!isset($vendors[$row['vendor']][$row['salesCode']])) {
+                $vendors[$row['vendor']][$row['salesCode']] = array('qty'=>0.0,'ttl'=>0.0,'normalTtl'=>0.0,'costTtl'=>0.0);
+            }
+            $vendors[$row['vendor']][$row['salesCode']]['qty'] += $row['quantity'];
+            $vendors[$row['vendor']][$row['salesCode']]['ttl'] += ($row['quantity']*$row['actual_retail']);
+            $vendors[$row['vendor']][$row['salesCode']]['normalTtl'] += ($row['quantity']*$row['normal_retail']);
+            $vendors[$row['vendor']][$row['salesCode']]['costTtl'] += ($row['quantity']*$row['cost']);
         }
         $ret .= ",,,,,,,,\r\n";
         foreach($totals as $code => $info){
-            $ret .= sprintf("TOTAL,,%s,,,%.2f,,%.2f,,,%.2f\r\n",
-                    $code, $info['qty'], $info['costTtl'], $info['ttl']);
+            $ret .= sprintf(",,TOTAL,%s,,,%.2f,,%.2f,,,%.2f,\r\n",
+                    $code, $info['qty'], $info['costTtl'], $info['normalTtl']);
+        }
+        $ret .= ",,,,,,,,\r\n";
+        foreach($vendors as $vendor => $sales) {
+            foreach ($sales as $code => $info) {
+                $ret .= sprintf(",,%s,%s,,,%.2f,,%.2f,,,%.2f,\r\n",
+                        $vendor,$code, $info['qty'], $info['costTtl'], $info['normalTtl']);
+            }
         }
         return $ret;
     }
 
     function body_content(){
         ob_start();
+        $stores = FormLib::storePicker();
+        $stores['html'] = str_replace('<select', '<select onchange="location=\'?store=\'+this.value;" ', $stores['html']);
         ?>
         <div id="bdiv">
             <p><a href="#" onclick="window.open('SaScanningPage.php','scan','width=320, height=200, location=no, menubar=no, status=no, toolbar=no, scrollbars=no, resizable=no');">Enter a new scan</a></p>
             <p><a href="SaHandheldPage.php">Alternate Scan Page</a></p>
             <p><?php echo($this->sql_actions); ?></p>
             <p><?php echo($this->status); ?></p>
-            <p><a href="?view=dept">view by pos department</a> <a href="SaReportPage.php">view by scanned section</a></p>
-            <p><a href="?excel=yes">download as csv</a></p>
+            <p><?php echo $stores['html']; ?></p>
+            <p><a href="?excel=yes&store=<?php echo $this->store; ?>">download as csv</a></p>
         <?php
         if ($this->scans) {
             $clear = '<div><a href="SaReportPage.php?clear=yes">Clear Old</a></div>';
@@ -277,19 +339,14 @@ table.shelf-audit tr:hover {
         }
         
         $table = '';
-        $view = FormLib::get_form_value('view','dept');
-        $counter = ($view == 'dept') ? 'd' : 's';
         $counter_total = 0;
         foreach($this->scans as $row) {
             
             if (!isset($counter_number)) {
-                if ($counter=='d') { $counter_number=$row['dept_no']; }
-                else { $counter_number=$row['section']; }
-                
+                $counter_number=$row['dept_no'];
                 $counter_total=$row['quantity']*$row['normal_retail'];
                 
-                if ($counter=='d') { $caption=$row['dept_name'].' Department'; }
-                else { $caption='Section #'.$row['section']; }
+                $caption=$row['dept_name'].' Department';
                 
                 $table .= '
         <table class="table shelf-audit">
@@ -324,12 +381,9 @@ table.shelf-audit tr:hover {
                     <td id="col_i"><a href="SaReportPage.php?delete=yes&id='.$row['id'].'">'
                         . \COREPOS\Fannie\API\lib\FannieUI::deleteIcon() . '</td>
                 </tr>';
-            } else if ($counter_number!=$row['section'] && $counter_number!=$row['dept_no']) {
-                if ($counter=='d') { $counter_number=$row['dept_no']; }
-                else { $counter_number=$row['section']; }
-                
-                if ($counter=='d') { $caption=$row['dept_name'].' Department'; }
-                else { $caption='Section #'.$row['section']; }
+            } elseif ($counter_number!=$row['dept_no']) {
+                $counter_number=$row['dept_no'];
+                $caption=$row['dept_name'].' Department';
                                 
                 $table .= '
             </tbody>

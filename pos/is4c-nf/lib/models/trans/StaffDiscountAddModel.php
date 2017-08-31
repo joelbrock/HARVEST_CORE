@@ -21,14 +21,19 @@
 
 *********************************************************************************/
 
-if (!class_exists('LocalTransModel')) {
+namespace COREPOS\pos\lib\models\trans;
+use COREPOS\pos\lib\models\BasicModel;
+
+/*
+if (!class_exists('\\COREPOS\\pos\lib\\models\\trans\\LocalTransModel')) {
     include_once(dirname(__FILE__).'/LocalTransModel.php');
 }
+*/
 
 /**
   @class StaffDiscountAddModel
 */
-class StaffDiscountAddModel extends LocalTransModel
+class StaffDiscountAddModel extends \COREPOS\pos\lib\models\trans\LocalTransModel
 {
 
     protected $name = "staffdiscountadd";
@@ -88,11 +93,19 @@ class StaffDiscountAddModel extends LocalTransModel
         return ($try === false) ? false : true;
     }
 
+    public function doc()
+    {
+        return '
+Use:
+This view calculates staff discounts on items
+in the transaction that have not yet been applied.
+These records are then inserted into localtemptrans
+to apply the relevant discount(s).
+        ';
+    }
+
     public function delete(){ return false; }
     public function save(){ return false; }
     public function normalize($db_name, $mode=BasicModel::NORMALIZE_MODE_CHECK, $doCreate=False){ return 0; }
-
-    /* START ACCESSOR FUNCTIONS */
-    /* END ACCESSOR FUNCTIONS */
 }
 

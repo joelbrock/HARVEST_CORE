@@ -21,10 +21,14 @@
 
 *********************************************************************************/
 
+use COREPOS\pos\lib\gui\NoInputCorePage;
+use COREPOS\pos\lib\Database;
+use \COREPOS\pos\lib\FormLib;
+use COREPOS\pos\lib\MiscLib;
 include_once(dirname(__FILE__).'/../../lib/AutoLoader.php');
 
-class QMDisplay extends NoInputPage {
-
+class QMDisplay extends NoInputCorePage 
+{
     private $offset;
     private $plugin_url;
 
@@ -58,19 +62,21 @@ class QMDisplay extends NoInputPage {
     function preprocess()
     {
         $plugin_info = new QuickMenus();
-        $this->plugin_url = $plugin_info->plugin_url().'/';
+        $this->plugin_url = $plugin_info->pluginUrl().'/';
 
-        $this->offset = isset($_REQUEST['offset'])?$_REQUEST['offset']:0;
+        $this->offset = FormLib::get('offset', 0);
 
         if (count($_POST) > 0){
             $output = "";
+            $qstr = '';
             if ($_REQUEST["clear"] == 0) {
-                $value = $_REQUEST['ddQKselect'];
+                $value = FormLib::get('ddQKselect');
 
-                $output = CoreLocal::get("qmInput").$value;
-                CoreLocal::set("msgrepeat",1);
-                CoreLocal::set("strRemembered",$output);
-                CoreLocal::set("currentid",CoreLocal::get("qmCurrentId"));
+                if ($value !== '') {
+                    $output = CoreLocal::get("qmInput").$value;
+                    $qstr = '?reginput=' . urlencode($output) . '&repeat=1';
+                    CoreLocal::set("currentid",CoreLocal::get("qmCurrentId"));
+                }
                 if (!FormLib::validateToken() && is_numeric($value)) {
                     CoreLocal::set("msgrepeat",0);
                 }
@@ -79,12 +85,42 @@ class QMDisplay extends NoInputPage {
                 CoreLocal::set("qmNumber",substr($output,2));
                 return True;
             } else {
-                $this->change_page($this->page_url."gui-modules/pos2.php");
+                $this->change_page($this->page_url."gui-modules/pos2.php" . $qstr);
             }
             return False;
         }
         return True;
     } // END preprocess() FUNCTION
+
+    private function getMenu()
+    {
+        $my_menu = array();
+        if (is_array(CoreLocal::get('qmNumber'))){
+            /** Calling code provided the menu array via session data */
+            $my_menu = CoreLocal::get('qmNumber');
+        } else {
+            /** New way:
+                Get menu options from QuickLookups table
+            */
+            $dbc = Database::pDataConnect();
+            if (CoreLocal::get('NoCompat') == 1 || $dbc->table_exists('QuickLookups')) {
+                $model = new COREPOS\pos\plugins\QuickMenus\QuickLookupsModel($dbc);
+                $model->lookupSet(CoreLocal::get('qmNumber'));
+                foreach($model->find(array('sequence', 'label')) as $obj) {
+                    $my_menu[$obj->label()] = $obj->action();
+                }
+            }
+            if (count($my_menu) == 0 && file_exists(realpath(dirname(__FILE__)."/quickmenus/".CoreLocal::get("qmNumber").".php"))) {
+                /** Old way:
+                    Menu is defined in a PHP file
+                */
+                include(realpath(dirname(__FILE__)."/quickmenus/"
+                    .CoreLocal::get("qmNumber").".php"));
+            }
+        }
+
+        return $my_menu;
+    }
 
     function body_content()
     {
@@ -92,44 +128,19 @@ class QMDisplay extends NoInputPage {
         $this->add_onload_command('$(\'#ddQKselect\').focus()');
 
         echo "<div class=\"baseHeight\" style=\"border: solid 1px black;\">";
-        echo "<form id=\"qmform\" action=\"".$_SERVER["PHP_SELF"]."\" 
+        echo "<form id=\"qmform\" action=\"" . filter_input(INPUT_SERVER, "PHP_SELF") ."\" 
             method=\"post\" onsubmit=\"return false;\">";
 
-        /**
-          Where can the menu be found?
-        */
-        $my_menu = array();
-        if (is_array(CoreLocal::get('qmNumber'))){
-            /** Calling code provided the menu array via session data */
-            $my_menu = CoreLocal::get('qmNumber');
-        } else if (file_exists(realpath(dirname(__FILE__)."/quickmenus/".CoreLocal::get("qmNumber").".php"))) {
-            /** Old way:
-                Menu is defined in a PHP file
-            */
-            include(realpath(dirname(__FILE__)."/quickmenus/"
-                .CoreLocal::get("qmNumber").".php"));
-        } else {
-            /** New way:
-                Get menu options from QuickLookups table
-            */
-            $db = Database::pDataConnect();
-            if ($db->table_exists('QuickLookups')) {
-                $model = new QuickLookupsModel($db);
-                $model->lookupSet(CoreLocal::get('qmNumber'));
-                foreach($model->find(array('sequence', 'label')) as $obj) {
-                    $my_menu[$obj->label()] = $obj->action();
-                }
-            }
-        }
+        $my_menu = $this->getMenu();
 
         echo '<br /><br />';
         echo '<select name="ddQKselect" id="ddQKselect" style="width:380px;" size="10"
             onblur="$(\'#ddQKselect\').focus();" >';
-        $i=1;
+        $count=1;
         foreach ($my_menu as $label => $value) {
             printf('<option value="%s" %s>%d. %s</option>',$value,
-                ($i==1?'selected':''),$i,$label);
-            $i++;
+                ($count==1?'selected':''),$count,$label);
+            $count++;
         }
         echo '</select>';
         $this->add_onload_command("qmNumberPress();\n");
@@ -139,10 +150,7 @@ class QMDisplay extends NoInputPage {
         echo "</form>";
         echo "</div>";
     } // END body_content() FUNCTION
-
 }
 
-if (basename($_SERVER['PHP_SELF']) == basename(__FILE__))
-    new QMDisplay();
+AutoLoader::dispatch();
 
-?>

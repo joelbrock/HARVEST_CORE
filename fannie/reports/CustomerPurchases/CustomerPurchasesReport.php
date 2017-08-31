@@ -30,7 +30,6 @@ class CustomerPurchasesReport extends FannieReportPage
 {
     public $description = '[Member Purchases] lists items purchased by a given member in a given date range.';
     public $report_set = 'Membership';
-    public $themed = true;
 
     protected $title = "Fannie : What Did I Buy?";
     protected $header = "What Did I Buy? Report";
@@ -39,10 +38,11 @@ class CustomerPurchasesReport extends FannieReportPage
 
     function fetch_report_data()
     {
-        global $FANNIE_OP_DB, $FANNIE_ARCHIVE_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
-        $date1 = FormLib::get_form_value('date1',date('Y-m-d'));
-        $date2 = FormLib::get_form_value('date2',date('Y-m-d'));
+        $dbc = $this->connection;
+        $FANNIE_OP_DB = $this->config->get('OP_DB');
+        $dbc->selectDB($FANNIE_OP_DB);
+        $date1 = $this->form->date1;
+        $date2 = $this->form->date2;
         $card_no = FormLib::get_form_value('card_no','0');
 
         $dlog = DTransactionsModel::selectDlog($date1,$date2);
@@ -60,10 +60,10 @@ class CustomerPurchasesReport extends FannieReportPage
               group by year(t.tdate),month(t.tdate),day(t.tdate),
               t.upc,p.description
               order by year(t.tdate),month(t.tdate),day(t.tdate)";
-        $args = array($card_no,$date1.' 00:00:00',$date2.' 23:59:59');
+        $args = array($card_no, $date1.' 00:00:00',$date2.' 23:59:59');
     
-        $prep = $dbc->prepare_statement($query);
-        $result = $dbc->exec_statement($prep,$args);
+        $prep = $dbc->prepare($query);
+        $result = $dbc->execute($prep,$args);
 
         /**
           Simple report
@@ -71,18 +71,24 @@ class CustomerPurchasesReport extends FannieReportPage
           Issue a query, build array of results
         */
         $ret = array();
-        while ($row = $dbc->fetch_array($result)){
-            $record = array();
-            $record[] = $row[0]."/".$row[1]."/".$row[2];
-            $record[] = $row['upc'];
-            $record[] = $row['description'];
-            $record[] = $row['department'].' '.$row['dept_name'];
-            $record[] = $row['super_name'];
-            $record[] = $row['qty'];
-            $record[] = $row['ttl'];
-            $ret[] = $record;
+        while ($row = $dbc->fetchRow($result)){
+            $ret[] = $this->rowToRecord($row);
         }
         return $ret;
+    }
+
+    private function rowToRecord($row)
+    {
+        $record = array();
+        $record[] = $row[0]."/".$row[1]."/".$row[2];
+        $record[] = $row['upc'];
+        $record[] = $row['description'];
+        $record[] = $row['department'].' '.$row['dept_name'];
+        $record[] = $row['super_name'];
+        $record[] = $row['qty'];
+        $record[] = $row['ttl'];
+
+        return $record;
     }
 
     function report_description_content()
@@ -105,9 +111,11 @@ class CustomerPurchasesReport extends FannieReportPage
         return array('Total',null,null,null,null,$sumQty,$sumSales);
     }
 
-    function form_content(){
+    function form_content()
+    {
+        ob_start();
 ?>
-<form method = "get" action="<?php echo $_SERVER['PHP_SELF']; ?>">
+<form method = "get"> 
 <div class="col-sm-4">
     <div class="form-group">
         <label><?php echo _('Owner #'); ?></label>
@@ -126,8 +134,8 @@ class CustomerPurchasesReport extends FannieReportPage
         <label for="excel">Excel</label>
     </div>
     <p>
-        <button type=submit class="btn btn-default">Submit</button>
-        <button type=reset class="btn btn-default">Start Over</button>
+        <button type=submit class="btn btn-default btn-core">Submit</button>
+        <button type=reset class="btn btn-default btn-reset">Start Over</button>
     </p>
 </div>
 <div class="col-sm-4">
@@ -135,6 +143,7 @@ class CustomerPurchasesReport extends FannieReportPage
 </div>
 </form>
 <?php
+        return ob_get_clean();
     }
 
     public function helpContent()
@@ -143,8 +152,16 @@ class CustomerPurchasesReport extends FannieReportPage
             List items purchased by a given customer in a given date range.
             </p>';
     }
+
+    public function unitTest($phpunit)
+    {
+        $data = array(0=>1, 1=>1, 2=>2000, 'upc'=>'4011',
+            'description'=>'test', 'department'=>1, 'dept_name'=>'test',
+            'super_name'=>'test', 'qty'=>1, 'ttl'=>1);
+        $phpunit->assertInternalType('array', $this->rowToRecord($data));
+        $phpunit->assertInternalType('array', $this->calculate_footers($this->dekey_array(array($data))));
+    }
 }
 
-FannieDispatch::conditionalExec(false);
+FannieDispatch::conditionalExec();
 
-?>

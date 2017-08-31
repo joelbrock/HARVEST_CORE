@@ -46,23 +46,23 @@ class BasketLimitedReport extends FannieReportPage
     {
         global $FANNIE_OP_DB;
         $dbc = FannieDB::get($FANNIE_OP_DB);
-        $date1 = FormLib::get('date1', date('Y-m-d'));
-        $date2 = FormLib::get('date2', date('Y-m-d'));
+        $date1 = $this->form->date1;
+        $date2 = $this->form->date2;
         $qty = FormLib::get('qty', 1);
 
-        $create = $dbc->prepare_statement("CREATE TABLE groupingTempBS (upc VARCHAR(13), quantity double, total decimal(10,2), trans_num varchar(50))");
-        $dbc->exec_statement($create);
+        $create = $dbc->prepare("CREATE TABLE groupingTempBS (upc VARCHAR(13), quantity double, total decimal(10,2), trans_num varchar(50))");
+        $dbc->execute($create);
 
         $dlog = DTransactionsModel::selectDlog($date1, $date2);
-        $setupQ = $dbc->prepare_statement("INSERT INTO groupingTempBS
+        $setupQ = $dbc->prepare("INSERT INTO groupingTempBS
             SELECT upc, quantity, total, trans_num
             FROM $dlog AS d WHERE tdate BETWEEN ? AND ?
             AND trans_type IN ('I','D')
             GROUP BY year(tdate),month(tdate),day(tdate),trans_num 
             HAVING COUNT(*) <= ?");
-        $dbc->exec_statement($setupQ,array($date1.' 00:00:00',$date2.' 23:59:59',$qty));
+        $dbc->execute($setupQ,array($date1.' 00:00:00',$date2.' 23:59:59',$qty));
 
-        $reportQ = $dbc->prepare_statement('
+        $reportQ = $dbc->prepare('
             SELECT g.upc,
                 p.description,
                 SUM(g.quantity) AS qty,
@@ -75,7 +75,7 @@ class BasketLimitedReport extends FannieReportPage
             HAVING sum(total) <> 0
             ORDER BY count(*) DESC
         ');
-        $reportR = $dbc->exec_statement($reportQ);
+        $reportR = $dbc->execute($reportQ);
 
         $data = array();
         while($w = $dbc->fetch_row($reportR)) {
@@ -87,8 +87,8 @@ class BasketLimitedReport extends FannieReportPage
             $data[] = $record;
         }
 
-        $drop = $dbc->prepare_statement("DROP TABLE groupingTempBS");
-        $dbc->exec_statement($drop);
+        $drop = $dbc->prepare("DROP TABLE groupingTempBS");
+        $dbc->execute($drop);
 
         return $data;
     }
@@ -134,8 +134,8 @@ class BasketLimitedReport extends FannieReportPage
         </label>
     </div>
     <p>
-        <button class="btn btn-default" type="submit">Submit</button>
-        <button class="btn btn-default" type="reset">Start Over</button>
+        <button class="btn btn-default btn-core" type="submit">Submit</button>
+        <button class="btn btn-default btn-reset" type="reset">Start Over</button>
     </p>
 </div>
 <div class="col-sm-5">
@@ -162,4 +162,3 @@ class BasketLimitedReport extends FannieReportPage
 
 FannieDispatch::conditionalExec();
 
-?>

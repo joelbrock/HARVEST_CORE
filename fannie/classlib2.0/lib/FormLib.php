@@ -24,29 +24,13 @@
 /**
   @class FormLib
 */
-class FormLib 
+class FormLib extends \COREPOS\common\FormLib
 {
-
-    /**
-      Safely fetch a form value
-      @param $name the field name
-      @param $default default value if the form value doesn't exist
-      @return The form value, if available, otherwise the default.
-    */
-    public static function getFormValue($name, $default='')
-    {
-        return (isset($_REQUEST[$name])) ? $_REQUEST[$name] : $default;
-    }
-
     public static function get_form_value($name, $default='')
     {
         return self::getFormValue($name, $default);
     }
 
-    public static function get($name, $default='')
-    {
-        return self::getFormValue($name, $default);
-    }
 
     /**
       Get form input as a formatted date
@@ -167,29 +151,49 @@ class FormLib
 
     public static function date_range_picker($one='date1',$two='date2',$week_start=1)
     {
+        $week_start = (!FannieConfig::config('FANNIE_WEEK_START')) ? 1 :  FannieConfig::config('FANNIE_WEEK_START');
         return self::dateRangePicker($one, $two, $week_start);
     }
 
     /**
       Get <select> box for the store ID
       @param $field_name [string] select.name (default 'store')
+      $param $all [string] include an "all" option (default true)
       @return keyed [array]
         - html => [string] select box
         - names => [array] store names
     */
-    public static function storePicker($field_name='store')
+    public static function storePicker($field_name='store', $all=true)
     {
         $op_db = FannieConfig::config('OP_DB');
-        $dbc = FannieDB::get($op_db, $previous);
+        $dbc = FannieDB::getReadOnly($op_db);
+
+        $clientIP = filter_input(INPUT_SERVER, 'REMOTE_ADDR');
+        $ranges = FannieConfig::config('STORE_NETS');
 
         $stores = new StoresModel($dbc);
-        $current = FormLib::get($field_name, 0);
-        $labels = array(0 => _('All Stores'));
+        $current = FormLib::get($field_name, false);
         $ret = '<select name="' . $field_name . '" class="form-control">';
-        $ret .= '<option value="0">' . $labels[0] . '</option>';
+        if ($all) {
+            $labels = array(0 => _('All Stores'));
+            $ret .= '<option value="0">' . $labels[0] . '</option>';
+        } else {
+            $labels = array();
+        }
         foreach($stores->find('storeID') as $store) {
+            $selected = '';
+            if ($store->storeID() == $current) {
+                $selected = 'selected';
+            } elseif (
+                $current === false
+                && isset($ranges[$store->storeID()]) 
+                && class_exists('\\Symfony\\Component\\HttpFoundation\\IpUtils')
+                && \Symfony\Component\HttpFoundation\IpUtils::checkIp($clientIP, $ranges[$store->storeID()])
+                ) {
+                $selected = 'selected';
+            }
             $ret .= sprintf('<option %s value="%d">%s</option>',
-                    ($store->storeID() == $current ? 'selected' : ''),
+                    $selected,
                     $store->storeID(),
                     $store->description()
             );
@@ -197,208 +201,41 @@ class FormLib
         }
         $ret .= '</select>';
 
-        // restore previous selected database
-        if ($previous != $op_db) {
-            FannieDB::get($previous);
-        }
-
         return array(
             'html' => $ret,
             'names' => $labels, 
         );
     }
 
-    public static function chainDeptFields($supers, $departments, $subs, $fake_supers=false)
-    {
-        $url_stem = FannieConfig::config('URL');
-        ob_start();
-        ?>
-        <div class="form-group">
-            <label class="control-label col-sm-4">Select SuperDept</label>
-            <div class="col-sm-8">
-                <select name="super-id" id="cdf-super-id" class="form-control"
-                    onchange="chainDeptFieldsSuper(this.value);">
-                    <option value=""></option>
-                    <?php foreach ($supers as $s) { ?>
-                    <option value="<?php echo $s->superID(); ?>"><?php echo $s->super_name(); ?></option>
-                    <?php } ?>
-                    <?php if ($fake_supers) { ?>
-                    <option value=-2 >All Retail</option>
-                    <option value=-1 >All</option>
-                    <?php } ?>
-                </select>
-            </div>
-        </div>
-        <div class="form-group">
-            <label class="control-label col-sm-4">Department Start</label>
-            <div class="col-sm-6">
-            <select id="cdf-dept-start-select" 
-                onchange="$('#cdf-dept-start').val(this.value);$('#cdf-dept-end-select').val(this.value);$('#cdf-dept-end').val(this.value);" 
-                class="form-control">
-            <option value="">
-            <?php foreach ($departments as $d) { ?>
-            <option value="<?php echo $d->dept_no(); ?>"><?php echo $d->dept_no(); ?>
-                <?php echo $d->dept_name(); ?></option>
-            <?php } ?>
-            </select>
-            </div>
-            <div class="col-sm-2">
-            <input type="number" name="deptStart" id="cdf-dept-start" value="" class="form-control" />
-            </div>
-        </div>
-        <div class="form-group">
-            <label class="control-label col-sm-4">Department End</label>
-            <div class="col-sm-6">
-            <select id="cdf-dept-end-select" onchange="$('#cdf-dept-end').val(this.value);" class="form-control">
-            <option value="">
-            <?php foreach ($departments as $d) { ?>
-            <option value="<?php echo $d->dept_no(); ?>"><?php echo $d->dept_no(); ?>
-                <?php echo $d->dept_name(); ?></option>
-            <?php } ?>
-            </select>
-            </div>
-            <div class="col-sm-2">
-            <input type="number" name="deptEnd" id="cdf-dept-end" value="" class="form-control" />
-            </div>
-        </div>
-        <script type="text/javascript">
-        function chainDeptFieldsSuper(superID)
-        {
-            if (superID === '') {
-                superID = -1;
-            }
-            var req = {
-                jsonrpc: '2.0',
-                method: '\\COREPOS\\Fannie\\API\\webservices\\FannieDeptLookup',
-                id: new Date().getTime(),
-                params: {
-                    'type' : 'children',
-                    'superID' : superID
-                }
-            };
-            $.ajax({
-                url: '<?php echo $url_stem; ?>ws/',
-                type: 'post',
-                data: JSON.stringify(req),
-                dataType: 'json',
-                contentType: 'application/json',
-                success: function(resp) {
-                    if (resp.result) {
-                        $('#cdf-dept-start-select').empty();
-                        $('#cdf-dept-end-select').empty();
-                        for (var i=0; i<resp.result.length; i++) {
-                            var opt = $('<option>').val(resp.result[i]['id'])
-                                .html(resp.result[i]['id'] + ' ' + resp.result[i]['name']);
-                            $('#cdf-dept-start-select').append(opt.clone());
-                            $('#cdf-dept-end-select').append(opt);
-                        }
-                        if (resp.result.length > 0) {
-                            $('#cdf-dept-start-select').val(resp.result[0]['id']);
-                            $('#cdf-dept-start').val(resp.result[0]['id']);
-                            $('#cdf-dept-end-select').val(resp.result[resp.result.length-1]['id']);
-                            $('#cdf-dept-end').val(resp.result[resp.result.length-1]['id']);
-                        } else {
-                            $('#cdf-dept-start').val('');
-                            $('#cdf-dept-end').val('');
-                        }
-                    }
-                }
-            });
-        }
-        </script>
-        <?php
-        return ob_get_clean();
-    }
-
     /**
       Generate a very standard form with date and department fields
-      @param $departments [array] of DepartmentModels
-      @param $supers [array] of SuperDeptNamesModels
-        [optional] default empty array
-      @param $fake_supers [boolean] include -1 and -2 as All Retail and All
-        [optional] default false
       @return [string] html form
     */
-    public static function dateAndDepartmentForm($departments, $supers=array(), $fake_supers=false)
+    public static function dateAndDepartmentForm($standardFieldNames=false)
     {
         ob_start();
         ?>
-<?php if (count($supers) > 0) { ?>
-<div class="well">Selecting a Buyer/Dept overrides Department Start/Department End, but not Date Start/End.
-        To run reports for a specific department(s) leave Buyer/Dept or set it to 'blank'
-</div>
-<?php } ?>
-<form method="get" action="<?php echo $_SERVER['PHP_SELF']; ?>" class="form-horizontal">
+<form method="get" class="form-horizontal">
 <div class="row">
-    <div class="col-sm-5">
-    <?php if (count($supers) > 0) { ?>
+    <div class="col-sm-6">
+        <?php echo $standardFieldNames ? self::standardDepartmentFields('super-dept', 'departments', 'dept-start', 'dept-end') : self::standardDepartmentFields('buyer');  ?>
         <div class="form-group">
-            <label class="control-label col-sm-4">Select Buyer/Dept</label>
+            <label class="col-sm-4 control-label">Store</label>
             <div class="col-sm-8">
-            <select id="buyer-select" name="buyer" class="form-control">
-                <option value=""></option>
-                <?php foreach ($supers as $s) { ?>
-                <option value="<?php echo $s->superID(); ?>"><?php echo $s->super_name(); ?></option>
-                <?php } ?>
-                <?php if ($fake_supers) { ?>
-                <option value=-2 >All Retail</option>
-                <option value=-1 >All</option>
-                <?php } ?>
-            </select>
+            <?php
+            $stores = FormLib::storePicker();
+            echo $stores['html'];
+            ?>
             </div>
         </div>
-    <?php } ?>
-        <div class="form-group">
-            <label class="control-label col-sm-4">Department Start</label>
-            <div class="col-sm-6">
-            <select onchange="$('#dept-start').val(this.value);" class="form-control">
-            <?php foreach ($departments as $d) { ?>
-            <option value="<?php echo $d->dept_no(); ?>"><?php echo $d->dept_no(); ?>
-                <?php echo $d->dept_name(); ?></option>
-            <?php } ?>
-            </select>
-            </div>
-            <div class="col-sm-2">
-            <input type="number" name="deptStart" id="dept-start" value="1" class="form-control" />
-            </div>
-        </div>
-        <div class="form-group">
-            <label class="control-label col-sm-4">Department End</label>
-            <div class="col-sm-6">
-            <select onchange="$('#dept-end').val(this.value);" class="form-control">
-            <?php foreach ($departments as $d) { ?>
-            <option value="<?php echo $d->dept_no(); ?>"><?php echo $d->dept_no(); ?>
-                <?php echo $d->dept_name(); ?></option>
-            <?php } ?>
-            </select>
-            </div>
-            <div class="col-sm-2">
-            <input type="number" name="deptEnd" id="dept-end" value="1" class="form-control" />
-            </div>
-        </div>
-        <div id="date-dept-form-left-col"></div>
+        <div id="date-dept-form-left-col"></div> 
     </div>
-    <div class="col-sm-5">
-        <div class="form-group">
-            <label class="col-sm-4 control-label">Start Date</label>
-            <div class="col-sm-8">
-                <input type="text" id="date1" name="date1" class="form-control date-field" required />
-            </div>
-        </div>
-        <div class="form-group">
-            <label class="col-sm-4 control-label">End Date</label>
-            <div class="col-sm-8">
-                <input type="text" id="date2" name="date2" class="form-control date-field" required />
-            </div>
-        </div>
-        <div class="form-group">
-            <?php echo FormLib::date_range_picker(); ?>                            
-        </div>
-    </div>
+    <?php echo self::standardDateFields(); ?>
 </div>
 <p>
-    <button type="submit" class="btn btn-default">Submit</button>
-    <button type="reset" class="btn btn-default">Start Over</button>
+    <button type="submit" class="btn btn-default btn-core">Submit</button>
+    <button type="reset" class="btn btn-default btn-reset"
+        onclick="$('#super-id').val('').trigger('change');">Start Over</button>
 </p>
         <?php
         return ob_get_clean();
@@ -414,91 +251,9 @@ class FormLib
     */
     public static function standardItemFields()
     {
-        $dbc = FannieDB::get(FannieConfig::config('OP_DB'));
-        $url_stem = FannieConfig::config('URL');
+        $dbc = FannieDB::getReadOnly(FannieConfig::config('OP_DB'));
         ob_start();
         ?>
-        <script type="text/javascript">
-        function filterDepartments(superID) {
-            if (superID === '') {
-                superID = -1;
-            }
-            var req = {
-                jsonrpc: '2.0',
-                method: '\\COREPOS\\Fannie\\API\\webservices\\FannieDeptLookup',
-                id: new Date().getTime(),
-                params: {
-                    'type' : 'children',
-                    'superID' : superID
-                }
-            };
-            $.ajax({
-                url: '<?php echo $url_stem; ?>ws/',
-                type: 'post',
-                data: JSON.stringify(req),
-                dataType: 'json',
-                contentType: 'application/json',
-                success: function(resp) {
-                    if (resp.result) {
-                        $('#dept-start-select').empty();
-                        $('#dept-end-select').empty();
-                        for (var i=0; i<resp.result.length; i++) {
-                            var opt = $('<option>').val(resp.result[i]['id'])
-                                .html(resp.result[i]['id'] + ' ' + resp.result[i]['name']);
-                            $('#dept-start-select').append(opt.clone());
-                            $('#dept-end-select').append(opt);
-                        }
-                        if (resp.result.length > 0) {
-                            $('#dept-start-select').val(resp.result[0]['id']);
-                            $('#deptStart').val(resp.result[0]['id']);
-                            $('#dept-end-select').val(resp.result[resp.result.length-1]['id']);
-                            $('#deptEnd').val(resp.result[resp.result.length-1]['id']);
-                            filterSubs();
-                        } else {
-                            $('#deptStart').val('');
-                            $('#deptEnd').val('');
-                        }
-                    }
-                }
-            });
-        }
-        function filterSubs()
-        {
-            var range = [ $('#deptStart').val(), $('#deptEnd').val() ];
-            var sID = $('#super-id').val();
-            var req = {
-                jsonrpc: '2.0',
-                method: '\\COREPOS\\Fannie\\API\\webservices\\FannieDeptLookup',
-                id: new Date().getTime(),
-                params: {
-                    'type' : 'children',
-                    'dept_no' : range,
-                    'superID' : sID
-                }
-            };
-            $.ajax({
-                url: '<?php echo $url_stem; ?>ws/',
-                type: 'post',
-                data: JSON.stringify(req),
-                dataType: 'json',
-                contentType: 'application/json',
-                success: function(resp) {
-                    if (resp.result) {
-                        $('#sub-start').empty();
-                        $('#sub-end').empty();
-                        $('#sub-start').append($('<option value="">Select Sub</option>'));
-                        $('#sub-end').append($('<option value="">Select Sub</option>'));
-                        for (var i=0; i<resp.result.length; i++) {
-                            var opt = $('<option>').val(resp.result[i]['id'])
-                                .html(resp.result[i]['id'] + ' ' + resp.result[i]['name']);
-                            $('#sub-start').append(opt.clone());
-                            $('#sub-end').append(opt);
-                        }
-                    }
-                }
-            });
-        }
-        </script>
         <div class="col-sm-5">
             <ul class="nav nav-tabs" role="tablist">
                 <li class="active"><a href="#dept-tab" data-toggle="tab"
@@ -513,85 +268,8 @@ class FormLib
             <input id="supertype" name="lookup-type" type="hidden" value="dept" />
             <div class="tab-content"><p>
                 <div class="tab-pane active" id="dept-tab">
-                    <div class="row form-group form-horizontal">
-                        <label class="control-label col-sm-3">Buyer (SuperDept)</label>
-                        <div class="col-sm-8">
-                            <select name=super-dept id="super-id" class="form-control" onchange="filterDepartments(this.value);">
-                                <option value=""></option>
-                                <?php
-                                $supers = $dbc->query('
-                                    SELECT superID, super_name
-                                    FROM superDeptNames
-                                    ORDER BY superID');         
-                                while ($row = $dbc->fetch_row($supers)) {
-                                    printf('<option value="%d">%s</option>',
-                                        $row['superID'], $row['super_name']);
-                                }
-                                ?>
-                                <option value="-2">All Retail</option>
-                                <option value="-1">All</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="row form-group form-horizontal">
-                        <label class="control-label col-sm-3">Dept. Start</label>
-                        <div class="col-sm-6">
-                            <select onchange="$('#deptStart').val(this.value); filterSubs();" 
-                                id="dept-start-select" class="form-control input-sm">
-                            <?php
-                            $depts = array();
-                            $res = $dbc->query('
-                                SELECT dept_no, dept_name
-                                FROM departments
-                                ORDER BY dept_no');
-                            while ($w = $dbc->fetch_row($res)) {
-                                $depts[$w['dept_no']] = $w['dept_name'];
-                            }
-                            foreach ($depts as $id => $name) {
-                                printf('<option value="%d">%d %s</option>',
-                                    $id, $id, $name);
-                            }
-                            ?>
-                            </select>
-                        </div>
-                        <div class="col-sm-2">
-                            <input type=text id=deptStart name=dept-start 
-                                class="form-control input-sm" value=1>
-                        </div>
-                    </div>
-                    <div class="form-group form-horizontal row">
-                        <label class="control-label col-sm-3">Dept. End</label>
-                        <div class="col-sm-6">
-                            <select onchange="$('#deptEnd').val(this.value); filterSubs();"
-                                id="dept-end-select" class="form-control input-sm">
-                            <?php
-                            foreach ($depts as $id => $name) {
-                                printf('<option value="%d">%d %s</option>',
-                                    $id, $id, $name);
-                            }
-                            ?>
-                            </select>
-                        </div>
-                        <div class="col-sm-2">
-                            <input type=text id=deptEnd name=dept-end 
-                                class="form-control input-sm" value=1>
-                        </div>
-                    </div>
-                    <div class="form-group form-horizontal row">
-                        <label class="control-label col-sm-3">Sub Start</label>
-                        <div class="col-sm-6">
-                            <select id="sub-start" name="sub-start" class="form-control">
-                            <option value="">Select dept</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="form-group form-horizontal row">
-                        <label class="control-label col-sm-3">Sub End</label>
-                        <div class="col-sm-6">
-                            <select id="sub-end" name="sub-end" class="form-control">
-                            <option value="">Select dept</option>
-                            </select>
-                        </div>
+                    <div class="form-horizontal">
+                        <?php echo self::standardDepartmentFields('super-dept', 'departments', 'dept-start', 'dept-end'); ?>
                     </div>
                 </div>
                 <div class="tab-pane" id="manu-tab">
@@ -675,6 +353,167 @@ class FormLib
     }
 
     /**
+      Draw a standard set of bootstrap'd department fields
+      with javascript chaining as they change
+      @param $super [string, default 'super'] name of the super department <select>
+      @param $multi [string, default 'departments'] name of the department multi <select>
+      @param $start [string, default 'deptStart'] name of the department start single <select>
+      @param $end [string, default 'deptEnd'] name of the department end single <select>
+      @param $subs [string, default 'subdepts'] name of the subdepartment multi <select>
+      @return [string] HTML
+    */
+    public static function standardDepartmentFields($super='super',$multi='departments',$start='deptStart',$end='deptEnd', $subs='subdepts')
+    {
+        /**
+          Precalculate options for superdept and dept selects
+        */
+        $dbc = FannieDB::getReadOnly(FannieConfig::config('OP_DB'));
+        $def = $dbc->tableDefinition('superDeptNames');
+        $superQ = 'SELECT superID, super_name FROM superDeptNames';
+        if (isset($def['deleted'])) {
+            $superQ .= ' WHERE deleted=0 ';
+        }
+        $superR = $dbc->query($superQ);
+        $super_opts = '';
+        while ($w = $dbc->fetchRow($superR)) {
+            $super_opts .= sprintf('<option value="%d">%s</option>',
+                $w['superID'], $w['super_name']) . "\n";
+        }
+        $deptR = $dbc->query('SELECT dept_no, dept_name FROM departments ORDER BY dept_no');
+        $dept_opts = '';
+        while ($w = $dbc->fetchRow($deptR)) {
+            $dept_opts .= sprintf('<option value="%d">%d %s</option>',
+                $w['dept_no'], $w['dept_no'], $w['dept_name']) . "\n";
+        }
+
+        /**
+          Store javascript chaining function calls in variables
+          the sub chaining one is repeated a bunch. The super chaining
+          one depends which type of department <select>s are shown
+          They're also ridiculously long argument lists.
+        */
+        $url = FannieConfig::config('URL');
+        $chainsubs = "chainSubDepartments('{$url}ws/', {super_id:'#super-id', dept_start:'#dept-start-txt', dept_end:'#dept-end-txt', sub_multiple:'#subdepts'})";
+        $onchange = "chainSuperDepartment('{$url}ws/', this.value, {dept_multiple:'#departments',dept_start:'#dept-start',dept_end:'#dept-end',dept_start_id:'#dept-start-txt',dept_end_id:'#dept-end-txt',callback:function(){ $chainsubs; }})";
+
+        /**
+          The rest of this method uses HEREDOC style strings with
+          {{PLACEHOLDERS}} and substitutes PHP variables in after the
+          fact. This is an uncommon coding style in the overall project
+          but the HTML is easier to read
+        */
+
+        $ret = <<<HTML
+<div class="form-group">
+    <label class="col-sm-4 control-label">Super Department</label>
+    <div class="col-sm-8">
+        <select name="{{SUPER_FIELD_NAME}}" id="super-id" class="form-control" onchange="{{SUPER_ONCHANGE}};">
+            <option value="">Select super department</option>
+            {{SUPER_OPTS}}
+            <option value="-2">All Retail</option><option value="-1">All</option>
+        </select>
+    </div>
+</div>
+HTML;
+        $ret = str_replace('{{SUPER_FIELD_NAME}}', $super, $ret);
+        $ret = str_replace('{{SUPER_ONCHANGE}}', $onchange, $ret);
+        $ret = str_replace('{{SUPER_OPTS}}', $super_opts, $ret);
+
+        $m_collapse = '';
+        $p_collapse = '';
+        $m_disabled = '';
+        $p_disabled = '';
+        if (FannieConfig::config('REPORT_DEPT_MODE') == 'multi') {
+            $p_collapse = 'collapse';
+            $p_disabled = 'disabled';
+        } else {
+            $m_collapse = 'collapse';
+            $m_disabled = 'disabled';
+        }
+        $ret .= <<<HTML
+<div class="form-group {{m_collapse}}" id="multi-dept">
+    <label class="col-sm-4 control-label">
+        <a href="" 
+            onclick="$('#multi-dept :input').prop('disabled', true);$('.pair-dept :input').prop('disabled', false);$('#multi-dept').hide();$('.pair-dept').show();return false;">
+            <span class="glyphicon glyphicon-refresh"
+                title="Choose range of departments"></span>
+        </a>
+        Department(s)
+    </label>
+    <div class="col-sm-8">
+        <select id="departments" name="{{DEPT_MULTI}}[]" class="form-control" 
+            multiple size="10" onchange="{{DEPT_ONCHANGE}};" {{m_disabled}}>';
+            {{DEPT_OPTS}}
+        </select>
+    </div>
+</div>
+HTML;
+        $ret = str_replace('{{DEPT_MULTI}}', $multi, $ret);
+        $ret = str_replace('{{m_collapse}}', $m_collapse, $ret);
+        $ret = str_replace('{{m_disabled}}', $m_disabled, $ret);
+
+        $ret .= <<<HTML
+<div class="form-group pair-dept {{p_collapse}}">
+    <label class="col-sm-4 control-label">
+        <a href="" 
+            onclick="$('.pair-dept :input').prop('disabled', true);$('#multi-dept :input').prop('disabled', false);$('.pair-dept').hide();$('#multi-dept').show();return false;">
+            <span class="glyphicon glyphicon-refresh"
+                title="Choose individual department(s)"></span>
+        </a>
+        Department Start
+    </label>
+    <div class="col-sm-6">
+        <select id="dept-start" class="form-control" {{p_disabled}}
+            onchange="$('#dept-start-txt').val(this.value); $('#dept-end').val(this.value); 
+            $('#dept-end-txt').val(this.value); {{DEPT_ONCHANGE}};">
+            {{DEPT_OPTS}}
+        </select>
+    </div>
+    <div class="col-sm-2">
+        <input type="text" name="{{DEPT_START}}" id="dept-start-txt" 
+            onchange="$('#dept-start').val(this.value); $('#dept-end').val(this.value);
+            $('#dept-end-txt').val(this.value); {{DEPT_ONCHANGE}};"
+            class="form-control" value="1" {{p_disabled}} />
+    </div>
+</div>
+<div class="form-group pair-dept {{p_collapse}}">
+    <label class="col-sm-4 control-label">Department End</label>
+    <div class="col-sm-6">
+        <select id="dept-end" class="form-control" {{p_disabled}}
+            onchange="$('#dept-end-txt').val(this.value); {{DEPT_ONCHANGE}};">
+            {{DEPT_OPTS}}
+        </select>
+    </div>
+    <div class="col-sm-2">
+    <input type="text" name="{{DEPT_END}}" id="dept-end-txt" 
+        onchange="$('#dept-end').val(this.value); {{DEPT_ONCHANGE}};"
+        class="form-control" value="1" {{p_disabled}} />
+    </div>
+</div>
+HTML;
+        $ret = str_replace('{{DEPT_START}}', $start, $ret);
+        $ret = str_replace('{{DEPT_END}}', $end, $ret);
+
+        $ret = str_replace('{{DEPT_OPTS}}', $dept_opts, $ret);
+        $ret = str_replace('{{DEPT_ONCHANGE}}', $chainsubs, $ret);
+        $ret = str_replace('{{p_collapse}}', $p_collapse, $ret);
+        $ret = str_replace('{{p_disabled}}', $p_disabled, $ret);
+
+        $ret .= <<<HTML
+<div class="form-group">
+    <label class="col-sm-4 control-label">Sub Dept(s)</label>
+    <div class="col-sm-8">
+        <select id="subdepts" name="{{SUBS_NAME}}[]" class="form-control" multiple size="5">
+        </select>
+    </div>
+</div>
+HTML;
+        $ret = str_replace('{{SUBS_NAME}}', $subs, $ret);
+
+        return $ret;
+    }
+
+    /**
       Generate standard date fields with date_range_picker
     */
     public static function standardDateFields()
@@ -710,19 +549,27 @@ class FormLib
     static public function standardItemFromWhere()
     {
         $op_db = FannieConfig::config('OP_DB');
-        $dbc = FannieDB::get($op_db);
+        $dbc = FannieDB::getReadOnly($op_db);
         $start_date = self::getDate('date1', date('Y-m-d'));
         $end_date = self::getDate('date2', date('Y-m-d'));
         $dlog = DTransactionsModel::selectDlog($start_date, $end_date);
         $lookupType = self::get('lookup-type', 'dept');
+        $store = self::get('store', false);
+        if ($store === false) {
+            $store = COREPOS\Fannie\API\lib\Store::getIdByIp();
+            if ($store === false) {
+                $store = 0;
+            }
+        }
 
         $query = '
             FROM ' . $dlog . ' AS t 
                 LEFT JOIN departments AS d ON t.department=d.dept_no
-                LEFT JOIN products AS p ON t.upc=p.upc 
+                ' . DTrans::joinProducts('t') . '
                 LEFT JOIN MasterSuperDepts AS m ON t.department=m.dept_ID 
-                LEFT JOIN subdepts AS b ON t.department=b.dept_ID
+                LEFT JOIN subdepts AS b ON p.subdept=b.subdept_no
                 LEFT JOIN vendors AS v ON p.default_vendor_id=v.vendorID
+                LEFT JOIN vendorItems AS i ON p.upc=i.upc AND p.default_vendor_id=i.vendorID
                 LEFT JOIN prodExtra AS x ON t.upc=x.upc ';
         $args = array();
         switch ($lookupType) {
@@ -745,6 +592,8 @@ class FormLib
         $query .= ' WHERE t.tdate BETWEEN ? AND ? ';
         $args[] = $start_date . ' 00:00:00';
         $args[] = $end_date . ' 23:59:59';
+        $query .= ' AND ' . DTrans::isStoreID($store, 't') . ' ';
+        $args[] = $store;
 
         switch ($lookupType) {
             case 'dept':
@@ -752,28 +601,53 @@ class FormLib
                 if ($super !== '' && $super >= 0) {
                     $query .= ' AND s.superID=? ';
                     $args[] = $super;
-                    if (FormLib::get('dept-start') !== '' && FormLib::get('dept-end') !== '') {
+                    if (is_array(FormLib::get('departments')) && count(FormLib::get('departments')) > 0) {
+                        $query .= ' AND t.department IN (';
+                        foreach (FormLib::get('departments') as $d) {
+                            $query .= '?,';
+                            $args[] = $d;
+                        }
+                        $query = substr($query, 0, strlen($query)-1) . ')';
+                    } elseif (FormLib::get('dept-start') !== '' && FormLib::get('dept-end') !== '') {
                         $query .= ' AND t.department BETWEEN ? AND ? ';
                         $args[] = FormLib::get('dept-start');
                         $args[] = FormLib::get('dept-end');
                     }
                 } elseif ($super !== '' && $super == -2) {
                     $query .= ' AND m.superID <> 0 ';
-                    if (FormLib::get('dept-start') !== '' && FormLib::get('dept-end') !== '') {
+                    if (is_array(FormLib::get('departments')) && count(FormLib::get('departments')) > 0) {
+                        $query .= ' AND t.department IN (';
+                        foreach (FormLib::get('departments') as $d) {
+                            $query .= '?,';
+                            $args[] = $d;
+                        }
+                        $query = substr($query, 0, strlen($query)-1) . ')';
+                    } elseif (FormLib::get('dept-start') !== '' && FormLib::get('dept-end') !== '') {
                         $query .= ' AND t.department BETWEEN ? AND ? ';
                         $args[] = FormLib::get('dept-start');
                         $args[] = FormLib::get('dept-end');
                     }
                 } elseif ($super === '') {
-                    $query .= ' AND t.department BETWEEN ? AND ? ';
-                    $args[] = FormLib::get('dept-start', 1);
-                    $args[] = FormLib::get('dept-end', 1);
+                    if (is_array(FormLib::get('departments')) && count(FormLib::get('departments')) > 0) {
+                        $query .= ' AND t.department IN (';
+                        foreach (FormLib::get('departments') as $d) {
+                            $query .= '?,';
+                            $args[] = $d;
+                        }
+                        $query = substr($query, 0, strlen($query)-1) . ')';
+                    } else {
+                        $query .= ' AND t.department BETWEEN ? AND ? ';
+                        $args[] = FormLib::get('dept-start', 1);
+                        $args[] = FormLib::get('dept-end', 1);
+                    }
                 }
-                if (FormLib::get('sub-start') !== '' && FormLib::get('sub-end') !== '') {
-                    $query .= ' AND b.subdept_no BETWEEN ? AND ? 
-                                AND p.subdept=b.subdept_no ';
-                    $args[] = FormLib::get('sub-start');
-                    $args[] = FormLib::get('sub-end');
+                if (is_array(FormLib::get('subdepts')) && count(FormLib::get('subdepts')) > 0) {
+                    $query .= ' AND p.subdept IN (';
+                    foreach (FormLib::get('subdepts') as $s) {
+                        $query .= '?,';
+                        $args[] = $s;
+                    }
+                    $query = substr($query, 0, strlen($query)-1) . ')';
                 }
                 break;
             case 'manu':
@@ -814,7 +688,7 @@ class FormLib
                     FROM products AS p
                         LEFT JOIN prodExtra AS x ON p.upc=x.upc
                         LEFT JOIN vendors AS v ON x.distributor=v.vendorName
-                    WHERE (p.default_vendor_id=? OR v.vendorID=?
+                    WHERE (p.default_vendor_id=? OR v.vendorID=?)
                     GROUP BY p.department');
                 $optimizeR = $dbc->execute($optimizeP, array($vID, $vID));
                 $dept_in = '';
@@ -882,5 +756,45 @@ class FormLib
         }
     }
 
+    /**
+      Convert a query string to a JSON object
+      representing field names and values
+    */
+    public static function queryStringToJSON($str)
+    {
+        $ret = array();
+        $pairs = explode('&', $str);
+        foreach ($pairs as $pair) {
+            if (substr($pair, -1) == '=') {
+                $ret[substr($pair, 0, strlen($pair)-1)] = '';
+            } elseif (strstr($pair, '=')) {
+                list($key, $val) = explode('=', $pair, 2);
+                $ret[$key] = $val;
+            }
+        }
+
+        return json_encode($ret);
+    }
+
+    /**
+      Generate javascript that will initialize fields
+      based on names and values in the JSON object
+    */
+    public static function fieldJSONtoJavascript($json)
+    {
+        $arr = json_decode($json, true);
+        if (!is_array($arr)) {
+            return false;
+        }
+        return array_reduce(array_keys($arr), function($carry, $key) use ($arr) {
+            $val = $arr[$key];
+            $carry .= sprintf("if (\$('input[type=\"checkbox\"][name=\"%s\"]').length) {\n", $key);
+            $carry .= sprintf("\$('input[type=\"checkbox\"][name=\"%s\"]').prop('checked',true);\n", $key);
+            $carry .= "} else {\n";
+            $carry .= sprintf("\$('[name=\"%s\"]').filter(':input').val('%s');\n", $key, $val);
+            $carry .= "}\n";
+            return $carry;
+        }, '');
+    }
 }
 

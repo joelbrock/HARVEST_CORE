@@ -44,10 +44,10 @@ class CashierPerformanceReport extends FannieReportPage
 
     function fetch_report_data()
     {
-        global $FANNIE_OP_DB, $FANNIE_ARCHIVE_DB, $FANNIE_TRANS_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
-        $date1 = FormLib::get_form_value('date1',date('Y-m-d'));
-        $date2 = FormLib::get_form_value('date2',date('Y-m-d'));
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
+        $date1 = $this->form->date1;
+        $date2 = $this->form->date2;
         $emp_no = FormLib::get('emp_no', false);
 
         $dtrans = DTransactionsModel::selectDTrans($date1,$date2);
@@ -55,7 +55,7 @@ class CashierPerformanceReport extends FannieReportPage
         $detailP = $dbc->prepare('
             SELECT SUM(CASE WHEN transInterval > 600 THEN 600 ELSE transInterval END) AS seconds,
                 COUNT(*) AS numTrans
-            FROM ' . $FANNIE_TRANS_DB . $dbc->sep() . 'CashPerformDay
+            FROM ' . $this->config->get('TRANS_DB') . $dbc->sep() . 'CashPerformDay
             WHERE proc_date BETWEEN ? AND ?
                 AND emp_no = ?
         ');
@@ -120,7 +120,7 @@ class CashierPerformanceReport extends FannieReportPage
             $minutes = $time / 60.0;
             $record[] = $trans;
             $record[] = sprintf('%.2f', $time / 60.0);
-            $record[] = sprintf('%.2f', $row['rings'] / $minutes);
+            $record[] = sprintf('%.2f', $this->safeDivide($row['rings'], $minutes));
             $data[] = $record;
         }
 
@@ -165,6 +165,7 @@ class CashierPerformanceReport extends FannieReportPage
     function form_content()
     {
         global $FANNIE_URL;
+        ob_start();
 ?>
 <form method = "get" action="<?php echo $_SERVER['PHP_SELF']; ?>">
 <div class="col-sm-4">
@@ -186,8 +187,8 @@ class CashierPerformanceReport extends FannieReportPage
         <label for="excel">Excel</label>
     </div>
     <p>
-        <button type=submit class="btn btn-default">Submit</button>
-        <button type=reset class="btn btn-default">Start Over</button>
+        <button type=submit class="btn btn-default btn-submit">Submit</button>
+        <button type=reset class="btn btn-default btn-reset">Start Over</button>
     </p>
 </div>
 <div class="col-sm-4">
@@ -195,6 +196,7 @@ class CashierPerformanceReport extends FannieReportPage
 </div>
 </form>
 <?php
+        return ob_get_clean();
     }
 
     public function helpContent()
@@ -222,6 +224,5 @@ class CashierPerformanceReport extends FannieReportPage
     }
 }
 
-FannieDispatch::conditionalExec(false);
+FannieDispatch::conditionalExec();
 
-?>

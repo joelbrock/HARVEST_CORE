@@ -34,6 +34,8 @@ class FannieDB
 
     private static $db = null;
 
+    private static $read_only = null;
+
     private function __construct(){}
 
     /**
@@ -43,7 +45,7 @@ class FannieDB
     */
     public static function get($db_name, &$previous_db=null)
     {
-        if (!self::dbIsConfigured()) {
+        if (!is_string($db_name) || !self::dbIsConfigured()) {
             return false;
         } else if (self::$db == null) {
             $previous_db = $db_name;
@@ -58,6 +60,20 @@ class FannieDB
         self::$db->setDefaultDB($db_name);
 
         return self::$db;
+    }
+
+    /**
+      This method exists to support unit testing where test runs
+      that take several minutes may run into issues with the
+      single database connection timing out.
+    */
+    public static function forceReconnect($db_name)
+    {
+        if (self::$db !== null) {
+            self::$db->close('', true);
+            self::$db = null;
+        }
+        return self::get($db_name);
     }
 
     private static function dbIsConfigured()
@@ -89,6 +105,45 @@ class FannieDB
     private static function addDB($db_name)
     {
         self::$db->selectDB($db_name);
+    }
+
+    /**
+      Get a read-only database connection
+      @param $db_name the database name
+      
+      Unlike the normal get() method which returns
+      a connection to the master database server,
+      multiple read-only databases might be available. 
+      Load balancing among them is simply random.
+    */
+    public static function getReadOnly($db_name)
+    {
+        if (self::$read_only === null) {
+            $config = FannieConfig::factory();
+            $json = json_decode($config->get('READONLY_JSON'), true);
+            if (!is_array($json)) {
+                return self::get($db_name);
+            }
+
+            $key = mt_rand(0, count($json)-1);
+            $pick = $json[$key];
+            if (!isset($pick['host']) || !isset($pick['type']) || !isset($pick['user']) || !isset($pick['pw'])) {
+                return self::get($db_name);
+            }
+
+            self::$read_only = new SQLManager(
+                $pick['host'],
+                $pick['type'],
+                $db_name,
+                $pick['user'],
+                $pick['pw'],
+                false,
+                true);
+        } else {
+            self::$read_only->selectDB($db_name);
+        }
+
+        return self::$read_only;
     }
 }
 

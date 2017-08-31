@@ -29,7 +29,7 @@
  * For bootstrapped v.2 re-code the table with floating divs.
  */
 
-class CoopCredMember extends MemberModule 
+class CoopCredMember extends COREPOS\Fannie\API\member\MemberModule 
 {
 
     protected $regularMemberMin = 1;
@@ -104,8 +104,8 @@ class CoopCredMember extends MemberModule
             FROM CCredPrograms
             WHERE active =1
             ORDER BY programName ASC";
-        $progS = $dbc->prepare_statement($progQ);
-        $progR = $dbc->exec_statement($progS,array());
+        $progS = $dbc->prepare($progQ);
+        $progR = $dbc->execute($progS,array());
         $ccred_programs = array();
         $pID = '';  // format: P01
         $firstMpID = ''; // a $pID
@@ -147,8 +147,8 @@ class CoopCredMember extends MemberModule
                 JOIN CCredPrograms AS p ON m.programID = p.programID
                 WHERE m.cardNo =?
                     AND p.active =1";
-        $infoS = $dbc->prepare_statement($infoQ);
-        $infoR = $dbc->exec_statement($infoS,array($memNum));
+        $infoS = $dbc->prepare($infoQ);
+        $infoR = $dbc->execute($infoS,array($memNum));
 
         $membershipCount = 0;
         $firstCreditOK = ($inProgramID > -1)?1:0;
@@ -317,15 +317,17 @@ class CoopCredMember extends MemberModule
         if ($memNum == $programBankNumber) {
             $today = date('Y-m-d');
             $cellContent = "<p style='margin:0em; font-family:Arial;line-height:1.0em;'>
-                <a href=\"{$FANNIE_URL}{$this->pluginHome}reports/Program/".
-                "ProgramReport.php?date1=&amp;date2=&amp;card_no={$memNum}".
+                <a href=\"{$FANNIE_URL}{$this->pluginHome}reports/ProgramEvents/".
+                "ProgramEventsReport.php?date1=&amp;date2=&amp;card_no={$memNum}".
+                "&amp;sortable=on" .
                 "&amp;programID={$programID}\"
                 title='List inputs to and payments from the program before today'
                 target='_coop_cred_events'
                 >Event History</a>
                 <br />
-                <a href=\"{$FANNIE_URL}{$this->pluginHome}reports/Program/".
-                "ProgramReport.php?date1={$today}&amp;date2={$today}".
+                <a href=\"{$FANNIE_URL}{$this->pluginHome}reports/ProgramEvents/".
+                "ProgramEventsReport.php?date1={$today}&amp;date2={$today}".
+                "&amp;sortable=on" .
                 "&amp;other_dates=on&amp;submit=Submit&amp;card_no={$memNum}".
                 "&amp;programID={$programID}\"
                 title='List inputs to and payments from the program today'
@@ -457,7 +459,7 @@ class CoopCredMember extends MemberModule
      * If member not in CCredMemberships for this program
      *  add to CCRedMembers IFF creditOK ticked.
      */
-    function SaveFormData($memNum)
+    public function saveFormData($memNum, $json=array())
     {
         global $FANNIE_ROOT;
         //$dbc = $this->db();

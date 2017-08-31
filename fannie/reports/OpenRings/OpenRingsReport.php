@@ -29,7 +29,6 @@ if (!class_exists('FannieAPI')) {
 class OpenRingsReport extends FannieReportPage 
 {
     public $description = '[Open Rings] shows UPC-less sales for a department or group of departments over a given date range.';
-    public $themed = true;
     public $report_set = 'Transaction Reports';
 
     protected $title = "Fannie : Open Rings Report";
@@ -60,13 +59,14 @@ class OpenRingsReport extends FannieReportPage
 
     public function fetch_report_data()
     {
-        global $FANNIE_OP_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
 
-        $date1 = FormLib::get('date1', date('Y-m-d'));
-        $date2 = FormLib::get('date2', date('Y-m-d'));
+        $date1 = $this->form->date1;
+        $date2 = $this->form->date2;
         $deptStart = FormLib::get('deptStart');
         $deptEnd = FormLib::get('deptEnd');
+        $deptMulti = FormLib::get('departments', array());
     
         $buyer = FormLib::get('buyer', '');
 
@@ -76,15 +76,15 @@ class OpenRingsReport extends FannieReportPage
         $where = ' 1=1 ';
         if ($buyer !== '') {
             if ($buyer > -1) {
-                $where = ' s.superID=? ';
+                $where .= ' AND s.superID=? ';
                 $args[] = $buyer;
             } elseif ($buyer == -2) {
-                $where = ' s.superID <> 0 ';
+                $where .= ' AND s.superID <> 0 ';
             }
-        } else {
-            $where = ' d.department BETWEEN ? AND ? ';
-            $args[] = $deptStart;
-            $args[] = $deptEnd;
+        }
+        if ($buyer != -1) {
+            list($conditional, $args) = DTrans::departmentClause($deptStart, $deptEnd, $deptMulti, $args);
+            $where .= $conditional;
         }
 
         $tempTables = array(
@@ -116,22 +116,25 @@ class OpenRingsReport extends FannieReportPage
             GROUP BY year(tdate),month(tdate),day(tdate)
             ORDER BY year(tdate),month(tdate),day(tdate)";
 
-        $prep = $dbc->prepare_statement($query);
-        $result = $dbc->exec_statement($query, $args);
+        $prep = $dbc->prepare($query);
+        $result = $dbc->execute($query, $args);
 
         $data = array();
-        while($row = $dbc->fetch_row($result)) {
-            $record = array(
-                sprintf('%d/%d/%d', $row[1], $row[2], $row[0]),
-                sprintf('%.2f', $row['total']),
-                sprintf('%.2f', $row['qty']),
-                sprintf('%.2f%%', $row['percentage']*100),
-            );
-
-            $data[] = $record;
+        while ($row = $dbc->fetchRow($result)) {
+            $data[] = $this->rowToRecord($row);
         }
 
         return $data;
+    }
+    
+    private function rowToRecord($row)
+    {
+        return array(
+            sprintf('%d/%d/%d', $row[1], $row[2], $row[0]),
+            sprintf('%.2f', $row['total']),
+            sprintf('%.2f', $row['qty']),
+            sprintf('%.2f%%', $row['percentage']*100),
+        );
     }
 
     public function calculate_footers($data)
@@ -156,67 +159,12 @@ class OpenRingsReport extends FannieReportPage
 
     public function form_content()
     {
-        global $FANNIE_OP_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
-
-        $deptsQ = $dbc->prepare_statement("select dept_no,dept_name from departments order by dept_no");
-        $deptsR = $dbc->exec_statement($deptsQ);
-        $deptsList = "";
-
-        $deptSubQ = $dbc->prepare_statement("SELECT superID,super_name FROM superDeptNames
-                WHERE superID <> 0 
-                ORDER BY superID");
-        $deptSubR = $dbc->exec_statement($deptSubQ);
-
-        $deptSubList = "";
-        while($deptSubW = $dbc->fetch_array($deptSubR)) {
-            $deptSubList .=" <option value=$deptSubW[0]>$deptSubW[1]</option>";
-        }
-        while ($deptsW = $dbc->fetch_array($deptsR)) {
-            $deptsList .= "<option value=$deptsW[0]>$deptsW[0] $deptsW[1]</option>";
-        }
-
         ob_start();
         ?>
-<div class="well">Selecting a Buyer/Dept overrides Department Start/Department End, but not Date Start/End.
-        To run reports for a specific department(s) leave Buyer/Dept or set it to 'blank'
-</div>
-<form method="get" action="OpenRingsReport.php" class="form-horizontal">
+<form method="get" class="form-horizontal">
 <div class="row">
-    <div class="col-sm-5">
-        <div class="form-group">
-            <label class="control-label col-sm-4">Select Buyer/Dept</label>
-            <div class="col-sm-8">
-            <select id=buyer name=buyer class="form-control">>
-               <option value="">
-               <?php echo $deptSubList; ?>
-               <option value=-2 >All Retail</option>
-               <option value=-1 >All</option>
-           </select>
-           </div>
-        </div>
-        <div class="form-group">
-            <label class="control-label col-sm-4">Department Start</label>
-            <div class="col-sm-6">
-            <select id=deptStartSel onchange="$('#deptStart').val(this.value);" class="form-control col-sm-6">
-                <?php echo $deptsList ?>
-            </select>
-            </div>
-            <div class="col-sm-2">
-            <input type=number name=deptStart id=deptStart size=5 value=1 class="form-control col-sm-2" />
-            </div>
-        </div>
-        <div class="form-group">
-            <label class="control-label col-sm-4">Department End</label>
-            <div class="col-sm-6">
-                <select id=deptEndSel onchange="$('#deptEnd').val(this.value);" class="form-control">
-                    <?php echo $deptsList ?>
-                </select>
-            </div>
-            <div class="col-sm-2">
-                <input type=number name=deptEnd id=deptEnd size=5 value=1 class="form-control" />
-            </div>
-        </div>
+    <div class="col-sm-6">
+        <?php echo FormLib::standardDepartmentFields('buyer'); ?>
         <div class="form-group">
             <label class="control-label col-sm-4">Save to Excel
                 <input type=checkbox name=excel id=excel value=1>
@@ -246,8 +194,9 @@ class OpenRingsReport extends FannieReportPage
     </div>
 </div>
 <p>
-    <button type=submit name=submit value="Submit" class="btn btn-default">Submit</button>
-    <button type=reset name=reset class="btn btn-default">Start Over</button>
+    <button type=submit name=submit value="Submit" class="btn btn-default btn-core">Submit</button>
+    <button type=reset name=reset class="btn btn-default btn-reset"
+        onclick="$('#super-id').val('').trigger('change');">Start Over</button>
 </p>
 </form>
         <?php
@@ -263,8 +212,14 @@ class OpenRingsReport extends FannieReportPage
             The percentage is relative to all items sold in that set of departments
             that day.</p>';
     }
+
+    public function unitTest($phpunit)
+    {
+        $data = array(0=>2000, 1=>1, 2=>2, 'total'=>1, 'qty'=>1, 'percentage'=>1);
+        $phpunit->assertInternalType('array', $this->rowToRecord($data));
+        $phpunit->assertInternalType('array', $this->calculate_footers($this->dekey_array(array($data))));
+    }
 }
 
 FannieDispatch::conditionalExec();
 
-?>

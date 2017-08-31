@@ -21,24 +21,27 @@
 
 *********************************************************************************/
 
+use COREPOS\pos\lib\gui\NoInputCorePage;
+use COREPOS\pos\lib\TransRecord;
+
 include_once(dirname(__FILE__).'/../lib/AutoLoader.php');
 
-class bigComment extends NoInputPage {
-
+class bigComment extends NoInputCorePage 
+{
     /**
       Input processing function
     */
     function preprocess()
     {
         // a selection was made
-        if (isset($_REQUEST['comment'])){
+        if ($this->form->tryGet('comment') !== '') {
 
-            if (isset($_REQUEST['cleared']) && $_REQUEST['cleared'] == '1'){
+            if ($this->form->tryGet('cleared') === '1') {
                 $this->change_page($this->page_url."gui-modules/pos2.php");
                 return False;
             }
             
-            $comment = str_replace("\r",'',$_REQUEST['comment']);
+            $comment = str_replace("\r",'',$this->form->comment);
             // remove trailing newline from double enter
             $comment = substr($comment,0,strlen($comment)-1);
             $lines = explode("\n", $comment);
@@ -107,7 +110,7 @@ class bigComment extends NoInputPage {
     {
         echo "<div class=\"baseHeight\">"
             ."<div class=\"listbox\">"
-            ."<form name=\"selectform\" method=\"post\" action=\"{$_SERVER['PHP_SELF']}\""
+            ."<form name=\"selectform\" method=\"post\" action=\"" . filter_input(INPUT_SERVER, 'PHP_SELF') . "\""
             ." id=\"selectform\">"
             ."<textarea name=\"comment\" id=\"comment\" "
             ." cols=\"35\" rows=\"15\" onblur=\"\$('#comment').focus();\">";
@@ -129,7 +132,5 @@ class bigComment extends NoInputPage {
 
 }
 
-if (basename(__FILE__) == basename($_SERVER['PHP_SELF']))
-    new bigComment();
+AutoLoader::dispatch();
 
-?>

@@ -37,16 +37,20 @@ class DepartmentMovementReport extends FannieReportPage
     public $report_set = 'Movement Reports';
     public $themed = true;
 
+    protected $new_tablesorter = true;
+
     /**
       Lots of options on this report.
     */
     function fetch_report_data()
     {
-        $dbc = FannieDB::get($this->config->get('OP_DB'));
-        $date1 = FormLib::getDate('date1',date('Y-m-d'));
-        $date2 = FormLib::getDate('date2',date('Y-m-d'));
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
+        $date1 = $this->form->date1;
+        $date2 = $this->form->date2;
         $deptStart = FormLib::get_form_value('deptStart','');
         $deptEnd = FormLib::get_form_value('deptEnd','');
+        $deptMulti = FormLib::get('departments', array());
         $buyer = FormLib::get_form_value('buyer','');
         $groupby = FormLib::get_form_value('sort','PLU');
         $store = FormLib::get('store', 0);
@@ -64,21 +68,17 @@ class DepartmentMovementReport extends FannieReportPage
         */
         $filter_condition = 't.department BETWEEN ? AND ?';
         $args = array($deptStart,$deptEnd);
+        if (count($deptMulti) > 0) {
+            list($inStr, $args) = $dbc->safeInClause($deptMulti);
+            $filter_condition = 't.department IN (' . $inStr . ') ';
+        }
         if ($buyer !== "" && $buyer > 0) {
-            $superR = $dbc->execute($superP, array($buyer));
-            $filter_condition = 't.department IN (';
-            $args = array();
-            while ($superW = $dbc->fetch_row($superR)) {
-                $filter_condition .= '?,';
-                $args[] = $superW['dept_ID'];
-            }
-            $filter_condition = substr($filter_condition, 0, strlen($filter_condition)-1) . ')';
-            $filter_condition .= ' AND s.superID=?';
+            $filter_condition .= ' AND s.superID=? ';
             $args[] = $buyer;
-        } else if ($buyer !== "" && $buyer == -1) {
+        } elseif ($buyer !== "" && $buyer == -1) {
             $filter_condition = "1=1";
             $args = array();
-        } else if ($buyer !== "" && $buyer == -2){
+        } elseif ($buyer !== "" && $buyer == -2){
             $superR = $dbc->execute($superP, array(0));
             $filter_condition = 't.department NOT IN (0,';
             $args = array();
@@ -118,6 +118,7 @@ class DepartmentMovementReport extends FannieReportPage
         switch($groupby) {
             case 'PLU':
                 $query = "SELECT t.upc,
+                      p.brand,
                       CASE WHEN p.description IS NULL THEN t.description ELSE p.description END as description, 
                       SUM(CASE WHEN trans_status IN('','0','R') THEN 1 WHEN trans_status='V' THEN -1 ELSE 0 END) as rings,"
                       . DTrans::sumQuantity('t')." as qty,
@@ -201,10 +202,10 @@ class DepartmentMovementReport extends FannieReportPage
           special case to combine year, month, and day into
           a single field
         */
-        $prep = $dbc->prepare_statement($query);
-        $result = $dbc->exec_statement($prep,$args);
+        $prep = $dbc->prepare($query);
+        $result = $dbc->execute($prep,$args);
         $ret = array();
-        while ($row = $dbc->fetch_array($result)) {
+        while ($row = $dbc->fetchRow($result)) {
             $record = array();
             if ($groupby == "Date") {
                 $record[] = $row[1]."/".$row[2]."/".$row[0];
@@ -212,7 +213,7 @@ class DepartmentMovementReport extends FannieReportPage
                 $record[] = sprintf('%.2f', $row[3]);
                 $record[] = sprintf('%.2f', $row[4]);
             } else {
-                for($i=0;$i<$dbc->num_fields($result);$i++) {
+                for($i=0;$i<$dbc->numFields($result);$i++) {
                     if (preg_match('/^\d+\.\d+$/', $row[$i])) {
                         $row[$i] = sprintf('%.2f', $row[$i]);
                     }
@@ -244,50 +245,63 @@ class DepartmentMovementReport extends FannieReportPage
           how the data is grouped
         */
         switch(count($data[0])) {
-            case 9:
-                $this->report_headers = array('UPC','Description','Rings','Qty','$',
-                    'Dept#','Department','Subdept','Vendor');
-                $this->sort_column = 4;
-                $this->sort_direction = 1;
-                $sumQty = 0.0;
-                $sumSales = 0.0;
-                $sumRings = 0.0;
-                foreach($data as $row) {
-                    $sumRings += $row[2];
-                    $sumQty += $row[3];
-                    $sumSales += $row[4];
-                }
-
-                return array('Total',null,$sumRings,$sumQty,$sumSales,'',null,null,null);
-                break;
+            case 10:
+                return $this->upcFooter($data);
             case 4:
                 /**
                   The Department and Weekday datasets are both four
                   columns wide so I have to resort to form parameters
                 */
-                if (FormLib::get_form_value('sort')=='Weekday') {
-                    $this->report_headers = array('Day','Day','Qty','$');
-                    $this->sort_column = 0;
-                    $this->sort_direction = 0;
-                } elseif (FormLib::get_form_value('sort')=='Date') {
-                    $this->report_headers = array('Date','Day','Qty','$');
-                    $this->sort_column = 0;
-                    $this->sort_direction = 0;
-                } else {
-                    $this->report_headers = array('Dept#','Department','Qty','$');
-                    $this->sort_column = 3;
-                    $this->sort_direction = 1;
-                }
-                $sumQty = 0.0;
-                $sumSales = 0.0;
-                foreach($data as $row) {
-                    $sumQty += $row[2];
-                    $sumSales += $row[3];
-                }
-
-                return array('Total',null,$sumQty,$sumSales);
-                break;
+                $this->nonUpcHeaders();
+                return $this->nonUpcFooter($data);
         }
+    }
+
+    private function upcFooter($data)
+    {
+        $this->report_headers = array('UPC','Brand','Description','Rings','Qty','$',
+            'Dept#','Department','Super#','Vendor');
+        $this->sort_column = 4;
+        $this->sort_direction = 1;
+        $sumQty = 0.0;
+        $sumSales = 0.0;
+        $sumRings = 0.0;
+        foreach($data as $row) {
+            $sumRings += $row[3];
+            $sumQty += $row[4];
+            $sumSales += $row[5];
+        }
+
+        return array('Total',null,null,$sumRings,$sumQty,$sumSales,'',null,null,null);
+    }
+
+    private function nonUpcHeaders()
+    {
+        if (FormLib::get_form_value('sort')=='Weekday') {
+            $this->report_headers = array('Day','Day','Qty','$');
+            $this->sort_column = 0;
+            $this->sort_direction = 0;
+        } elseif (FormLib::get_form_value('sort')=='Date') {
+            $this->report_headers = array('Date','Day','Qty','$');
+            $this->sort_column = 0;
+            $this->sort_direction = 0;
+        } else {
+            $this->report_headers = array('Dept#','Department','Qty','$');
+            $this->sort_column = 3;
+            $this->sort_direction = 1;
+        }
+    }
+
+    private function nonUpcFooter($data)
+    {
+        $sumQty = 0.0;
+        $sumSales = 0.0;
+        foreach($data as $row) {
+            $sumQty += $row[2];
+            $sumSales += $row[3];
+        }
+
+        return array('Total',null,$sumQty,$sumSales);
     }
 
     function report_description_content()
@@ -304,63 +318,12 @@ class DepartmentMovementReport extends FannieReportPage
 
     function form_content()
     {
-        $dbc = FannieDB::get($this->config->get('OP_DB'));
-        $deptsQ = $dbc->prepare_statement("select dept_no,dept_name from departments order by dept_no");
-        $deptsR = $dbc->exec_statement($deptsQ);
-        $deptsList = "";
-
-        $deptSubQ = $dbc->prepare_statement("SELECT superID,super_name FROM superDeptNames
-                WHERE superID <> 0 
-                ORDER BY superID");
-        $deptSubR = $dbc->exec_statement($deptSubQ);
-
-        $deptSubList = "";
-        while($deptSubW = $dbc->fetch_array($deptSubR)) {
-            $deptSubList .=" <option value=$deptSubW[0]>$deptSubW[1]</option>";
-        }
-        while ($deptsW = $dbc->fetch_array($deptsR)) {
-            $deptsList .= "<option value=$deptsW[0]>$deptsW[0] $deptsW[1]</option>";
-        }
+        ob_start();
 ?>
-<div class="well">Selecting a Buyer/Dept overrides Department Start/Department End, but not Date Start/End.
-        To run reports for a specific department(s) leave Buyer/Dept or set it to 'blank'
-</div>
 <form method = "get" action="DepartmentMovementReport.php" class="form-horizontal">
 <div class="row">
     <div class="col-sm-6">
-        <div class="form-group">
-            <label class="control-label col-sm-4">Select Buyer/Dept</label>
-            <div class="col-sm-8">
-            <select id=buyer name=buyer class="form-control">
-               <option value=0 >
-               <?php echo $deptSubList; ?>
-               <option value=-2 >All Retail</option>
-               <option value=-1 >All</option>
-           </select>
-           </div>
-        </div>
-        <div class="form-group">
-            <label class="control-label col-sm-4">Department Start</label>
-            <div class="col-sm-6">
-            <select id=deptStartSel onchange="$('#deptStart').val(this.value);" class="form-control col-sm-6 input-sm">
-                <?php echo $deptsList ?>
-            </select>
-            </div>
-            <div class="col-sm-2">
-            <input type=text name=deptStart id=deptStart value=1 class="form-control col-sm-2 input-sm" />
-            </div>
-        </div>
-        <div class="form-group">
-            <label class="control-label col-sm-4">Department End</label>
-            <div class="col-sm-6">
-                <select id=deptEndSel onchange="$('#deptEnd').val(this.value);" class="form-control input-sm">
-                    <?php echo $deptsList ?>
-                </select>
-            </div>
-            <div class="col-sm-2">
-                <input type=text name=deptEnd id=deptEnd value=1 class="form-control input-sm" />
-            </div>
-        </div>
+        <?php echo FormLib::standardDepartmentFields('buyer', 'departments', 'deptStart', 'deptEnd'); ?>
         <div class="form-group">
             <label class="col-sm-4 control-label">Sum movement by?</label>
             <div class="col-sm-8">
@@ -382,30 +345,18 @@ class DepartmentMovementReport extends FannieReportPage
             </div>
         </div>
     </div>
-    <div class="col-sm-5">
-        <div class="form-group">
-            <label class="col-sm-4 control-label">Start Date</label>
-            <div class="col-sm-8">
-                <input type=text id=date1 name=date1 class="form-control date-field" required />
-            </div>
-        </div>
-        <div class="form-group">
-            <label class="col-sm-4 control-label">End Date</label>
-            <div class="col-sm-8">
-                <input type=text id=date2 name=date2 class="form-control date-field" required />
-            </div>
-        </div>
-        <div class="form-group">
-            <?php echo FormLib::date_range_picker(); ?>                            
-        </div>
-    </div>
+    <?php echo FormLib::standardDateFields(); ?>
 </div>
     <p>
-        <button type=submit name=submit value="Submit" class="btn btn-default">Submit</button>
-        <button type=reset name=reset class="btn btn-default">Start Over</button>
+        <button type=submit name=submit value="Submit" class="btn btn-default btn-core">Submit</button>
+        <button type=reset name=reset class="btn btn-default btn-reset"
+            onclick="$('#super-id').val('').trigger('change');">Start Over</button>
     </p>
 </form>
 <?php
+        $this->addOnloadCommand("\$('#subdepts').closest('.form-group').hide();");
+
+        return ob_get_clean();
     }
 
     public function helpContent()

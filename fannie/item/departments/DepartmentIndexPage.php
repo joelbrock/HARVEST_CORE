@@ -26,9 +26,13 @@ if (!class_exists('FannieAPI')) {
     include_once($FANNIE_ROOT.'classlib2.0/FannieAPI.php');
 }
 
-class DepartmentIndexPage extends FanniePage {
+class DepartmentIndexPage extends FanniePage 
+{
     protected $title = "Fannie : Manage Departments";
     protected $header = "Manage Departments";
+
+    protected $must_authenticate = true;
+    protected $auth_classes = array('departments', 'admin');
 
     public $description = '[Department Menu] lists pages related to departments.';
     public $themed = true;
@@ -60,8 +64,12 @@ class DepartmentIndexPage extends FanniePage {
             a higher-level set of super departments.
             </p>';
     }
+
+    public function unitTest($phpunit)
+    {
+        $phpunit->assertNotEquals(0, strlen($this->body_content()));
+    }
 }
 
-FannieDispatch::conditionalExec(false);
+FannieDispatch::conditionalExec();
 
-?>

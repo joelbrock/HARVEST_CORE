@@ -26,7 +26,12 @@ using System.Threading;
 using System.Net;
 using System.Net.Sockets;
 using System.Xml;
+using System.Drawing;
+using System.Linq;
+using System.Collections;
+using System.Collections.Generic;
 using CustomForms;
+using BitmapBPP;
 using DSIPDCXLib;
 using AxDSIPDCXLib;
 
@@ -36,13 +41,41 @@ public class SPH_Datacap_PDCX : SerialPortHandler
 {
     private DsiPDCX ax_control = null;
     private string device_identifier = null;
-    protected string server_list = "x1.mercurydev.net;x2.mercurydev.net";
-    protected int LISTEN_PORT = 9000; // acting as a Datacap stand-in
+    private string com_port = "0";
+    protected string server_list = "x1.mercurypay.com;x2.backuppay.com";
+    protected int LISTEN_PORT = 8999; // acting as a Datacap stand-in
+    protected short CONNECT_TIMEOUT = 60;
+    private bool log_xml = true;
+    private RBA_Stub rba = null;
+    private bool pdc_active;
+    private Object pdcLock = new Object();
 
     public SPH_Datacap_PDCX(string p) : base(p)
     { 
-        verbose_mode = 1;
         device_identifier=p;
+        if (p.Contains(":")) {
+            string[] parts = p.Split(new char[]{':'}, 2);
+            device_identifier = parts[0];
+            com_port = parts[1];
+        }
+        if (device_identifier == "INGENICOISC250_MERCURY_E2E") {
+            rba = new RBA_Stub("COM"+com_port);
+        }
+        pdc_active = false;
+    }
+
+    public override void SetConfig(string k, string v)
+    {
+        if (k == "disableRBA" && v == "true") {
+            try {
+                if (this.rba != null) {
+                    rba.stubStop();
+                }
+            } catch (Exception) {}
+            this.rba = null;
+        } else if (k == "disableButtons" && v == "true") {
+            this.rba.SetEMV(RbaButtons.None);
+        }
     }
 
     /**
@@ -51,9 +84,22 @@ public class SPH_Datacap_PDCX : SerialPortHandler
     */
     protected bool initDevice()
     {
-        ax_control = new DsiPDCX();
-        ax_control.ServerIPConfig(server_list, 0);
-        ax_control.SetResponseTimeout(60);
+        if (ax_control == null) {
+            ax_control = new DsiPDCX();
+            ax_control.ServerIPConfig(server_list, 0);
+            ax_control.SetResponseTimeout(CONNECT_TIMEOUT);
+            InitPDCX();
+        }
+        lock (pdcLock) {
+            if (pdc_active) {
+                ax_control.CancelRequest();
+            }
+        }
+        if (rba != null) {
+            rba.SetParent(this.parent);
+            rba.SetVerbose(this.verbose_mode);
+            rba.stubStart();
+        }
 
         return true;
     }
@@ -85,12 +131,24 @@ public class SPH_Datacap_PDCX : SerialPortHandler
                             message += System.Text.Encoding.ASCII.GetString(buffer, 0, bytes_read);
                         } while (stream.DataAvailable);
 
+                        if (rba != null) {
+                            rba.stubStop();
+                        }
+
                         message = GetHttpBody(message);
+                        message = message.Replace("{{SecureDevice}}", this.device_identifier);
+                        message = message.Replace("{{ComPort}}", com_port);
+                        message = message.Trim(new char[]{'"'});
                         if (this.verbose_mode > 0) {
                             Console.WriteLine(message);
                         }
-
-                        string result = ax_control.ProcessTransaction(message, 0, null, null);
+                        lock (pdcLock) {
+                            pdc_active = true;
+                        }
+                        string result = ax_control.ProcessTransaction(message, 1, null, null);
+                        lock (pdcLock) {
+                            pdc_active = false;
+                        }
                         result = WrapHttpResponse(result);
                         if (this.verbose_mode > 0) {
                             Console.WriteLine(result);
@@ -98,6 +156,12 @@ public class SPH_Datacap_PDCX : SerialPortHandler
 
                         byte[] response = System.Text.Encoding.ASCII.GetBytes(result);
                         stream.Write(response, 0, response.Length);
+                        if (log_xml) {
+                            using (StreamWriter file = new StreamWriter("log.xml", true)) {
+                                file.WriteLine(message);
+                                file.WriteLine(result);
+                            }
+			            }
                     }
                     client.Close();
                 }
@@ -139,6 +203,7 @@ public class SPH_Datacap_PDCX : SerialPortHandler
             + "Connection: close\r\n"
             + "Content-Type: text/xml\r\n"
             + "Content-Length: " + http_response.Length + "\r\n" 
+            + "Access-Control-Allow-Origin: http://localhost\r\n"
             + "\r\n"; 
         
         return headers + http_response;
@@ -155,14 +220,22 @@ public class SPH_Datacap_PDCX : SerialPortHandler
         switch(msg) {
             case "termReset":
             case "termReboot":
-                ax_control.CancelRequest();
+                if (rba != null) {
+                    rba.stubStop();
+                }
                 initDevice();
                 break;
             case "termManual":
                 break;
             case "termApproved":
+                if (rba != null) {
+                    rba.showApproved();
+                }
                 break;
             case "termSig":
+                if (rba != null) {
+                    rba.stubStop();
+                }
                 GetSignature();
                 break;
             case "termGetType":
@@ -175,6 +248,26 @@ public class SPH_Datacap_PDCX : SerialPortHandler
                 break;
         }
     }
+
+    /**
+      PDCX initialize device
+    */
+    protected string InitPDCX()
+    {
+        string xml="<?xml version=\"1.0\"?>"
+            + "<TStream>"
+            + "<Admin>"
+            + "<MerchantID>MerchantID</MerchantID>"
+            + "<TranCode>SecureDeviceInit</TranCode>"
+            + "<TranType>Setup</TranType>"
+            + "<SecureDevice>" + this.device_identifier + "</SecureDevice>"
+            + "<ComPort>" + this.com_port + "</ComPort>"
+            + "<PadType>" + SecureDeviceToPadType(device_identifier) + "</PadType>"
+            + "</Admin>"
+            + "</TStream>";
+        
+        return ax_control.ProcessTransaction(xml, 1, null, null);
+    }
     
     protected string GetSignature()
     {
@@ -184,25 +277,82 @@ public class SPH_Datacap_PDCX : SerialPortHandler
             + "<MerchantID>MerchantID</MerchantID>"
             + "<TranCode>GetSignature</TranCode>"
             + "<SecureDevice>"+ this.device_identifier + "</SecureDevice>"
+            + "<ComPort>" + this.com_port + "</ComPort>"
             + "<Account>"
             + "<AcctNo>SecureDevice</AcctNo>"
             + "</Account>"
             + "</Transaction>"
             + "</TStream>";
-        string result = ax_control.ProcessTransaction(xml, 0, null, null);
+        lock (pdcLock) {
+            pdc_active = true;
+        }
+        string result = ax_control.ProcessTransaction(xml, 1, null, null);
+        lock (pdcLock) {
+            pdc_active = false;
+        }
         XmlDocument doc = new XmlDocument();
         try {
             doc.LoadXml(result);
             XmlNode status = doc.SelectSingleNode("RStream/CmdResponse/CmdStatus");
-            if (status.Value != "Success") {
+            if (status.InnerText != "Success") {
                 return null;
             }
-            string sigdata = doc.SelectSingleNode("RStream/Signature").Value;
+            string sigdata = doc.SelectSingleNode("RStream/Signature").InnerText;
+            List<Point> points = SigDataToPoints(sigdata);
+
+            int ticks = Environment.TickCount;
+            string my_location = AppDomain.CurrentDomain.BaseDirectory;
+            char sep = Path.DirectorySeparatorChar;
+            while (File.Exists(my_location + sep + "ss-output/"  + sep + ticks)) {
+                ticks++;
+            }
+            string filename = my_location + sep + "ss-output"+ sep + "tmp" + sep + ticks + ".bmp";
+            BitmapBPP.Signature sig = new BitmapBPP.Signature(filename, points);
+            parent.MsgSend("TERMBMP" + ticks + ".bmp");
+            if (rba != null) {
+                rba.showApproved();
+            }
         } catch (Exception) {
             return null;
         }
         
         return null;
+    }
+
+    protected string SecureDeviceToPadType(string device)
+    {
+        switch (device) {
+            case "VX805XPI":
+            case "VX805XPI_MERCURY_E2E":
+                return "VX805";
+            case "INGENICOISC250":
+            case "INGENICOISC250_MERCURY_E2E":
+                return "ISC250";
+            default:
+                return device;
+        }
+    }
+
+    protected List<Point> SigDataToPoints(string data)
+    {
+        char[] comma = new char[]{','};
+        char[] colon = new char[]{':'};
+        var pairs = from pair in data.Split(colon) 
+            select pair.Split(comma);
+        var points = from pair in pairs 
+            where pair.Length == 2
+            select new Point(CoordsToInt(pair[0]), CoordsToInt(pair[1]));
+
+        return points.ToList();
+    }
+
+    protected int CoordsToInt(string coord)
+    {
+        if (coord == "#") {
+            return 0;
+        } else {
+            return Int32.Parse(coord);
+        }
     }
 }
 

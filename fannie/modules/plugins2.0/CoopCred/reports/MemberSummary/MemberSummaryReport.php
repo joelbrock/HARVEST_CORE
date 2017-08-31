@@ -378,12 +378,12 @@ class MemberSummaryReport extends FannieReportPage
         // summary
         }
 
-        $statement = $dbc->prepare_statement("$query");
+        $statement = $dbc->prepare("$query");
         if ($statement === False) {
             $ret[] = "***Error preparing: $query";
             return $ret;
         }
-        $results = $dbc->exec_statement($statement,$args);
+        $results = $dbc->execute($statement,$args);
         if ($results === False) {
             $allArgs = implode(' : ',$args);
             $ret[] = "***Error executing: $query with: $allArgs";
@@ -392,7 +392,7 @@ class MemberSummaryReport extends FannieReportPage
 
         if ($this->reportType == "detail") {
             // Compose the rows of the table.
-            while ($row = $dbc->fetch_array($results)) {
+            while ($row = $dbc->fetchRow($results)) {
                 // Array of cells of a row in the report table.
                 $record = array();
                 if ($this->reportType == "detail")
@@ -435,7 +435,7 @@ class MemberSummaryReport extends FannieReportPage
             $lastCardNo = 0;
             $record = array();
             $rowCount = 0;
-            while ($row = $dbc->fetch_array($results)) {
+            while ($row = $dbc->fetchRow($results)) {
                 if ($row['cardNo'] != $lastCardNo && $lastCardNo != 0) {
                     $ret[] = $record;
                     // Array of cells of a row in the report table.
@@ -489,7 +489,7 @@ class MemberSummaryReport extends FannieReportPage
             " is the difference between the the amount that has been put in Members'".
             " accounts (Payment) and the amount they have used for purchases.".
             " It is the amount the Coop is still liable for.</p>";
-        $ret[] = "<p class='explain'><b><a href='MemberSummaryReport.php?pid=" .
+        $ret[] = "<p class='explain'><b><a href='{$_SERVER['PHP_SELF']}?pid=" .
             $this->programID . "'>" .
             "Start again from the form.</a></b></p>";
         return $ret;
@@ -638,6 +638,5 @@ title="Tick to display with sorting from column heads; un-tick for a plain formt
 // /class MemberSummaryReport
 }
 
-FannieDispatch::conditionalExec(false);
+FannieDispatch::conditionalExec();
 
-?>

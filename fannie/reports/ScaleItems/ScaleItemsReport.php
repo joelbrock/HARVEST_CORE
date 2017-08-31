@@ -29,7 +29,7 @@ if (!class_exists('FannieAPI')) {
 class ScaleItemsReport extends FannieReportPage 
 {
     public $description = '[Scale Items] lists items with Hobart scale information';
-    public $report_set = 'Operational Data';
+    public $report_set = 'Service Scales';
     public $themed = true;
 
     protected $report_headers = array('UPC', 'Description', 'Weight', 'Tare', 'Shelf Life',
@@ -41,8 +41,8 @@ class ScaleItemsReport extends FannieReportPage
 
     public function fetch_report_data()
     {
-        global $FANNIE_OP_DB, $FANNIE_URL;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
         $model = new ScaleItemsModel($dbc);
 
         $query = "SELECT s.plu,
@@ -80,31 +80,40 @@ class ScaleItemsReport extends FannieReportPage
             $args[] = '%' . $search . '%';
             $args[] = '%' . $search . '%';
         }
+        if ($this->config->get('STORE_ID')) {
+            $query .= ' AND p.store_id=? ';
+            $args[] = $this->config->get('STORE_ID');
+        }
         $query .= ' ORDER BY s.plu';
         $prep = $dbc->prepare($query);
         $result = $dbc->execute($prep, $args);
 
         $data = array();
-        while($row = $dbc->fetch_row($result)) {
-            $record = array(
-                $row['plu'],
-                $row['itemdesc'],
-                $row['weight'],
-                $row['tare'],
-                $row['shelflife'],
-                $row['netWeight'],
-                $row['text'],
-            );
-            $data[] = $record;
+        while ($row = $dbc->fetchRow($result)) {
+            $data[] = $this->rowToRecord($row);
         }
 
         return $data;
     }
 
+    private function rowToRecord($row)
+    {
+        return array(
+            $row['plu'],
+            $row['itemdesc'],
+            $row['weight'],
+            $row['tare'],
+            $row['shelflife'],
+            $row['netWeight'],
+            $row['text'],
+        );
+    }
+
     public function form_content()
     {
-        global $FANNIE_OP_DB;
-        $model = new DepartmentsModel(FannieDB::get($FANNIE_OP_DB));
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
+        $model = new DepartmentsModel($dbc);
         $dlist = array();
         foreach($model->find('dept_no') as $dept) {
             $dlist[$dept->dept_no()] = $dept->dept_name();
@@ -157,6 +166,12 @@ class ScaleItemsReport extends FannieReportPage
             </p>';
     }
 
+    public function unitTest($phpunit)
+    {
+        $data = array('plu'=>'21234000000', 'itemdesc'=>'test', 'weight'=>0,
+            'tare'=>0.01, 'shelflife'=>5, 'netWeight'=>0, 'text'=>'test');
+        $phpunit->assertInternalType('array', $this->rowToRecord($data));
+    }
 }
 
 FannieDispatch::conditionalExec();

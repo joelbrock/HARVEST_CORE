@@ -21,11 +21,7 @@
 
 *********************************************************************************/
 
-namespace COREPOS\Common\mvc;
-
-if (!class_exists('ValueContainer')) {
-    include(dirname(__FILE__) . '/ValueContainer.php');
-}
+namespace COREPOS\common\mvc;
 
 class FormValueContainer extends ValueContainer
 {

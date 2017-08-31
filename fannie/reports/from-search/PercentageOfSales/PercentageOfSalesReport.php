@@ -21,6 +21,8 @@
 
 *********************************************************************************/
 
+use COREPOS\Fannie\API\lib\Store;
+
 include(dirname(__FILE__) . '/../../../config.php');
 if (!class_exists('FannieAPI')) {
     include($FANNIE_ROOT.'classlib2.0/FannieAPI.php');
@@ -38,17 +40,12 @@ class PercentageOfSalesReport extends FannieReportPage
 
     public function fetch_report_data()
     {
-        global $FANNIE_OP_DB, $FANNIE_ARCHIVE_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
 
         $upcs = FormLib::get('u', array());
-        $in = '';
-        $args = array();
-        foreach($upcs as $u) {
-            $in .= '?,';
-            $args[] = BarcodeLib::padUPC($u);
-        }
-        $in = substr($in, 0, strlen($in)-1);
+        list($in, $args) = $dbc->safeInClause($upcs);
+        $store = Store::getIdByIp();
 
         $query = "SELECT p.upc, p.description, p.department,
                     d.dept_name, l.quantity, l.total,
@@ -58,13 +55,15 @@ class PercentageOfSalesReport extends FannieReportPage
                 FROM products AS p
                     LEFT JOIN MasterSuperDepts AS m ON p.department=m.dept_ID
                     LEFT JOIN departments AS d ON p.department=d.dept_no
-                    LEFT JOIN " . $FANNIE_ARCHIVE_DB . $dbc->sep() . "productWeeklyLastQuarter AS l
-                        ON p.upc=l.upc
-                    LEFT JOIN " . $FANNIE_ARCHIVE_DB . $dbc->sep() . "weeksLastQuarter AS w
+                    LEFT JOIN " . $this->config->get('ARCHIVE_DB') . $dbc->sep() . "productWeeklyLastQuarter AS l
+                        ON p.upc=l.upc AND p.store_id=l.storeID
+                    LEFT JOIN " . $this->config->get('ARCHIVE_DB') . $dbc->sep() . "weeksLastQuarter AS w
                         ON l.weekLastQuarterID=w.weekLastQuarterID 
                 WHERE p.upc IN ($in)
+                    AND p.store_id=?
                 ORDER BY l.weekLastQuarterID, p.upc";
         $prep = $dbc->prepare($query);
+        $args[] = $store;
         $result = $dbc->execute($prep, $args);
 
         $upc_data = array();

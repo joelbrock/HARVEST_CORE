@@ -40,9 +40,15 @@ class SaMenuPage extends FannieRESTfulPage {
     function css_content(){
         ob_start();
         ?>
+/*
 input[type="submit"] {
     width:85%;
     font-size: 2em;
+}
+*/
+a[type="submit"] {
+    width: 65vw;
+    font-size: 1em;
 }
         <?php
         return ob_get_clean();
@@ -59,17 +65,28 @@ input[type="submit"] {
 </head>
 <body>
 <p>
-<input type="submit" value="Inventory"
-    onclick="location='SaHandheldPage.php';return false;" />
+<a class="btn btn-default btn-lg" type="submit"
+    href="SaHandheldPage.php" />Inventory</a>
 <hr />
+<!--
 <input type="submit" value="Price Check"
     onclick="location='SaPriceChangePage.php';return false;" />
+    -->
+<a class="btn btn-default btn-lg" type="submit"
+    href="SaItemList.php" />Quick List</a>
 <hr />
-<input type="submit" value="Ordering Info"
-    onclick="location='SaOrderingPage.php';return false;" />
+<a class="btn btn-default btn-lg" type="submit"
+    href="../../../item/handheld/ItemStatusPage.php" />Price Check</a>
 <hr />
-<input type="submit" value="Shelf Location"
-    onclick="location='../../../item/mapping/index.php';return false;" />
+<a class="btn btn-default btn-lg" type="submit"
+    href="../../../purchasing/EditOnePurchaseOrder.php" />Create Order</a>
+<hr />
+<a class="btn btn-default btn-lg" type="submit"
+    href="http://192.168.1.2/scancoord/item/SalesChange/SalesChangeIndex.php" />Batch Check</a>
+<hr />
+<a class="btn btn-default btn-lg" type="submit"
+    href="http://192.168.1.2/scancoord/item/AuditScanner.php" />Audie</a>
+<hr />
 </p>
 </body>
 </html>
@@ -80,4 +97,3 @@ input[type="submit"] {
 
 FannieDispatch::conditionalExec();
 
-?>

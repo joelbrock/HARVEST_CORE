@@ -43,8 +43,37 @@ class StaffArAccountsPage extends FannieRESTfulPage
         $this->__routes[] = 'get<add><payid>';
         $this->__routes[] = 'get<delete>';
         $this->__routes[] = 'post<saveIds><saveAmounts>';
+        $this->__routes[] = 'get<excel>';
 
         return parent::preprocess();
+    }
+
+    public function get_excel_handler()
+    {
+        $dbc = FannieDB::get($this->config->get('TRANS_DB'));
+
+        header('Content-Type: application/ms-excel');
+        header('Content-Disposition: attachment; filename="epiU8U16.csv"');
+        $res = $dbc->query("
+            SELECT s.adpID,
+                a.lastName,
+                a.firstName,
+                a.adjust
+            FROM staffAR AS a
+                LEFT JOIN staffID AS s ON a.cardNo=s.cardno
+            ORDER BY a.lastName");
+        echo "Co Code,Batch ID,File #,adjust ded code ,adjust ded amount\r\n";
+        while ($row = $dbc->fetchRow($res)) {
+            printf('"%s","%s","%s","%s",%.2f' . "\r\n",
+                'U8U',
+                '160815',
+                $row['adpID'],
+                'I',
+                $row['adjust']
+            );
+        }
+
+        return false;
     }
 
     public function get_add_payid_handler()
@@ -221,6 +250,29 @@ class StaffArAccountsPage extends FannieRESTfulPage
         $ret .= '</div>';
 
         return $ret;
+    }
+
+    public function helpContent()
+    {
+        return '<p>This tool schedules automatic payments to
+            accounts\' store charge balance. Its primary purpose is to
+            address the gap in time between entering deduction information
+            into the payroll system software and actual pay day.</p>
+            <p>The <em>Current</em> column shows each account\'s current
+            store charge balance. The <em>Next Deduction</em> column
+            shows the balance payment that will occur on the next 
+            scheduled pay day. In a typical payroll cycle, the user will
+            first click <em>Set New to Current Balances</em> and then
+            <em>Save New as Next Deduction</em> to lock in the current
+            balance as the next scheduled payment. The <em>Next Deduction</em>
+            amounts should then be entered into the payroll system software.
+            On payday the accounts\' balances will be reduced by the
+            specified amounts</p>
+            <p>It is important not to alter the <em>Next Deduction</em>
+            amounts in the time between entering the deduction information
+            in the payroll system and pay day. If accounts continue to
+            make charges during this time period, their balance will not
+            be reduced all the way to zero.</p>';
     }
 }
 

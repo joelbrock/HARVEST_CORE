@@ -21,7 +21,7 @@
 
 *********************************************************************************/
 
-class ScaleItemModule extends ItemModule 
+class ScaleItemModule extends \COREPOS\Fannie\API\item\ItemModule 
 {
 
     public function showEditForm($upc, $display_mode=1, $expand_mode=1)
@@ -29,10 +29,11 @@ class ScaleItemModule extends ItemModule
         $upc = BarcodeLib::padUPC($upc);
 
         $dbc = $this->db();
-        $p = $dbc->prepare_statement('SELECT * FROM scaleItems WHERE plu=?');
-        $r = $dbc->exec_statement($p,array($upc));
+        $p = $dbc->prepare('SELECT * FROM scaleItems WHERE plu=?');
+        $r = $dbc->execute($p,array($upc));
         $scale = array('itemdesc'=>'','weight'=>0,'bycount'=>0,'tare'=>0,
-            'shelflife'=>0,'label'=>133,'graphics'=>0,'text'=>'', 'netWeight'=>0);
+            'shelflife'=>0,'label'=>133,'graphics'=>0,'text'=>'', 'netWeight'=>0,
+            'mosaStatement'=>0, 'originText'=>'');
         $found = false;
         if ($dbc->num_rows($r) > 0) {
             $scale = $dbc->fetch_row($r);
@@ -58,8 +59,8 @@ class ScaleItemModule extends ItemModule
                 </div>";
         $ret .= '<div id="ScaleFieldsetContent" class="panel-body" style="' . $css . '">';
         
-        $p = $dbc->prepare_statement('SELECT description FROM products WHERE upc=?');
-        $r = $dbc->exec_statement($p,array($upc));
+        $p = $dbc->prepare('SELECT description FROM products WHERE upc=?');
+        $r = $dbc->execute($p,array($upc));
         $reg_description = '';
         if ($dbc->num_rows($r) > 0) {
             $w = $dbc->fetch_row($r);
@@ -99,7 +100,7 @@ class ScaleItemModule extends ItemModule
                 $scale['netWeight']);
 
         $ret .= "<td><select name=s_label size=2 class=\"form-control\">";
-        $label_attr = HobartDgwLib::labelToAttributes($scale['label']);
+        $label_attr = \COREPOS\Fannie\API\item\ServiceScaleLib::labelToAttributes($scale['label']);
         if ($label_attr['align'] == 'horizontal') {
             $ret .= "<option value=horizontal selected>Horizontal</option>";
             $ret .= "<option value=vertical>Vertical</option>";
@@ -116,9 +117,26 @@ class ScaleItemModule extends ItemModule
         $ret .= "<tr><td colspan=7>";
         $ret .= '<div class="col-sm-6">';
         $ret .= "<b>Expanded text:<br />
-            <textarea name=s_text rows=4 cols=45 class=\"form-control\">";
+            <textarea name=s_text id=s_text rows=4 cols=45 class=\"form-control\">";
         $ret .= $scale['text'];
         $ret .= "</textarea>";
+        $ret .= '<br /><b>Linked PLU</b><br />';
+        $linkedPLU = isset($scale['linkedPLU']) ? $scale['linkedPLU'] : '';
+        $ret .= '<input type="text" class="form-control" name="s_linkedPLU" value="' . $linkedPLU . '" />';
+        $ret .= '</div>';
+        $ret .= '<div class="col-sm-4">';
+        $ret .= '<div class="form-group">
+            <button type="button" class="btn btn-default btn-sm" onclick="appendScaleTag(\'mosa\'); return false;">MOSA</button>
+            <label>
+                <input type="checkbox" name="scale_mosa" ' . ($scale['mosaStatement'] ? 'checked' : '') . ' />
+                Include MOSA statement
+            </label>
+            </div>';
+        $ret .= '<div class="form-group">
+            <button type="button" class="btn btn-default btn-sm" onclick="appendScaleTag(\'cool\'); return false;">COOL</button>
+            <input type="text" class="form-control" name="scale_origin" value="' . $scale['originText'] . '" 
+                placeholder="Country of origin text" />
+            </div>';
         $ret .= '</div>';
         $scales = new ServiceScalesModel($dbc);
         $mapP = $dbc->prepare('SELECT upc
@@ -130,7 +148,7 @@ class ScaleItemModule extends ItemModule
                                     INNER JOIN superdepts AS s ON p.department=s.dept_ID
                                 WHERE p.upc=?
                                     AND s.superID=?');
-        $ret .= '<div class="col-sm-6">';
+        $ret .= '<div class="col-sm-2">';
         foreach ($scales->find('description') as $scale) {
             $checked = false;
             $mapR = $dbc->execute($mapP, array($scale->serviceScaleID(), $upc));
@@ -146,10 +164,17 @@ class ScaleItemModule extends ItemModule
                 }
             }
 
-            $ret .= sprintf('<input type="checkbox" name="scaleID[]" id="scaleID%d" value=%d %s />
-                            <label for="scaleID%d">%s</label><br />',
+            $css_class = '';
+            $title = '';
+            $ret .= sprintf('<div class="form-group %s" title="%s"><div class="checkbox">
+                            <label class="control-label">
+                            <input type="checkbox" name="scaleID[]" id="scaleID%d" value=%d %s />
+                            %s</label>
+                            </div></div>',
+                            $css_class, $title,
                             $scale->serviceScaleID(), $scale->serviceScaleID(), ($checked ? 'checked' : ''),
-                            $scale->serviceScaleID(), $scale->description());
+                            $scale->description()
+            );
         }
         $ret .= '</div>';
         $ret .= "</td></tr>";
@@ -158,15 +183,33 @@ class ScaleItemModule extends ItemModule
         return $ret;
     }
 
+    function getFormJavascript($upc)
+    {
+        return <<<STR
+function appendScaleTag(tag) {
+    var current = $('#s_text').val();
+    current += "{" + tag + "}";
+    $('#s_text').val(current);
+    console.log(current);
+}
+STR;
+    }
+
     function SaveFormData($upc)
     {
         /* check if data was submitted */
         if (FormLib::get('s_plu') === '') return False;
 
         $desc = FormLib::get('descript','');
+        if (is_array($desc)) {
+            $desc = array_pop($desc);
+        }
         $longdesc = FormLib::get('s_longdesc','');
         if (trim($longdesc) !== '') $desc = $longdesc;
         $price = FormLib::get('price',0);
+        if (is_array($price)) {
+            $price = array_pop($price);
+        }
         $tare = FormLib::get('s_tare',0);
         $shelf = FormLib::get('s_shelflife',0);
         $bycount = FormLib::get('s_bycount',0);
@@ -176,8 +219,9 @@ class ScaleItemModule extends ItemModule
         $text = FormLib::get('s_text','');
         $align = FormLib::get('s_label','horizontal');
         $netWeight = FormLib::get('s_netwt', 0);
+        $linkedPLU = FormLib::get('s_linkedPLU', null);
 
-        $label = HobartDgwLib::attributesToLabel(
+        $label = \COREPOS\Fannie\API\item\ServiceScaleLib::attributesToLabel(
             $align,
             ($type == 'Fixed Weight') ? true : false,
             ($graphics != 0) ? true : false
@@ -202,8 +246,11 @@ class ScaleItemModule extends ItemModule
         if ($weight == 1 && $bycount == 1) {
             $p = new ProductsModel($dbc);
             $p->upc($upc);
-            if($p->load()) {
-                $p->Scale(0);
+            $stores = FormLib::get('store_id');
+            foreach ($stores as $s) {
+                $p->store_id($s);
+                $p->scale(0);
+                $p->enableLogging(false);
                 $p->save();
             }
         }
@@ -225,6 +272,9 @@ class ScaleItemModule extends ItemModule
         $scaleItem->label($label);
         $scaleItem->graphics( ($graphics) ? 121 : 0 );
         $scaleItem->netWeight($netWeight);
+        $scaleItem->linkedPLU(BarcodeLib::padUPC($linkedPLU));
+        $scaleItem->mosaStatement(FormLib::get('scale_mosa',false) ? 1 : 0);
+        $scaleItem->originText(FormLib::get('scale_origin'));
         $scaleItem->save();
 
         // extract scale PLU
@@ -245,6 +295,8 @@ class ScaleItemModule extends ItemModule
             'Label' => $label,
             'ExpandedText' => $text,
             'ByCount' => $bycount,
+            'OriginText' => $scaleItem->originText(),
+            'MOSA' => $scaleItem->mosaStatement(),
         );
         if ($netWeight != 0) {
             $item_info['NetWeight'] = $netWeight;
@@ -266,37 +318,85 @@ class ScaleItemModule extends ItemModule
         $scales = array();
         $scaleIDs = FormLib::get('scaleID', array());
         $model = new ServiceScalesModel($dbc);
-        $chkMap = $dbc->prepare('SELECT upc
-                                 FROM ServiceScaleItemMap
-                                 WHERE serviceScaleID=?
-                                    AND upc=?');
-        $addMap = $dbc->prepare('INSERT INTO ServiceScaleItemMap
-                                    (serviceScaleID, upc)
-                                 VALUES
-                                    (?, ?)');
-        foreach ($scaleIDs as $scaleID) {
-            $model->reset();
-            $model->serviceScaleID($scaleID);
-            if (!$model->load()) {
-                // scale doesn't exist
-                continue;
-            }
-            $repr = array(
-                'host' => $model->host(),
-                'dept' => $model->scaleDeptName(),
-                'type' => $model->scaleType(),  
-                'new' => false,
-            );
-            $exists = $dbc->execute($chkMap, array($scaleID, $upc));
-            if ($dbc->num_rows($exists) == 0) {
-                $repr['new'] = true;
-                $dbc->execute($addMap, array($scaleID, $upc));
+        /**
+          Send item to requested scales
+        */
+        if (count($scaleIDs) > 0) {
+            $chkMap = $dbc->prepare('SELECT upc
+                                     FROM ServiceScaleItemMap
+                                     WHERE serviceScaleID=?
+                                        AND upc=?');
+            $addMap = $dbc->prepare('INSERT INTO ServiceScaleItemMap
+                                        (serviceScaleID, upc)
+                                     VALUES
+                                        (?, ?)');
+            foreach ($scaleIDs as $scaleID) {
+                $model->reset();
+                $model->serviceScaleID($scaleID);
+                if (!$model->load()) {
+                    // scale doesn't exist
+                    continue;
+                }
+                $repr = array(
+                    'host' => $model->host(),
+                    'dept' => $model->scaleDeptName(),
+                    'type' => $model->scaleType(),  
+                    'new' => false,
+                );
+                $exists = $dbc->execute($chkMap, array($scaleID, $upc));
+                if ($dbc->num_rows($exists) == 0) {
+                    $repr['new'] = true;
+                    $dbc->execute($addMap, array($scaleID, $upc));
+                }
+
+                $scales[] = $repr;
             }
 
-            $scales[] = $repr;
+            \COREPOS\Fannie\API\item\HobartDgwLib::writeItemsToScales($item_info, $scales);
+            \COREPOS\Fannie\API\item\EpScaleLib::writeItemsToScales($item_info, $scales);
         }
 
-        HobartDgwLib::writeItemsToScales($item_info, $scales);
+        /**
+          Delete item from scales if that
+          option was unchecked
+        */
+        $mapP = $dbc->prepare('
+            SELECT serviceScaleID
+            FROM ServiceScaleItemMap
+            WHERE upc=?');
+        $mapR = $dbc->execute($mapP, array($upc));
+        $delP = $dbc->prepare('
+            DELETE
+            FROM ServiceScaleItemMap
+            WHERE serviceScaleID=?
+                AND upc=?');
+        if ($mapR && $dbc->numRows($mapR)) {
+            $scales = array();
+            while ($mapW = $dbc->fetchRow($mapR)) {
+                if (in_array($mapW['serviceScaleID'], $scaleIDs)) {
+                    // item sent to that scale
+                    continue;
+                }
+                $model->reset();
+                $model->serviceScaleID($mapW['serviceScaleID']);
+                if (!$model->load()) {
+                    // scale doesn't exist
+                    continue;
+                }
+                $repr = array(
+                    'host' => $model->host(),
+                    'dept' => $model->scaleDeptName(),
+                    'type' => $model->scaleType(),  
+                    'new' => false,
+                );
+                $scales[] = $repr;
+
+                $dbc->execute($delP, array($mapW['serviceScaleID'], $upc));
+            }
+            if (count($scales) > 0) {
+                \COREPOS\Fannie\API\item\HobartDgwLib::deleteItemsFromScales($item_info['PLU'], $scales); 
+            }
+        }
     }
 }
 

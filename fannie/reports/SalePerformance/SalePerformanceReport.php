@@ -52,8 +52,8 @@ class SalePerformanceReport extends FannieReportPage
 
     private function ajaxCallback()
     {
-        global $FANNIE_OP_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
 
         $m = FormLib::get('month', 1);
         $y = FormLib::get('year', date('Y'));
@@ -72,12 +72,12 @@ class SalePerformanceReport extends FannieReportPage
                 $m,$y);
         $ret .= "<table class=\"table\">";
         $ret .= "<tr><th>&nbsp;</th><th>Batch</th><th>Start</th><th>End</th></tr>";
-        $q = $dbc->prepare_statement("SELECT batchID,batchName,startDate,endDate FROM
+        $q = $dbc->prepare("SELECT batchID,batchName,startDate,endDate FROM
                                 batches WHERE discounttype <> 0 AND (
                                 (year(startDate)=? and month(startDate)=?) OR
                                 (year(endDate)=? and month(endDate)=?)
                                 ) ORDER BY startDate,batchType,batchName");
-        $r = $dbc->exec_statement($q,array($y,$m,$y,$m));
+        $r = $dbc->execute($q,array($y,$m,$y,$m));
         while($w = $dbc->fetch_row($r)) {
             list($start, $time) = explode(' ',$w[2], 2);
             list($end, $time) = explode(' ',$w[3], 2);
@@ -102,14 +102,20 @@ class SalePerformanceReport extends FannieReportPage
     
     public function fetch_report_data()
     {
-        global $FANNIE_OP_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
+
+        if (!is_array($this->form->ids)) {
+            $this->form->ids = array($this->form->ids);
+        }
 
         $data = array();
         $model = new BatchesModel($dbc); 
-        foreach(FormLib::get('ids') as $batchID) {
+        foreach ($this->form->ids as $batchID) {
             $model->batchID($batchID);
-            $model->load();
+            if ($model->load() === false) {
+                continue;
+            }
             
             list($start, $time) = explode(' ', $model->startDate(), 2);
             list($end, $time) = explode(' ', $model->endDate(), 2);
@@ -125,8 +131,8 @@ class SalePerformanceReport extends FannieReportPage
                 AND d.tdate BETWEEN ? AND ?
                 GROUP BY ".$dbc->week('tdate').", batchName
                 ORDER BY batchName, MIN(tdate)";
-            $p = $dbc->prepare_statement($q);
-            $r = $dbc->exec_statement($p, array($batchID, $start.' 00:00:00', $end.' 23:59:59'));
+            $p = $dbc->prepare($q);
+            $r = $dbc->execute($p, array($batchID, $start.' 00:00:00', $end.' 23:59:59'));
             while($w = $dbc->fetch_row($r)) {
                 list($s, $time) = explode(' ', $w['weekStart'], 2);
                 list($e, $time) = explode(' ', $w['weekEnd'], 2);
@@ -213,4 +219,3 @@ for ($i=1;$i<=12;$i++) {
 
 FannieDispatch::conditionalExec();
 
-?>

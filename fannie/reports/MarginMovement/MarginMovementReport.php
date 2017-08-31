@@ -30,7 +30,6 @@ class MarginMovementReport extends FannieReportPage
 {
     public $description = '[Margin Movement] lists item movement with margin information.';
     public $report_set = 'Movement Reports';
-    public $themed = true;
 
     protected $title = "Fannie : Margin Movement Report";
     protected $header = "Margin Movement Report";
@@ -66,13 +65,15 @@ class MarginMovementReport extends FannieReportPage
 
     public function fetch_report_data()
     {
-        global $FANNIE_OP_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
 
-        $date1 = FormLib::get('date1', date('Y-m-d'));
-        $date2 = FormLib::get('date2', date('Y-m-d'));
+        $date1 = $this->form->date1;
+        $date2 = $this->form->date2;
         $deptStart = FormLib::get('deptStart');
         $deptEnd = FormLib::get('deptEnd');
+        $deptMulti = FormLib::get('departments', array());
+        $subs = FormLib::get('subdepts', array());
         $include_sales = FormLib::get('includeSales', 0);
     
         $buyer = FormLib::get('buyer', '');
@@ -82,14 +83,20 @@ class MarginMovementReport extends FannieReportPage
         $args = array($date1.' 00:00:00', $date2.' 23:59:59');
         $where = ' 1=1 ';
         if ($buyer !== '') {
-            if ($buyer != -1) {
-                $where = ' s.superID=? ';
+            if ($buyer == -2) {
+                $where .= ' AND s.superID != 0 ';
+            } elseif ($buyer != -1) {
+                $where .= ' AND s.superID=? ';
                 $args[] = $buyer;
             }
-        } else {
-            $where = ' d.department BETWEEN ? AND ? ';
-            $args[] = $deptStart;
-            $args[] = $deptEnd;
+        }
+        if ($buyer != -1) {
+            list($conditional, $args) = DTrans::departmentClause($deptStart, $deptEnd, $deptMulti, $args);
+            $where .= $conditional;
+        }
+        if (count($subs) > 0) {
+            list($inStr, $args) = $dbc->safeInClause($subs, $args);
+            $where .= " AND p.subdept IN ($inStr) ";
         }
 
         $dlog = DTransactionsModel::selectDlog($date1, $date2);
@@ -100,7 +107,12 @@ class MarginMovementReport extends FannieReportPage
                     d.department,
                     t.dept_name,
                     SUM(total) AS total,
-                    SUM(d.cost) AS cost,"
+                    SUM(
+                        CASE WHEN (d.cost > 0 AND d.total < 0) OR (d.cost < 0 AND d.total > 0)
+                            THEN -1*d.cost
+                            ELSE d.cost
+                        END
+                    ) AS cost,"
                     . DTrans::sumQuantity('d') . " AS qty
                   FROM $dlog AS d "
                     . DTrans::joinProducts('d', 'p', 'inner')
@@ -108,6 +120,8 @@ class MarginMovementReport extends FannieReportPage
         // join only needed with specific buyer
         if ($buyer !== '' && $buyer > -1) {
             $query .= 'LEFT JOIN superdepts AS s ON d.department=s.dept_ID ';
+        } elseif ($buyer !== '' && $buyer == -2) {
+            $query .= 'LEFT JOIN MasterSuperDepts AS s ON d.department=s.dept_ID ';
         }
         $query .= "WHERE tdate BETWEEN ? AND ?
             AND $where
@@ -118,30 +132,17 @@ class MarginMovementReport extends FannieReportPage
         $query .= "GROUP BY d.upc,p.description,d.department,t.dept_name
             ORDER BY sum(total) DESC";
 
-        $prep = $dbc->prepare_statement($query);
-        $result = $dbc->exec_statement($query, $args);
+        $prep = $dbc->prepare($query);
+        $result = $dbc->execute($query, $args);
 
         $data = array();
         $sum_total = 0.0;
         $sum_cost = 0.0;
-        while($row = $dbc->fetch_row($result)) {
-            $margin = $row['total'] == 0 ? 0 : ($row['total'] - $row['cost']) / $row['total'] * 100;
-            $record = array(
-                $row['upc'],
-                $row['brand'],
-                $row['description'],
-                $row['department'],
-                $row['dept_name'],
-                sprintf('%.2f', $row['cost']),
-                sprintf('%.2f', $row['total']),
-                sprintf('%.2f', $margin),
-                sprintf('%.2f', $row['qty'] == 0 ? 0 : ($row['total'] - $row['cost']) / $row['qty']),
-            );
-
+        while ($row = $dbc->fetchRow($result)) {
             $sum_total += $row['total'];
             $sum_cost += $row['cost'];
 
-            $data[] = $record;
+            $data[] = $this->rowToRecord($row);
         }
 
         // go through and add a contribution to margin value
@@ -152,6 +153,22 @@ class MarginMovementReport extends FannieReportPage
         }
 
         return $data;
+    }
+
+    private function rowToRecord($row)
+    {
+        $margin = $row['total'] == 0 ? 0 : ($row['total'] - $row['cost']) / $row['total'] * 100;
+        return array(
+            $row['upc'],
+            $row['brand'],
+            $row['description'],
+            $row['department'],
+            $row['dept_name'],
+            sprintf('%.2f', $row['cost']),
+            sprintf('%.2f', $row['total']),
+            sprintf('%.2f', $margin),
+            sprintf('%.2f', $row['qty'] == 0 ? 0 : ($row['total'] - $row['cost']) / $row['qty']),
+        );
     }
 
     public function calculate_footers($data)
@@ -172,16 +189,7 @@ class MarginMovementReport extends FannieReportPage
 
     public function form_content()
     {
-        global $FANNIE_OP_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
-
-        $depts = new DepartmentsModel($dbc);
-        $d_list = $depts->find('dept_no');
-        $supers = new SuperDeptNamesModel($dbc);
-        $supers->superID(0, '>');
-        $s_list = $supers->find('superID');
-
-        $form = FormLib::dateAndDepartmentForm($d_list, $s_list);
+        $form = FormLib::dateAndDepartmentForm();
 
         /** add one extra field **/
         $checkbox = '<div class=col-sm-5>'
@@ -201,8 +209,15 @@ class MarginMovementReport extends FannieReportPage
             margin.
             </p>';
     }
+
+    public function unitTest($phpunit)
+    {
+        $data = array('total'=>10, 'cost'=>5, 'upc'=>'4011', 'brand'=>'test',
+            'description'=>'test', 'department'=>1, 'dept_name'=>'test', 'qty'=>1);
+        $phpunit->assertInternalType('array', $this->rowToRecord($data));
+        $phpunit->assertInternalType('array', $this->calculate_footers($this->dekey_array(array($data))));
+    }
 }
 
 FannieDispatch::conditionalExec();
 
-?>

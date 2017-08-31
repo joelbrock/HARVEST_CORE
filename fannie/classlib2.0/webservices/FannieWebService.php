@@ -21,7 +21,7 @@
 
 *********************************************************************************/
 
-namespace COREPOS\Fannie\API\webservices {
+namespace COREPOS\Fannie\API\webservices;
 
 class FannieWebService 
 {
@@ -73,15 +73,8 @@ class FannieWebService
     */
     protected function renderPlain($arr)
     {
-        $ret = '';
-        foreach($arr as $a) $ret .= $a;
-        return $ret;
+        return array_reduce($arr, function($carry, $item){ return $carry . $item; }, '');
     }
 }
 
-}
-
-namespace {
-    class FannieWebService extends \COREPOS\Fannie\API\webservices\FannieWebService {}
-}
 

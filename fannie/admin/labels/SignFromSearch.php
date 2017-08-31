@@ -26,7 +26,7 @@ if (!class_exists('FannieAPI')) {
     include_once($FANNIE_ROOT.'classlib2.0/FannieAPI.php');
 }
 
-class SignFromSearch extends FannieRESTfulPage 
+class SignFromSearch extends \COREPOS\Fannie\API\FannieReadOnlyPage 
 {
 
     protected $title = 'Fannie - Signage';
@@ -37,16 +37,33 @@ class SignFromSearch extends FannieRESTfulPage
     public $themed = true;
 
     protected $signage_mod;
+    protected $selected_mod;
     protected $signage_obj;
 
     public function preprocess()
     {
        $this->__routes[] = 'post<u>'; 
        $this->__routes[] = 'post<batch>'; 
+       $this->__routes[] = 'get<batch>'; 
+       $this->__routes[] = 'get<queueID>'; 
        return parent::preprocess();
     }
 
-    function post_u_handler()
+    protected function get_queueID_handler()
+    {
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
+        $tags = new ShelftagsModel($dbc);
+        $tags->id($this->queueID);
+        $this->u = array();
+        foreach ($tags->find() as $tag) {
+            $this->u[] = $tag->upc();
+        }
+
+        return $this->post_u_handler();
+    }
+
+    protected function post_u_handler()
     {
         if (!is_array($this->u)) {
             $this->u = array($this->u);
@@ -85,31 +102,46 @@ class SignFromSearch extends FannieRESTfulPage
             $this->signage_obj->saveItems();
             echo '<html><head></head>
                   <body onload="document.forms[0].submit();">
-                  <form method="post" action="' . $_SERVER['PHP_SELF'] . '">';
+                  <form method="post" action="' . filter_input(INPUT_SERVER, 'PHP_SELF') . '">';
             foreach ($this->upcs as $u) {
                 printf('<input type="hidden" name="u[]" value="%s" />', $u);
             }
             echo '</form></body></html>';
             return false;
-        } else if (is_array(FormLib::get('update_upc'))) {
+        } elseif (is_array(FormLib::get('update_upc'))) {
             $upc = FormLib::get('update_upc');
             $brand = FormLib::get('update_brand', array());
             $desc = FormLib::get('update_desc', array());
+            $ignore = FormLib::get('ignore_desc', array());
             $origin = FormLib::get('update_origin', array());
+            $custom = FormLib::get('custom_origin', array());
+            $knownOrigins = $this->signage_obj->getOrigins();
             for ($i=0; $i<count($upc); $i++) {
                 if (isset($brand[$i])) {
                     $this->signage_obj->addOverride($upc[$i], 'brand', $brand[$i]);
                 }
-                if (isset($desc[$i])) {
+                if ($ignore[$i] == 0 && isset($desc[$i])) {
                     $this->signage_obj->addOverride($upc[$i], 'description', $desc[$i]);
                 }
-                if (isset($origin[$i])) {
-                    $this->signage_obj->addOverride($upc[$i], 'originName', $origin[$i]);
+                if (isset($custom[$i]) && !empty($custom[$i])) {
+                    $this->signage_obj->addOverride($upc[$i], 'originName', $custom[$i]);
+                } elseif (isset($origin[$i]) && isset($knownOrigins[$origin[$i]])) {
+                    $this->signage_obj->addOverride($upc[$i], 'originName', $knownOrigins[$origin[$i]]);
                 }
             }
+            $this->signage_obj->setRepeats(FormLib::get('repeats', 1));
         }
 
+        return $this->drawPdf();
+    }
+
+    private function drawPdf()
+    {
         if (FormLib::get('pdf') == 'Print') {
+            foreach (FormLib::get('exclude', array()) as $e) {
+                $this->signage_obj->addExclude($e);
+            }
+            $this->signage_obj->setInUseFilter(FormLib::get('store', 0));
             $this->signage_obj->drawPDF();
             return false;
         } else {
@@ -117,7 +149,12 @@ class SignFromSearch extends FannieRESTfulPage
         }
     }
 
-    function post_batch_handler()
+    protected function get_batch_handler()
+    {
+        return $this->post_batch_handler();
+    }
+
+    protected function post_batch_handler()
     {
         if (!is_array($this->batch)) {
             $this->batch = array($this->batch);
@@ -140,20 +177,37 @@ class SignFromSearch extends FannieRESTfulPage
             $this->signage_obj->saveItems();
             echo '<html><head></head>
                   <body onload="document.forms[0].submit();">
-                  <form method="post" action="' . $_SERVER['PHP_SELF'] . '">';
+                  <form method="post" action="' . filter_input(INPUT_SERVER, 'PHP_SELF') . '">';
             foreach ($this->batch as $b) {
                 printf('<input type="hidden" name="batch[]" value="%d" />', $b);
             }
             echo '</form></body></html>';
             return false;
+        } elseif (is_array(FormLib::get('update_upc'))) {
+            $upc = FormLib::get('update_upc');
+            $brand = FormLib::get('update_brand', array());
+            $desc = FormLib::get('update_desc', array());
+            $ignore = FormLib::get('ignore_desc', array());
+            $origin = FormLib::get('update_origin', array());
+            $custom = FormLib::get('custom_origin', array());
+            $knownOrigins = $this->signage_obj->getOrigins();
+            for ($i=0; $i<count($upc); $i++) {
+                if (isset($brand[$i])) {
+                    $this->signage_obj->addOverride($upc[$i], 'brand', $brand[$i]);
+                }
+                if ($ignore[$i] == 0 && isset($desc[$i])) {
+                    $this->signage_obj->addOverride($upc[$i], 'description', $desc[$i]);
+                }
+                if (isset($custom[$i]) && !empty($custom[$i])) {
+                    $this->signage_obj->addOverride($upc[$i], 'originName', $custom[$i]);
+                } elseif (isset($origin[$i]) && isset($knownOrigins[$origin[$i]])) {
+                    $this->signage_obj->addOverride($upc[$i], 'originName', $knownOrigins[$origin[$i]]);
+                }
+            }
+            $this->signage_obj->setRepeats(FormLib::get('repeats', 1));
         }
-        
-        if (FormLib::get('pdf') == 'Print') {
-            $this->signage_obj->drawPDF();
-            return false;
-        } else {
-            return true;
-        }
+ 
+        return $this->drawPdf();
     }
 
     /**
@@ -164,12 +218,24 @@ class SignFromSearch extends FannieRESTfulPage
     {
         $mod = FormLib::get('signmod', false);
         if ($mod !== false) {
-            $this->signage_mod = $mod;
+            $this->selected_mod = $mod;
+            if (substr($mod, 0, 7) == 'Legacy:') {
+                $this->signage_mod = 'COREPOS\\Fannie\\API\\item\\signage\\LegacyWrapper';
+                COREPOS\Fannie\API\item\signage\LegacyWrapper::setWrapped(substr($mod, 7));
+            } else {
+                $this->signage_mod = $mod;
+            }
             return true;
         } else {
             $mods = FannieAPI::listModules('\COREPOS\Fannie\API\item\FannieSignage');
-            if (isset($mods[0])) {
+            $default = $this->config->get('DEFAULT_SIGNAGE');
+            if (in_array($default, $mods)) {
+                $this->signage_mod = $default;
+                $this->selected_mod = $default;
+                return true;
+            } elseif (isset($mods[0])) {
                 $this->signage_mod = $mods[0];
+                $this->selected_mod = $mods[0];
                 return true;
             } else {
                 return false;
@@ -177,29 +243,51 @@ class SignFromSearch extends FannieRESTfulPage
         }
     }
 
-    function post_batch_view()
+    protected function get_batch_view()
+    {
+        return $this->post_batch_view();
+    }
+
+    protected function post_batch_view()
     {
         return $this->post_u_view();
     }
 
-    function post_u_view()
+    protected function get_queueID_view()
+    {
+        return $this->post_u_view();
+    }
+
+    protected function post_u_view()
     {
         $ret = '';
-        $ret .= '<form action="' . $_SERVER['PHP_SELF'] . '" method="post" id="signform">';
-        $mods = FannieAPI::listModules('FannieSignage');
-        $others = FannieAPI::listModules('\COREPOS\Fannie\API\item\FannieSignage');
-        foreach ($others as $o) {
-            if (!in_array($o, $mods)) {
-                $mods[] = $o;
-            }
+        $ret .= '<form action="' . filter_input(INPUT_SERVER, 'PHP_SELF') . '" method="post" id="signform">';
+        $mods = FannieAPI::listModules('\COREPOS\Fannie\API\item\FannieSignage');
+        $enabled = $this->config->get('ENABLED_SIGNAGE');
+        if (count($enabled) > 0) {
+            $mods = array_filter($mods, function ($i) use ($enabled) {
+                return in_array($i, $enabled) || in_array(str_replace('\\', '-', $i), $enabled);
+            });
         }
         sort($mods);
+        $tagEnabled = $this->config->get('ENABLED_TAGS');
+        foreach (COREPOS\Fannie\API\item\signage\LegacyWrapper::getLayouts() as $l) {
+            if (in_array($l, $tagEnabled) && count($tagEnabled) > 0) {
+                $mods[] = 'Legacy:' . $l;
+            }
+        }
         $ret .= '<div class="form-group form-inline">';
         $ret .= '<label>Layout</label>: 
             <select name="signmod" class="form-control" onchange="$(\'#signform\').submit()">';
         foreach ($mods as $m) {
-            $ret .= sprintf('<option %s>%s</option>',
-                    ($m == $this->signage_mod ? 'selected' : ''), $m);
+            $name = $m;
+            if (strstr($m, '\\')) {
+                $pts = explode('\\', $m);
+                $name = $pts[count($pts)-1];
+            }
+            if ($name === 'LegacyWrapper') continue;
+            $ret .= sprintf('<option %s value="%s">%s</option>',
+                    ($m == $this->selected_mod ? 'selected' : ''), $m, $name);
         }
         $ret .= '</select>';
         
@@ -224,6 +312,20 @@ class SignFromSearch extends FannieRESTfulPage
             }
         }
         $ret .= '&nbsp;&nbsp;&nbsp;&nbsp;';
+
+        $stores = new StoresModel($this->connection);
+        $stores->hasOwnItems(1);
+        $ret .= '<select class="form-control" name="store">
+                <option value="0">Any Store</option>';
+        foreach ($stores->find() as $s) {
+            $ret .= sprintf('<option value="%d">%s</option>',
+                $s->storeID(), $s->description());
+        }
+        $ret .= '</select>';
+        $ret .= '&nbsp;&nbsp;&nbsp;&nbsp;';
+        $ret .= '<input type="number" title="Number of copies" name="repeats" class="form-control" value="1" />';
+
+        $ret .= '&nbsp;&nbsp;&nbsp;&nbsp;';
         $ret .= '<button type="submit" name="pdf" value="Print" 
                     class="btn btn-default">Print</button>';
         $ret .= '</div>';
@@ -231,25 +333,27 @@ class SignFromSearch extends FannieRESTfulPage
 
         $ret .= $this->signage_obj->listItems();
 
+        /*
         $ret .= '<p><button type="submit" name="update" id="updateBtn" value="Save Text"
                     class="btn btn-default">Save Text</button></p>';
+        */
 
         $this->add_onload_command('$(".FannieSignageField").keydown(function(event) {
             if (event.which == 13) {
                 event.preventDefault();
-                $("#updateBtn").click();
             }
         });');
 
         $ret .= '</form>';
+        $this->addScript('../../src/javascript/tablesorter/jquery.tablesorter.js');
+        $this->addOnloadCommand("\$('.tablesorter').tablesorter();");
 
         return $ret;
     }
 
-    public function get_view()
+    protected function get_view()
     {
-        global $FANNIE_OP_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
+        $dbc = $this->connection;
 
         $batchQ = 'SELECT batchID, 
                     batchName,
@@ -265,7 +369,7 @@ class SignFromSearch extends FannieRESTfulPage
         $batchR = $dbc->execute($batchP, array($today, $today, $today));
 
         $ret = '<b>Select batch(es)</b>:'; 
-        $ret .= '<form action="' . $_SERVER['PHP_SELF'] . '" method="post">';
+        $ret .= '<form action="' . filter_input(INPUT_SERVER, 'PHP_SELF') . '" method="post">';
         $ret .= '<select name="batch[]" multiple size="15">';
         while ($batchW = $dbc->fetch_row($batchR)) {
             $ret .= sprintf('<option value="%d">%s (%s - %s)</option>',
@@ -294,8 +398,18 @@ class SignFromSearch extends FannieRESTfulPage
             </p>';
     }
 
+    public function unitTest($phpunit)
+    {
+        $phpunit->assertNotEquals(0, strlen($this->get_view()));
+        $this->u = array(BarcodeLib::padUPC('4011'));
+        $phpunit->assertEquals(true, $this->post_u_handler());
+        $phpunit->assertNotEquals(0, strlen($this->post_u_view()));
+        $this->batch = 1;
+        $phpunit->assertEquals(true, $this->get_batch_handler());
+        $phpunit->assertNotEquals(0, strlen($this->get_batch_view()));
+    }
+
 }
 
-FannieDispatch::conditionalExec(false);
+FannieDispatch::conditionalExec();
 
-?>

@@ -38,16 +38,9 @@ class EquityReport extends FannieReportPage
     protected $header = "Equity Activity Report";
     protected $required_fields = array('memNum');
 
-    public function preprocess()
-    {
-        $this->card_no = FormLib::get('memNum','');
-
-        return parent::preprocess();
-    }
-
     public function report_description_content()
     {
-        return array('Activity for account #'.$this->card_no);
+        return array('Activity for account #'.$this->form->memNum);
     }
 
     public function fetch_report_data()
@@ -70,7 +63,7 @@ class EquityReport extends FannieReportPage
                 $in .= '?,';
             }
             $in = substr($in, 0, strlen($in)-1);
-            $args[] = $this->card_no;
+            $args[] = $this->form->memNum;
 
             $todayQ = '
                 SELECT -total AS stockPurchase,
@@ -101,7 +94,7 @@ class EquityReport extends FannieReportPage
             FROM " . $this->config->get('TRANS_DB') . $dbc->sep() . "stockpurchases AS s 
                 LEFT JOIN departments AS d ON s.dept=d.dept_no
             WHERE s.card_no=?";
-        $args[] = $this->card_no;
+        $args[] = $this->form->memNum;
 
         /** union two queries together if applicable **/
         if ($todayQ) {
@@ -110,25 +103,31 @@ class EquityReport extends FannieReportPage
         } else {
             $historyQ .= ' ORDER BY tdate';
         }
-        $p = $dbc->prepare($historyQ);
-        $r = $dbc->execute($p, $args);
+        $prep = $dbc->prepare($historyQ);
+        $res = $dbc->execute($prep, $args);
 
         $data = array();
-        while($w = $dbc->fetch_row($r)) {
-            $record = array();
-            $record[] = sprintf('%d/%d/%d',$w[4],$w[5],$w[3]);
-            if (FormLib::get('excel') !== '') {
-                $record[] = $w[1];
-            } else {
-                $record[] = sprintf('<a href="%sadmin/LookupReceipt/RenderReceiptPage.php?year=%d&month=%d&day=%d&receipt=%s">%s</a>',
-                        $this->config->get('URL'),$w[3],$w[4],$w[5],$w[1],$w[1]);
-            }
-            $record[] = sprintf('%.2f', ($w[0] != 0 ? $w[0] : $w[2]));
-            $record[] = $w[2];
-            $data[] = $record;
+        while ($row = $dbc->fetchRow($res)) {
+            $data[] = $this->rowToRecord($row);
         }
 
         return $data;
+    }
+
+    private function rowToRecord($row)
+    {
+        $record = array();
+        $record[] = sprintf('%d/%d/%d',$row[4],$row[5],$row[3]);
+        if (FormLib::get('excel') !== '') {
+            $record[] = $row[1];
+        } else {
+            $record[] = sprintf('<a href="%sadmin/LookupReceipt/RenderReceiptPage.php?year=%d&month=%d&day=%d&receipt=%s">%s</a>',
+                    $this->config->get('URL'),$row[3],$row[4],$row[5],$row[1],$row[1]);
+        }
+        $record[] = sprintf('%.2f', ($row[0] != 0 ? $row[0] : $row[2]));
+        $record[] = $row[2];
+
+        return $record;
     }
 
     public function form_content()
@@ -152,6 +151,11 @@ class EquityReport extends FannieReportPage
             </p>';
     }
 
+    public function unitTest($phpunit)
+    {
+        $data = array(100, '1-1-1', 'equity', 2000, 1, 1, '2000-01-01');
+        $phpunit->assertInternalType('array', $this->rowToRecord($data));
+    }
 }
 
 FannieDispatch::conditionalExec();

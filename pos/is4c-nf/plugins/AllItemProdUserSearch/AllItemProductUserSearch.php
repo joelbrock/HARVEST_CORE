@@ -21,6 +21,9 @@
 
 *********************************************************************************/
 
+use COREPOS\pos\lib\Database;
+use COREPOS\pos\lib\Search\Products\ProductSearch;
+
 /**
   @class AllItemProductUserSearch
   Use the productUser table to supplement searches.
@@ -42,7 +45,7 @@ class AllItemProductUserSearch extends ProductSearch {
         $query = "SELECT p.upc,
                CASE WHEN u.description IS NOT NULL THEN u.description
                    ELSE p.description END as description,
-                p.normal_price, p.special_price, p.advertised, p.scale
+                p.normal_price, p.special_price, p.scale
                FROM products AS p
                 LEFT JOIN productUser AS u ON p.upc=u.upc
              WHERE (p.description LIKE '%$str%' OR

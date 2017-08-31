@@ -41,9 +41,13 @@
    id for recovery in the case of mistakes.
 */
 
-include('../config.php');
-include($FANNIE_ROOT.'src/SQLManager.php');
-include($FANNIE_ROOT.'src/cron_msg.php');
+include(dirname(__FILE__) . '/../config.php');
+if (!class_exists('FannieAPI')) {
+    include($FANNIE_ROOT . 'classlib2.0/FannieAPI.php');
+}
+if (!function_exists('cron_msg')) {
+    include($FANNIE_ROOT.'src/cron_msg.php');
+}
 
 set_time_limit(0);
 
@@ -62,6 +66,7 @@ if ($chk2 === false)
 else
     echo cron_msg("Cleared deleted shelftags");
 
+<<<<<<< HEAD
 $chk2 = $sql->query("DELETE FROM shelftags WHERE id < 0");
 if ($chk2 === false)
 	echo cron_msg("Error clearing deleted sheltags");
@@ -69,3 +74,5 @@ else
 	echo cron_msg("Cleared deleted shelftags");
 
 ?>
+=======
+>>>>>>> 19e4bb6cdedf44fe4ca28b47ac82846d1eef39d5

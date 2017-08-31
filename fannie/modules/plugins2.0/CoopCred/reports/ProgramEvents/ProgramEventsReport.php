@@ -219,11 +219,11 @@ class ProgramEventsReport extends FannieReportPage {
         $args[] = $date1 . ' 00:00:00';
         $args[] = $date2 . ' 23:59:59';
 
-        $prep = $dbc->prepare_statement($query);
+        $prep = $dbc->prepare($query);
         if ($prep === False) {
             $dbc->logger("\nprep failed:\n$query");
         }
-        $result = $dbc->exec_statement($prep,$args);
+        $result = $dbc->execute($prep,$args);
         if ($result === False) {
             $dbc->logger("\nexec failed:\n$query\nargs:",implode(" : ",$args));
         }
@@ -235,7 +235,7 @@ class ProgramEventsReport extends FannieReportPage {
         $transferOut = 0;
         $otherOut = 0;
         $rowCount = 0;
-        while ($row = $dbc->fetch_array($result)){
+        while ($row = $dbc->fetchRow($result)){
             $memberNumber = $row['card_no'];
             $suffix = "";
             if ($row['trans_status'] == 'V') {
@@ -358,7 +358,7 @@ class ProgramEventsReport extends FannieReportPage {
             "<br />It is relative to the starting day of the report" .
             " and thus may not be meaningful if the opening balance was not zero." .
             "</p>";
-        $ret[] = "<p class='explain'><b><a href='ProgramEventsReport.php?pid=" .
+        $ret[] = "<p class='explain'><b><a href='{$_SERVER['PHP_SELF']}?pid=" .
             $this->programID . "'>" .
             "Start again from the form.</a></b></p>";
         return $ret;
@@ -501,6 +501,5 @@ title="Tick to display with sorting from column heads; un-tick for a plain formt
     // class programReport
 }
 
-FannieDispatch::conditionalExec(false);
+FannieDispatch::conditionalExec();
 
-?>

@@ -42,12 +42,13 @@
    Changes are logged in prodUpdate if possible.
 */
 
-include('../config.php');
+include(dirname(__FILE__) . '/../config.php');
 if (!class_exists('FannieAPI')) {
-    include($FANNIE_ROOT.'classlib2.0/FannieAPI.php');
+    include($FANNIE_ROOT . 'classlib2.0/FannieAPI.php');
 }
-include($FANNIE_ROOT.'src/SQLManager.php');
-include($FANNIE_ROOT.'src/cron_msg.php');
+if (!function_exists('cron_msg')) {
+    include($FANNIE_ROOT.'src/cron_msg.php');
+}
 
 set_time_limit(0);
 
@@ -147,4 +148,4 @@ if ($success)
     echo cron_msg("Changes logged in prodUpdate");
 else
     echo cron_msg("Error logging changes");
-?>
+

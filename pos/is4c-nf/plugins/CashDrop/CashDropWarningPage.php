@@ -21,9 +21,11 @@
 
 *********************************************************************************/
 
+use COREPOS\pos\lib\gui\InputCorePage;
 include_once(dirname(__FILE__).'/../../lib/AutoLoader.php');
 
-class CashDropWarningPage extends InputPage {
+class CashDropWarningPage extends InputCorePage 
+{
 
     function preprocess()
     {
@@ -31,12 +33,10 @@ class CashDropWarningPage extends InputPage {
             $in = strtoupper($_REQUEST['reginput']);
             if ($in != '' && $in != 'CL') return True;
 
-            CoreLocal::set("msgrepeat",1);
-            CoreLocal::set("strRemembered",CoreLocal::get('cashDropSaveInput'));
             CoreLocal::set('cashDropSaveInput','');
-
-            $this->change_page($this->page_url."gui-modules/pos2.php");
-            return False;
+            $qstr = '?reginput=' . urlencode(CoreLocal::get('cashDropSaveInput')) . '&repeat=1';
+            $this->change_page($this->page_url."gui-modules/pos2.php" . $qstr);
+            return false;
         }
         return True;
     }
@@ -60,7 +60,5 @@ class CashDropWarningPage extends InputPage {
     } // END body_content() FUNCTION
 }
 
-if (basename($_SERVER['PHP_SELF']) == basename(__FILE__))
-    new CashDropWarningPage();
+AutoLoader::dispatch();
 
-?>

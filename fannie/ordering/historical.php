@@ -20,18 +20,32 @@
     Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 *********************************************************************************/
-include('../config.php');
-include($FANNIE_ROOT.'classlib2.0/FannieAPI.php');
+use COREPOS\Fannie\API\lib\Store;
+if (basename(__FILE__) != basename($_SERVER['PHP_SELF'])) {
+    return;
+}
+
+include(dirname(__FILE__) . '/../config.php');
+if (!class_exists('FannieAPI')) {
+    include($FANNIE_ROOT.'classlib2.0/FannieAPI.php');
+}
+$edit = FannieAuth::validateUserQuiet('ordering_edit');
+if (Store::getIdByIp() == 2 || $edit || FannieConfig::config('SO_UI') === 'bootstrap') {
+    header('Location: OldSpecialOrdersPage.php');
+    return;
+}
+if (!function_exists('checkLogin')) {
+    include($FANNIE_ROOT.'auth/login.php');
+}
 $dbc = FannieDB::get($FANNIE_OP_DB);
 $TRANS = ($FANNIE_SERVER_DBMS == "MSSQL") ? $FANNIE_TRANS_DB.".dbo." : $FANNIE_TRANS_DB.".";
 
-include($FANNIE_ROOT.'auth/login.php');
 $username = checkLogin();
 if (!$username){
     $url = $FANNIE_URL."auth/ui/loginform.php";
     $rd = $FANNIE_URL."ordering/historical.php";
     header("Location: $url?redirect=$rd");
-    exit;
+    return;
 }
 
 $page_title = "Special Order :: Management";
@@ -73,17 +87,17 @@ $status = array(
 );
 
 $assignments = array();
-$q = $dbc->prepare_statement("SELECT superID,super_name FROM MasterSuperDepts
+$q = $dbc->prepare("SELECT superID,super_name FROM MasterSuperDepts
     GROUP BY superID,super_name ORDER BY superID");
-$r = $dbc->exec_statement($q);
+$r = $dbc->execute($q);
 while($w = $dbc->fetch_row($r))
     $assignments[$w[0]] = $w[1];
 unset($assignments[0]); 
 
 $suppliers = array('');
-$q = $dbc->prepare_statement("SELECT mixMatch FROM {$TRANS}CompleteSpecialOrder WHERE trans_type='I'
+$q = $dbc->prepare("SELECT mixMatch FROM {$TRANS}CompleteSpecialOrder WHERE trans_type='I'
     GROUP BY mixMatch ORDER BY mixMatch");
-$r = $dbc->exec_statement($q);
+$r = $dbc->execute($q);
 while($w = $dbc->fetch_row($r)){
     $suppliers[] = $w[0];
 }
@@ -187,7 +201,7 @@ if ($paged) {
 }
 $lookupQ .= " ORDER BY $orderby";
 $p = $dbc->prepare($lookupQ);
-$r = $dbc->exec_statement($p,$filterargs);
+$r = $dbc->execute($p,$filterargs);
 
 $orders = array();
 $valid_ids = array();
@@ -207,24 +221,24 @@ if ($f2 !== '' || $f3 !== '') {
         $filter .= "AND p.mixMatch=?";
         $args[] = $f3;
     }
-    $p = $dbc->prepare_statement("SELECT p.order_id FROM {$TRANS}CompleteSpecialOrder AS p
+    $p = $dbc->prepare("SELECT p.order_id FROM {$TRANS}CompleteSpecialOrder AS p
         LEFT JOIN MasterSuperDepts AS m ON p.department=m.dept_ID
         LEFT JOIN {$TRANS}SpecialOrders AS o ON p.order_id=o.specialOrderID
         WHERE 1=1 $filter
         GROUP BY p.order_id");
-    $r = $dbc->exec_statement($p,$args);
+    $r = $dbc->execute($p,$args);
     $valid_ids = array();
     while($w = $dbc->fetch_row($r))
         $valid_ids[$w['order_id']] = True;
 
     if ($f2 !== '' && $f3 === '') {
-        $q2 = $dbc->prepare_statement("SELECT o.specialOrderID FROM 
+        $q2 = $dbc->prepare("SELECT o.specialOrderID FROM 
                 {$TRANS}SpecialOrders AS o
                 INNER JOIN {$TRANS}CompleteSpecialOrder AS p
                 ON p.order_id=o.specialOrderID
                 WHERE o.noteSuperID IN (?)
                 GROUP BY o.specialOrderID");
-        $r2 = $dbc->exec_statement($q2, array($f2));
+        $r2 = $dbc->execute($q2, array($f2));
         while($w2 = $dbc->fetch_row($r2)) {
             $valid_ids[$w2['specialOrderID']] = true;
         }
@@ -244,10 +258,10 @@ if (empty($oargs)) {
     // avoid invalid query
 }
 
-$itemsQ = $dbc->prepare_statement("SELECT order_id,description,mixMatch FROM 
+$itemsQ = $dbc->prepare("SELECT order_id,description,mixMatch FROM 
     {$TRANS}CompleteSpecialOrder WHERE order_id IN $oids
     AND trans_id > 0");
-$itemsR = $dbc->exec_statement($itemsQ, $oargs);
+$itemsR = $dbc->execute($itemsQ, $oargs);
 $items = array();
 $suppliers = array();
 while ($itemsW = $dbc->fetch_row($itemsR)) {
@@ -324,7 +338,7 @@ foreach ($orders as $w) {
 $ret .= "</table>";
 
 if ($paged) {
-    $url = $_SERVER['REQUEST_URI'];
+    $url = filter_input(INPUT_SERVER, 'REQUEST_URI');
     if (!strstr($url,"page=")) {
         if (substr($url,-4)==".php") {
             $url .= "?page=".$page;
@@ -369,27 +383,7 @@ function applyMemNum(n){
     $('#cardno').val(n);
     refilter();
 }
-function updateStatus(oid,val){
-    $.ajax({
-    url: 'ajax-calls.php',
-    type: 'post',
-    data: 'action=UpdateStatus&orderID='+oid+'&val='+val,
-    cache: false,
-    success: function(resp){
-        $('#statusdate'+oid).html(resp);    
-    }
-    });
-}
-function togglePrint(username,oid){
-    $.ajax({
-    url: 'ajax-calls.php',
-    type: 'post',
-    data: 'action=UpdatePrint&orderID='+oid+'&user='+username,
-    cache: false,
-    success: function(resp){}
-    });
-}
 </script>
 <?php
 //include($FANNIE_ROOT.'src/footer.html');
-?>
+

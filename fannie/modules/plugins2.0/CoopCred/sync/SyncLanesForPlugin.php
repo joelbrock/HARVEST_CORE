@@ -83,7 +83,7 @@ class SyncLanesForPlugin extends SyncLanes
             $ret['sending'] = False;
             $ret['messages'] = 'No table given';
             return $ret;
-        } elseif (ereg("[^A-Za-z0-9_]",$table)) {
+        } elseif (preg_match('/^[^A-Za-z0-9_]+$/',$table)) {
             $ret['sending'] = False;
             $ret['messages'] = 'Illegal table name: '.$table;
             return $ret;
@@ -102,7 +102,7 @@ class SyncLanesForPlugin extends SyncLanes
                 $ret['sending'] = False;
                 $ret['messages'] = 'No server database given';
                 return $ret;
-            } elseif (ereg("[^A-Za-z0-9_]",$server_db)) {
+            } elseif (preg_match('/^[^A-Za-z0-9_]+$/',$server_db)) {
                 $ret['sending'] = False;
                 $ret['messages'] = 'Illegal database name: '.$server_db;
                 return $ret;
@@ -111,7 +111,7 @@ class SyncLanesForPlugin extends SyncLanes
                 $ret['sending'] = False;
                 $ret['messages'] = 'No lane database given';
                 return $ret;
-            } elseif (ereg("[^A-Za-z0-9_]",$lane_db)) {
+            } elseif (preg_match('/^[^A-Za-z0-9_]+$/',$lane_db)) {
                 $ret['sending'] = False;
                 $ret['messages'] = 'Illegal database name: '.$lane_db;
                 return $ret;
@@ -191,13 +191,13 @@ class SyncLanesForPlugin extends SyncLanes
                      */
                 }
                 // This creates the lane-side DB if it doesn't exist.
-                $ret['messages'] .= "Before add_connection()\n";
-                    $success = $dbc->add_connection($lane['host'],$lane['type'],
+                $ret['messages'] .= "Before addConnection()\n";
+                    $success = $dbc->addConnection($lane['host'],$lane['type'],
                                     $lane[$db],$lane['user'],$lane['pw']);
                 if ($success) {
-                    $ret['messages'] .= "After add_connection() OK\n";
+                    $ret['messages'] .= "After addConnection() OK\n";
                 } else {
-                    $ret['messages'] .= "After add_connection() failed\n";
+                    $ret['messages'] .= "After addConnection() failed\n";
                 }
                 if ($dbc->connections[$lane[$db]]) {
                     if (!$dbc->tableExists($table,$lane[$db])) {
@@ -288,7 +288,7 @@ class SyncLanesForPlugin extends SyncLanes
             $ret['sending'] = False;
             $ret['messages'] = 'No table given';
             return $ret;
-        } elseif (ereg("[^A-Za-z0-9_]",$table)) {
+        } elseif (preg_match('/^[^A-Za-z0-9_]+$/',$table)) {
             $ret['sending'] = False;
             $ret['messages'] = 'Illegal table name: '.$table;
             return $ret;
@@ -309,7 +309,7 @@ class SyncLanesForPlugin extends SyncLanes
                 $laneNumber++;
                 continue;
             }
-            $dbc->add_connection($lane['host'],$lane['type'],
+            $dbc->addConnection($lane['host'],$lane['type'],
                 $lane[$db],$lane['user'],$lane['pw']);
             if ($dbc->connections[$lane[$db]]) {
                 $success = $dbc->transfer($lane[$db],

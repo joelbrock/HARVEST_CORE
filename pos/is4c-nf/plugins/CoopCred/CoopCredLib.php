@@ -22,11 +22,13 @@
 
 *********************************************************************************/
 
+use COREPOS\pos\lib\ReceiptLib;
+
 /**
   @class CoopCredLib
   Functions for the Coop Cred plugin.
 */
-class CoopCredLib extends LibraryClass {
+class CoopCredLib {
 
 static private $SQL_CONNECTION = null;
 
@@ -168,17 +170,17 @@ static private $SQL_CONNECTION = null;
             JOIN {$CORE_LOCAL->get('pDatabase')}.custdata c
                 ON m.cardNo = c.CardNo
             WHERE m.cardNo = ? AND m.programID = ? AND c.personNum=1";
-        $statement = $conn->prepare_statement($query);
+        $statement = $conn->prepare($query);
             if ($statement === False) {
-                return "Error: prepare_statement() failed for query: $query";
+                return "Error: prepare() failed for query: $query";
             }
         $args=array(
             (int)$CORE_LOCAL->get("memberID"),
             (int)$pgm->programID()
             );
-        $result = $conn->exec_statement($statement,$args);
+        $result = $conn->execute($statement,$args);
             if ($result === False) {
-                return "Error: exec_statement() failed for query: $query args:" .
+                return "Error: execute() failed for query: $query args:" .
                     implode('|',$args);
             }
 
@@ -191,7 +193,7 @@ static private $SQL_CONNECTION = null;
                 ".";
         }
 
-        $mem = $conn->fetch_array($result);
+        $mem = $conn->fetchRow($result);
 
         /* Suspended or not activated for either purchasing or input.
          */
@@ -288,7 +290,7 @@ static private $SQL_CONNECTION = null;
         if ($subsR === False) {
             return "Error: query() failed for query: $subsQ";
         } else {
-            $row = $conn->fetch_array($subsR);
+            $row = $conn->fetchRow($subsR);
             $CORE_LOCAL->set("{$pc}chargeTotal",
                 (!$row || !isset($row['chargeTotal']))
                     ? 0 : (double)$row["chargeTotal"] );
@@ -329,7 +331,7 @@ static private $SQL_CONNECTION = null;
             /**
               Create the connection object and add all local databases to it.
             */
-            self::$SQL_CONNECTION = new SQLManager($CORE_LOCAL->get("localhost"),
+            self::$SQL_CONNECTION = new \COREPOS\pos\lib\SQLManager($CORE_LOCAL->get("localhost"),
                 $CORE_LOCAL->get("DBMS"),
                 $CORE_LOCAL->get("tDatabase"),
                 $CORE_LOCAL->get("localUser"),$CORE_LOCAL->get("localPass"),
@@ -392,4 +394,4 @@ static private $SQL_CONNECTION = null;
 
 // CoopCredLib class
 }
-?>
+

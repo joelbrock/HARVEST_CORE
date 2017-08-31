@@ -36,7 +36,6 @@ class MemberEditor extends FanniePage {
     protected $header = "Member ";
 
     public $description = '[Member Editor] is the primary tool for viewing and editing member accounts.';
-    public $themed = true;
 
     protected $must_authenticate = true;
     protected $auth_classes = array('editmembers');
@@ -61,13 +60,13 @@ class MemberEditor extends FanniePage {
         global $FANNIE_COUNTRY, $FANNIE_MEMBER_MODULES, $FANNIE_OP_DB;
 
         $this->country = (isset($FANNIE_COUNTRY)&&!empty($FANNIE_COUNTRY))?$FANNIE_COUNTRY:"US";
-        $this->memNum = FormLib::get_form_value('memNum',False);
+        $this->memNum = FormLib::get('memNum',False);
         if ($this->memNum !== false) {
             $this->title .= $this->memNum;
             $this->header .= $this->memNum;
 
             /* start building prev/next links */
-            $list = FormLib::get_form_value('l');
+            $list = FormLib::get('l');
             list($prevLink, $nextLink) = self::memLinksPrevNext($this->memNum, $list);
 
             if (!empty($prevLink))
@@ -79,14 +78,31 @@ class MemberEditor extends FanniePage {
             /* end building prev/next links */
 
             /* form was submitted. save input. */
-            if (FormLib::get_form_value('saveBtn',False) !== False){
-                $whichBtn = FormLib::get_form_value('saveBtn');
-                FannieAPI::listModules('MemberModule');
+            if (FormLib::get('saveBtn',False) !== False){
+                $whichBtn = FormLib::get('saveBtn');
+                /** get current account settings for reference **/
+                $account = \COREPOS\Fannie\API\member\MemberREST::get($this->memNum);
+                \COREPOS\Fannie\API\member\MemberModule::setAccount($account);
+                FannieAPI::listModules('COREPOS\Fannie\API\member\MemberModule');
                 foreach($FANNIE_MEMBER_MODULES as $mm){
                     if (class_exists($mm)) {
                         $instance = new $mm();
-                        $this->msgs .= $instance->saveFormData($this->memNum);
+                        $saved = $instance->saveFormData($this->memNum, $account);
+                        /**
+                          The API return type is changing here. Any un-updated
+                          module that still returns a string should not clobber
+                          the $account info.
+                        */
+                        if (is_array($saved)) {
+                            $account = $saved;
+                        } else {
+                            $this->msgs .= $saved;
+                        }
                     }
+                }
+                $post_result = \COREPOS\Fannie\API\member\MemberREST::post($this->memNum, $account);
+                if ($post_result['errors'] > 0) {
+                    $this->msgs .= 'Error saving account';
                 }
 
                 $dbc = FannieDB::get($FANNIE_OP_DB);
@@ -163,25 +179,8 @@ class MemberEditor extends FanniePage {
 
             return $ret;
         } else {
-            $dbc = FannieDB::get(FannieConfig::config('OP_DB'));
-            $prevP = $dbc->prepare('
-                SELECT MAX(CardNo) AS prev
-                FROM custdata 
-                WHERE CardNo < ?');
-            $prevR = $dbc->execute($prevP,array($card_no));
-            if ($dbc->numRows($prevR) > 0) {
-                $prevW = $dbc->fetchRow($prevR);
-                $prev = $prevW['prev'];
-            }
-            $nextP = $dbc->prepare('
-                SELECT MIN(CardNo) AS next 
-                FROM custdata 
-                WHERE CardNo > ?');
-            $nextR = $dbc->execute($nextP,array($card_no));
-            if ($dbc->numRows($nextR) > 0) {
-                $nextW = $dbc->fetchRow($nextR);
-                $next = $nextW['next'];
-            }
+            $prev = \COREPOS\Fannie\API\member\MemberREST::prevAccount($card_no);
+            $next = \COREPOS\Fannie\API\member\MemberREST::nextAccount($card_no);
             
             $ret = array('', '');
             if ($prev != false) {
@@ -201,10 +200,8 @@ class MemberEditor extends FanniePage {
 
     function body_content()
     {
-        global $FANNIE_MEMBER_MODULES;
         $ret = '';
-
-        $list = FormLib::get_form_value('l');
+        $list = FormLib::get('l');
 
         $ret .= '<form action="MemberEditor.php" method="post">';
         $ret .= sprintf('<input type="hidden" name="memNum" value="%d" />',$this->memNum);
@@ -220,8 +217,10 @@ class MemberEditor extends FanniePage {
             $ret .= '<div class="alert alert-danger">' . $this->msgs . '</div>';
         }
         $current_width = 100;
-        FannieAPI::listModules('MemberModule');
-        foreach ($FANNIE_MEMBER_MODULES as $mm) {
+        $account = \COREPOS\Fannie\API\member\MemberREST::get($this->memNum);
+        \COREPOS\Fannie\API\member\MemberModule::setAccount($account);
+        FannieAPI::listModules('COREPOS\Fannie\API\member\MemberModule');
+        foreach ($this->config->get('MEMBER_MODULES') as $mm) {
             if (!class_exists($mm)) {
                 continue;
             }
@@ -260,9 +259,8 @@ class MemberEditor extends FanniePage {
             $ret .= '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;';
         }
         $ret .= '<button type="submit" name="saveBtn" value="Save" 
-            class="btn btn-default">Save</button>';
-        $ret .= '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;';
-        $ret .= '<button type="reset" class="btn btn-default">Reset Form</button>';
+            class="btn btn-default btn-core">Save</button>';
+        $ret .= '<button type="reset" class="btn btn-default btn-reset">Reset Form</button>';
         $ret .= '</p>';
         $ret .= '</form>';
 
@@ -286,8 +284,15 @@ class MemberEditor extends FanniePage {
             through that result set. Similarly, the <em>Save &amp; Next</em>
             button will save the current member and proceed to the next.</p>';
     }
+
+    public function unitTest($phpunit)
+    {
+        $modules = FannieAPI::listModules('\COREPOS\Fannie\API\member\MemberModule');
+        $this->config->set('FANNIE_MEMBER_MODULES', $modules);
+        $this->memNum = 1;
+        $phpunit->assertNotEquals(0, strlen($this->body_content()));
+    }
 }
 
 FannieDispatch::conditionalExec();
 
-?>

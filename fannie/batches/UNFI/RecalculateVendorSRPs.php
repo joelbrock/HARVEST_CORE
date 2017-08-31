@@ -39,6 +39,9 @@ class RecalculateVendorSRPs extends FannieRESTfulPage
     specific margin goals.';
     public $themed = true;
 
+    protected $auth_classes = array('batches');
+    protected $must_authenticate = true;
+
     public function get_id_view()
     {
         global $FANNIE_OP_DB;
@@ -46,8 +49,8 @@ class RecalculateVendorSRPs extends FannieRESTfulPage
 
         $id = $this->id;
 
-        $delQ = $dbc->prepare_statement("DELETE FROM vendorSRPs WHERE vendorID=?");
-        $delR = $dbc->exec_statement($delQ,array($id));
+        $delQ = $dbc->prepare("DELETE FROM vendorSRPs WHERE vendorID=?");
+        $delR = $dbc->execute($delQ,array($id));
 
         $query = '
             SELECT v.upc,
@@ -58,7 +61,8 @@ class RecalculateVendorSRPs extends FannieRESTfulPage
                     WHEN b.margin IS NOT NULL THEN b.margin
                     ELSE 0 
                 END AS margin,
-                n.shippingMarkup
+                COALESCE(n.shippingMarkup, 0) as shipping,
+                COALESCE(n.discountRate, 0) as discount
             FROM vendorItems as v 
                 LEFT JOIN vendorDepartments AS a ON v.vendorID=a.vendorID AND v.vendorDept=a.deptID
                 INNER JOIN vendors AS n ON v.vendorID=n.vendorID
@@ -67,7 +71,7 @@ class RecalculateVendorSRPs extends FannieRESTfulPage
             WHERE v.vendorID=?
                 AND (a.margin IS NOT NULL OR b.margin IS NOT NULL)';
         $fetchP = $dbc->prepare($query);
-        $fetchR = $dbc->exec_statement($fetchP, array($id));
+        $fetchR = $dbc->execute($fetchP, array($id));
         $upP = $dbc->prepare('
             UPDATE vendorItems
             SET srp=?,
@@ -76,20 +80,28 @@ class RecalculateVendorSRPs extends FannieRESTfulPage
                 AND sku=?');
         $insP = false;
         if ($dbc->tableExists('vendorSRPs')) {
-            $insP = $dbc->prepare_statement('INSERT INTO vendorSRPs VALUES (?,?,?)');
+            $insP = $dbc->prepare('INSERT INTO vendorSRPs VALUES (?,?,?)');
         }
-        while ($fetchW = $dbc->fetch_array($fetchR)) {
+        $rounder = new \COREPOS\Fannie\API\item\PriceRounder();
+        $upcs = array();
+        $dbc->startTransaction();
+        while ($fetchW = $dbc->fetchRow($fetchR)) {
+            if (isset($upcs[$fetchW['upc']])) {
+                continue;
+            }
+            $upcs[$fetchW['upc']] = true;
             // calculate a SRP from unit cost and desired margin
-            $srp = round($fetchW['cost'] / (1 - $fetchW['margin']),2);
-            $srp *= (1+$fetchW['shippingMarkup']);
+            $adj = \COREPOS\Fannie\API\item\Margin::adjustedCost($fetchW['cost'], $fetchW['discount'], $fetchW['shipping']);
+            $srp = \COREPOS\Fannie\API\item\Margin::toPrice($adj, $fetchW['margin']);
 
-            $srp = $this->normalizePrice($srp);
+            $srp = $rounder->round($srp);
 
             $upR = $dbc->execute($upP, array($srp, $id, $fetchW['sku']));
             if ($insP) {
-                $insR = $dbc->exec_statement($insP,array($id,$fetchW['upc'],$srp));
+                $insR = $dbc->execute($insP,array($id,$fetchW['upc'],$srp));
             }
         }
+        $dbc->commitTransaction();
 
         $ret = "<b>SRPs have been updated</b><br />";
         $ret .= sprintf('<p>
@@ -119,8 +131,8 @@ class RecalculateVendorSRPs extends FannieRESTfulPage
     {
         global $FANNIE_OP_DB;
         $dbc = FannieDB::get($FANNIE_OP_DB);
-        $q = $dbc->prepare_statement("SELECT vendorID,vendorName FROM vendors ORDER BY vendorName");
-        $r = $dbc->exec_statement($q);
+        $q = $dbc->prepare("SELECT vendorID,vendorName FROM vendors ORDER BY vendorName");
+        $r = $dbc->execute($q);
         $opts = "";
         while($w = $dbc->fetch_row($r))
             $opts .= "<option value=$w[0]>$w[1]</option>";
@@ -145,12 +157,81 @@ class RecalculateVendorSRPs extends FannieRESTfulPage
     public function helpContent()
     {
         return '<p>Recalculate suggested retail prices for items from
-            a given vendor. If margin targets have been assigned to
-            vendor-specific departments, those margins are used. Otherwise
-            POS departments\' margin targets are used.</p>';
+            a given vendor. This takes place in three steps.
+            <ul>
+                <li>First, the vendor catalog unit costs are adjusted
+                    upwards or downwards to account for volume discounts
+                    or shipping markups. The adjusted cost is the catalog
+                    cost times (1 - volume discount) times (1 + shipping markup).
+                    If the cost is 1.99, volume discount is 15%, and shipping
+                    markup is 5%, the adjusted cost is 1.99 * (1 - 0.15) *
+                    (1 + 0.05) = 1.78.</li>
+                <li>Second, the margin target is applied to the adjusted cost
+                    to calculate an approximate SRP. In this case the adjusted 
+                    cost is divided by (1 - margin). If the adjusted cost is 1.78
+                    as before and the margin target is 35%, the appoximate
+                    SRP is 1.78 / (1 - 0.35) = 2.74.
+                    <ul>
+                        <li>There are two tiers of margin targets. If the
+                        item belongs to a vendor subcategory with a non-zero margin
+                        target, that margin is used in this calculation. Otherwise
+                        the POS department\'s margin target it used.
+                        </li>
+                    </ul>
+                </li>
+                <li>Finally, the price is rounded to conform with standards.
+                    <em>This is not currently configurable but probably should be</em>.
+                    In general prices round upward with exceptions around certain
+                    key price points. Higher prices will make larger rounding jumps.
+                    <ul>
+                        <li>Prices between $0.00 and $0.99
+                            <ul>
+                                <li>Round upward to next x.29, x.39, x.49, x.69, x.79, x.89, x.99</li>
+                                <li>Exceptions: none</li>
+                            </ul>
+                        </li>
+                        <li>Prices between $1.00 and $2.99
+                            <ul>
+                                <li>Round upward to next x.19, x.39, x.49, x.69, x.89, x.99</li>
+                                <li>Exceptions: pricing ending in x.15 or less round down to
+                                    the previous x.99</li>
+                            </ul>
+                        </li>
+                        <li>Prices between $3.00 and $5.99
+                            <ul>
+                                <li>Round upward to next x.39, x.69, x.99</li>
+                                <li>Exceptions: pricing ending in x.15 or less round down to
+                                    the previous x.99</li>
+                            </ul>
+                        </li>
+                        <li>Prices between $6.00 and $9.99
+                            <ul>
+                                <li>Round upward to next x.69, x.99</li>
+                                <li>Exceptions: pricing ending in x.29 or less round down to
+                                    the previous x.99</li>
+                            </ul>
+                        </li>
+                        <li>Prices $10.00 and higher
+                            <ul>
+                                <li>Round upward to next x.99</li>
+                                <li>Exceptions: Prices including a zero always round down.
+                                    For example, 30.99 rounds down to 29.99 where as
+                                    31.01 rounds up to 31.99.</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </li>
+                </ul>
+            </p>';
+    }
+
+    public function unitTest($phpunit)
+    {
+        $phpunit->assertNotEquals(0, strlen($this->get_view()));
+        $this->id = 1;
+        $phpunit->assertNotEquals(0, strlen($this->get_id_view()));
     }
 }
 
-FannieDispatch::conditionalExec(false);
+FannieDispatch::conditionalExec();
 
-?>

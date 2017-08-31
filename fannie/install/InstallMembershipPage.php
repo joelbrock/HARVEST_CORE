@@ -22,10 +22,16 @@
 *********************************************************************************/
 
 //ini_set('display_errors','1');
-include('../config.php'); 
-include('util.php');
-include('db.php');
-include_once('../classlib2.0/FannieAPI.php');
+include(dirname(__FILE__) . '/../config.php'); 
+if (!class_exists('FannieAPI')) {
+    include_once(dirname(__FILE__) . '/../classlib2.0/FannieAPI.php');
+}
+if (!function_exists('confset')) {
+    include(dirname(__FILE__) . '/util.php');
+}
+if (!function_exists('dropDeprecatedStructure')) {
+    include(dirname(__FILE__) . '/db.php');
+}
 
 /**
     @class InstallMembershipPage
@@ -39,78 +45,18 @@ class InstallMembershipPage extends \COREPOS\Fannie\API\InstallPage {
     public $description = "
     Class for the Membership install and config options page.
     ";
-    public $themed = true;
 
-    // This replaces the __construct() in the parent.
-    public function __construct() {
-
-        FanniePage::__construct();
-
-        // Link to a file of CSS by using a function.
-        $this->add_css_file("../src/style.css");
-        $this->add_css_file("../src/javascript/jquery-ui.css");
-        $this->add_css_file("../src/css/install.css");
-
-        // Link to a file of JS by using a function.
-        $this->add_script("../src/javascript/jquery.js");
-        $this->add_script("../src/javascript/jquery-ui.js");
-
-    // __construct()
-    }
-
-    // If chunks of CSS are going to be added the function has to be
-    //  redefined to return them.
-    // If this is to override x.css draw_page() needs to load it after the add_css_file
-    /**
-      Define any CSS needed
-      @return A CSS string
-    function css_content(){
-        $css ="";
-        return $css;
-    //css_content()
-    }
-    */
-
-    // If chunks of JS are going to be added the function has to be
-    //  redefined to return them.
-    /**
-      Define any javascript needed
-      @return A javascript string
-    function javascript_content(){
-        $js ="";
-        return $js;
-    }
-    */
-
-    function body_content(){
-        global $FANNIE_URL,
-            $FANNIE_EQUITY_DEPARTMENTS,
-            $FANNIE_AR_DEPARTMENTS,
-            $FANNIE_NAMES_PER_MEM,
-            $FANNIE_MEMBER_MODULES,
-            $FANNIE_MEMBER_UPC_PREFIX,
-            $FANNIE_SERVER,$FANNIE_SERVER_DBMS, $FANNIE_TRANS_DB,$FANNIE_SERVER_USER, $FANNIE_SERVER_PW;
-
+    function body_content()
+    {
+        include(dirname(__FILE__) . '/../config.php');
         ob_start();
 
         echo showInstallTabs("Members");
 ?>
 
 <form action=InstallMembershipPage.php method=post>
-<h1 class="install">
-    <?php 
-    if (!$this->themed) {
-        echo "<h1 class='install'>{$this->header}</h1>";
-    }
-    ?>
-</h1>
 <?php
-if (is_writable('../config.php')){
-    echo "<div class=\"alert alert-success\"><i>config.php</i> is writeable</div>";
-}
-else {
-    echo "<div class=\"alert alert-danger\"><b>Error</b>: config.php is not writeable</div>";
-}
+echo $this->writeCheck(dirname(__FILE__) . '/../config.php');
 ?>
 <hr />
 
@@ -151,17 +97,9 @@ confset('FANNIE_MEMBER_MODULES',$saveStr);
 ?>
 <select multiple name="FANNIE_MEMBER_MODULES[]" size="10" class="form-control">
 <?php
-$tmp = array();
-$modules = FannieAPI::listModules('MemberModule');
-foreach ($modules as $class) {
-    $tmp[] = $class;
-}
 $modules = FannieAPI::listModules('\COREPOS\Fannie\API\member\MemberModule');
-foreach ($modules as $class) {
-    $tmp[] = $class;
-}
-sort($tmp);
-foreach($tmp as $module){
+sort($modules);
+foreach($modules as $module){
     printf("<option %s>%s</option>",(in_array($module,$FANNIE_MEMBER_MODULES)?'selected':''),$module);
 }
 ?>
@@ -175,6 +113,50 @@ Click or ctrl-Click or shift-Click to select/deselect modules for enablement.
 Member Card UPC Prefix: 
 <?php echo installTextField('FANNIE_MEMBER_UPC_PREFIX', $FANNIE_MEMBER_UPC_PREFIX, ''); ?>
 <hr />
+<h4 class="install">Lane On-Screen Display</h4>
+<div id="blueline-input-div">
+This controls what is displayed on the upper left of the cashier's screen after a member
+is selected.
+<?php echo installTextField('FANNIE_BLUELINE_TEMPLATE', $FANNIE_BLUELINE_TEMPLATE, ''); ?>
+<a href="" class="btn btn-default btn-xs"
+    onclick="$('#blueline-input-div input').focus().val($('#blueline-input-div input').val() + '{{ACCOUNTNO}}'); return false;">
+    Account#
+</a>
+<a href="" class="btn btn-default btn-xs"
+    onclick="$('#blueline-input-div input').focus().val($('#blueline-input-div input').val() + '{{ACCOUNTTYPE}}'); return false;">
+    Account Type
+</a>
+<a href="" class="btn btn-default btn-xs"
+    onclick="$('#blueline-input-div input').focus().val($('#blueline-input-div input').val() + '{{FIRSTNAME}}'); return false;">
+    First Name
+</a>
+<a href="" class="btn btn-default btn-xs"
+    onclick="$('#blueline-input-div input').focus().val($('#blueline-input-div input').val() + '{{LASTNAME}}'); return false;">
+    Last Name
+</a>
+<a href="" class="btn btn-default btn-xs"
+    onclick="$('#blueline-input-div input').focus().val($('#blueline-input-div input').val() + '{{FIRSTINITIAL}}'); return false;">
+    First Initial
+</a>
+<a href="" class="btn btn-default btn-xs"
+    onclick="$('#blueline-input-div input').focus().val($('#blueline-input-div input').val() + '{{LASTINITIAL}}'); return false;">
+    Last Initial
+</a>
+</div>
+<hr />
+<h4 class="install">Data Mode</h4>
+<div>
+Choose how customer data is stored in the database. Using "classic" is highly
+recommended in production environments. The "new" mode should not be without
+a developer and/or database administrator on hand to help with potential bugs.
+<?php
+$modes = array(
+    1 => 'New',
+    0 => 'Classic',
+);
+echo installSelectField('FANNIE_CUST_SCHEMA', $FANNIE_CUST_SCHEMA, $modes, 0);
+?>
+<hr />
 <p>
     <button type="submit" class="btn btn-default">Save Configuration</button>
 </p>
@@ -185,57 +167,52 @@ $sql = db_test_connect($FANNIE_SERVER,$FANNIE_SERVER_DBMS,
         $FANNIE_SERVER_PW);
 if (!$sql) {
     echo "<div class='alert alert-danger'>Cannot connect to database to refresh views.</div>";
-}
-else {
+} else {
     echo "Refreshing database views ... ";
     $this->recreate_views($sql);
     echo "done.";
 }
 
         return ob_get_clean();
-
     // body_content
     }
 
     // rebuild views that depend on ar & equity
     // department definitions
-    function recreate_views($con){
-        global $FANNIE_TRANS_DB,$FANNIE_OP_DB,$FANNIE_SERVER_DBMS;
+    function recreate_views($con)
+    {
+        $db_name = $this->config->get('TRANS_DB');
 
-        $con->query("DROP VIEW ar_history_today_sum",$FANNIE_TRANS_DB);
-        create_if_needed($con,$FANNIE_SERVER_DBMS,$FANNIE_TRANS_DB,
-                'ar_history_today_sum','trans');
+        $con->query("DROP VIEW ar_history_today",$db_name);
+        $model = new ArHistoryTodayModel($con);
+        $model->createIfNeeded($db_name);
 
-        $con->query("DROP VIEW ar_live_balance",$FANNIE_TRANS_DB);
-        create_if_needed($con,$FANNIE_SERVER_DBMS,$FANNIE_TRANS_DB,
-                'ar_live_balance','trans');
+        $con->query("DROP VIEW ar_history_today_sum",$db_name);
+        $model = new ArHistoryTodaySumModel($con);
+        $model->createIfNeeded($db_name);
 
-        $con->query("DROP VIEW stockSumToday",$FANNIE_TRANS_DB);
-        create_if_needed($con,$FANNIE_SERVER_DBMS,$FANNIE_TRANS_DB,
-                'stockSumToday','trans');
+        $con->query("DROP VIEW ar_live_balance",$db_name);
+        $model = new ArLiveBalanceModel($con);
+        $model->addExtraDB($this->config->get('OP_DB'));
+        $model->createIfNeeded($db_name);
 
-        $con->query("DROP VIEW equity_live_balance",$FANNIE_TRANS_DB);
-        create_if_needed($con,$FANNIE_SERVER_DBMS,$FANNIE_TRANS_DB,
-                'equity_live_balance','trans');
+        $con->query("DROP VIEW stockSumToday",$db_name);
+        $model = new StockSumTodayModel($con);
+        $model->createIfNeeded($db_name);
 
-        if ($con->tableExists('newBalanceStockToday_test')) {
-            $con->query("DROP VIEW newBalanceStockToday_test",$FANNIE_TRANS_DB);
-            create_if_needed($con,$FANNIE_SERVER_DBMS,$FANNIE_TRANS_DB,
-                    'newBalanceStockToday_test','trans');
-        }
+        $con->query("DROP VIEW equity_live_balance",$db_name);
+        $model = new EquityLiveBalanceModel($con);
+        $model->addExtraDB($this->config->get('OP_DB'));
+        $model->createIfNeeded($db_name);
+    }
 
-        $con->query("DROP VIEW dheader",$FANNIE_TRANS_DB);
-        create_if_needed($con,$FANNIE_SERVER_DBMS,$FANNIE_TRANS_DB,
-                'dheader','trans');
-
-        $con->query("DROP VIEW ar_history_today",$FANNIE_TRANS_DB);
-        create_if_needed($con,$FANNIE_SERVER_DBMS,$FANNIE_TRANS_DB,
-                'ar_history_today','trans');
+    public function unitTest($phpunit)
+    {
+        $phpunit->assertNotEquals(0, strlen($this->body_content()));
     }
 
 // InstallMembershipPage
 }
 
-FannieDispatch::conditionalExec(false);
+FannieDispatch::conditionalExec();
 
-?>

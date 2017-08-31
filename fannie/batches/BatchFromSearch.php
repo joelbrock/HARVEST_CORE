@@ -32,9 +32,11 @@ class BatchFromSearch extends FannieRESTfulPage
     protected $header = 'Create Batch From Search Results';
     protected $title = 'Create Batch From Search Results';
 
+    protected $auth_classes = array('batches');
+    protected $must_authenticate = true;
+
     public $description = '[Batch From Search] takes a set of advanced search results and
     creates a sale or price change batch. Must be accessed via Advanced Search.';
-    public $themed = true;
 
     private $upcs = array();
 
@@ -50,24 +52,30 @@ class BatchFromSearch extends FannieRESTfulPage
     {
         global $FANNIE_OP_DB;
         $dbc = FannieDB::get($FANNIE_OP_DB);
-        $type = FormLib::get('batchType');
-        $name = FormLib::get('batchName');
-        $startdate = FormLib::get('startDate');
-        $enddate = FormLib::get('endDate');
-        $owner = FormLib::get('batchOwner');
+        try {
+            $type = $this->form->batchType;
+            $name = $this->form->batchName;
+            $startdate = $this->form->startDate;
+            $enddate = $this->form->endDate;
+            $owner = $this->form->batchOwner;
+        } catch (Exception $ex) {
+            return true;
+        }
         $priority = 0;
+        $round = FALSE;
+        //$round = $this->form->priceRound;
+        $round = FormLib::get('priceRound');
 
-        $upcs = FormLib::get('upc', array());
-        $prices = FormLib::get('price', array());
+        $upcs = $this->form->upc;
+        $prices = $this->form->price;
 
-        $infoQ = $dbc->prepare_statement("select discType from batchType where batchTypeID=?");
-        $infoR = $dbc->exec_statement($infoQ,array($type));
-        if ($dbc->num_rows($infoR) == 0) {
+        $btype = new BatchTypeModel($dbc);
+        $btype->batchTypeID($type);
+        if (!$btype->load()) {
             echo 'Invalid Batch Type ' . $type;
             return false;
         }
-        $infoW = $dbc->fetch_array($infoR);
-        $discounttype = $infoW['discType'];
+        $discounttype = $btype->discType();
 
         // make sure item data is present before creating batch
         if (!is_array($upcs) || !is_array($prices) || count($upcs) != count($prices) || count($upcs) == 0) {
@@ -75,90 +83,111 @@ class BatchFromSearch extends FannieRESTfulPage
             return false;
         }
 
-        $b = new BatchesModel($dbc);
-        $b->startDate($startdate);
-        $b->endDate($enddate);
-        $b->batchName($name);
-        $b->batchType($type);
-        $b->discounttype($discounttype);
-        $b->priority($priority);
-        $b->owner($owner);
-        $id = $b->save();
+        $batch = new BatchesModel($dbc);
+        $batch->startDate($startdate);
+        $batch->endDate($enddate);
+        $batch->batchName($name);
+        $batch->batchType($type);
+        $batch->discountType($discounttype);
+        $batch->priority($priority);
+        $batch->owner($owner);
+        $batchID = $batch->save();
+
+        if ($this->config->get('STORE_MODE') === 'HQ') {
+            StoreBatchMapModel::initBatch($batchID);
+        }
 
         if ($dbc->tableExists('batchowner')) {
-            $insQ = $dbc->prepare_statement("insert batchowner values (?,?)");
-            $insR = $dbc->exec_statement($insQ,array($id,$owner));
+            $insQ = $dbc->prepare("insert batchowner values (?,?)");
+            $insR = $dbc->execute($insQ,array($batchID,$owner));
         }
 
-        // add items to batch
-        for($i=0; $i<count($upcs); $i++) {
-            $upc = $upcs[$i];
-            $price = isset($prices[$i]) ? $prices[$i] : 0.00;
-            $bl = new BatchListModel($dbc);
-            $bl->upc(BarcodeLib::padUPC($upc));
-            $bl->batchID($id);
-            $bl->salePrice($price);
-            $bl->active(0);
-            $bl->pricemethod(0);
-            $bl->quantity(0);
-            $bl->save();
-        }
+        $this->itemsToBatch($batchID, $dbc, $upcs, $prices, $round);
 
         /**
           If tags were requested and it's price change batch, make them
           Lookup vendor info for each item then add a shelftag record
         */
-        $tagset = FormLib::get('tagset');
+        $tagset = $this->form->tagset;
         if ($discounttype == 0 && $tagset !== '') {
-            $vendorID = FormLib::get('preferredVendor', 0);
-            $tag = new ShelftagsModel($dbc);
-            $product = new ProductsModel($dbc);
-            for($i=0; $i<count($upcs);$i++) {
-                $upc = $upcs[$i];
-                $price = isset($prices[$i]) ? $prices[$i] : 0.00;
-                $product->upc($upc);
-                $info = $product->getTagData($price);
-                $tag->id($tagset);
-                $tag->upc($upc);
-                $tag->description($info['description']);
-                $tag->normal_price($price);
-                $tag->brand($info['brand']);
-                $tag->sku($info['sku']);
-                $tag->size($info['size']);
-                $tag->units($info['units']);
-                $tag->vendor($info['vendor']);
-                $tag->pricePerUnit($info['pricePerUnit']);
-                $tag->save();
-            }
+            $this->itemsToTags($tagset, $dbc, $upcs, $prices);
         }
 
-        header('Location: newbatch/BatchManagementTool.php?startAt=' . $id);
-        return false;
+        return 'newbatch/EditBatchPage.php?id=' . $batchID;
+    }
+
+    private function itemsToBatch($batchID, $dbc, $upcs, $prices, $round)
+    {
+        $rounder = new \COREPOS\Fannie\API\item\PriceRounder();
+        $dbc->startTransaction();
+        // add items to batch
+        for($i=0; $i<count($upcs); $i++) {
+            $upc = $upcs[$i];
+            $price = isset($prices[$i]) ? $prices[$i] : 0.00;
+            if ($round) {
+                $price = $rounder->round($price);
+            }
+            $list = new BatchListModel($dbc);
+            $list->upc(BarcodeLib::padUPC($upc));
+            $list->batchID($batchID);
+            $list->salePrice($price);
+            $list->groupSalePrice($price);
+            $list->active(0);
+            $list->pricemethod(0);
+            $list->quantity(0);
+            $list->save();
+        }
+        $dbc->commitTransaction();
+    }
+
+    private function itemsToTags($tagset, $dbc, $upcs, $prices)
+    {
+        $dbc->startTransaction();
+        $tag = new ShelftagsModel($dbc);
+        $product = new ProductsModel($dbc);
+        for($i=0; $i<count($upcs);$i++) {
+            $upc = $upcs[$i];
+            $price = isset($prices[$i]) ? $prices[$i] : 0.00;
+            $product->upc($upc);
+            $info = $product->getTagData($price);
+            $tag->id($tagset);
+            $tag->upc($upc);
+            $tag->description($info['description']);
+            $tag->normal_price($price);
+            $tag->brand($info['brand']);
+            $tag->sku($info['sku']);
+            $tag->size($info['size']);
+            $tag->units($info['units']);
+            $tag->vendor($info['vendor']);
+            $tag->pricePerUnit($info['pricePerUnit']);
+            $tag->save();
+        }
+        $dbc->commitTransaction();
     }
 
     function post_redoSRPs_handler()
     {
         global $FANNIE_OP_DB;
         $dbc = FannieDB::get($FANNIE_OP_DB);
-        $upcs = FormLib::get('upc', array());
-        $vendorID = FormLib::get('preferredVendor', 0);
+        $upcs = $this->form->upc;
+        $vendorID = $this->form->preferredVendor;
 
         for ($i=0; $i<count($upcs); $i++) {
             $upcs[$i] = BarcodeLib::padUPC($upcs[$i]);
         }
-        $params = $this->arrayToParams($upcs);
+        list($in_sql, $args) = $dbc->safeInClause($upcs);
 
         $query = '
             SELECT p.upc,
                 CASE WHEN v.srp IS NULL THEN 0 ELSE v.srp END as newSRP
             FROM products AS p
                 LEFT JOIN vendorItems AS v ON p.upc=v.upc 
-            WHERE p.upc IN (' . $params['in'] . ')
+            WHERE p.upc IN (' . $in_sql . ')
             ORDER BY p.upc,
                 CASE WHEN v.vendorID=? THEN -999 ELSE v.vendorID END';
         $prep = $dbc->prepare($query);
-        $params['args'][] = $vendorID;
-        $result = $dbc->execute($prep, $params['args']);
+        $args[] = $vendorID;
+        $result = $dbc->execute($prep, $args);
 
         $prevUPC = 'notUPC';
         $results = array();
@@ -200,117 +229,113 @@ class BatchFromSearch extends FannieRESTfulPage
     function post_u_view()
     {
         global $FANNIE_OP_DB, $FANNIE_URL;
-        $ret = '<form action="BatchFromSearch.php" method="post">';
-
-        $ret .= '<div class="form-group form-inline">';
+        $this->addScript('from-search.js');
 
         $dbc = FannieDB::get($FANNIE_OP_DB);
         $types = $dbc->query('SELECT batchTypeID, typeDesc, discType FROM batchType');
-        $discTypes = array();
-        $ret .= '<select name="batchType" id="batchType" class="form-control"
-            onchange="discountTypeFixup()">';
-        while($row = $dbc->fetch_row($types)) {
-            $ret .= sprintf('<option value="%d">%s</option>',
-                            $row['batchTypeID'], $row['typeDesc']
+        $btOpts=$dtOpts='';
+        while ($row = $dbc->fetchRow($types)) {
+            $btOpts .= sprintf('<option value="%d">%s</option>',
+                        $row['batchTypeID'], $row['typeDesc']
             );
-            $discTypes[] = $row;
-        }
-        $ret .= '</select>';
-        foreach($discTypes as $row) {
-            $ret .= sprintf('<input type="hidden" id="discType%d" value="%d" />',
+            $dtOpts .= sprintf('<input type="hidden" id="discType%d" value="%d" />',
                             $row['batchTypeID'], $row['discType']
             );
         }
 
         $name = FannieAuth::checkLogin();
-        $ret .= '
-                <label>Name</label>: ';
-        $ret .= '<input type="text" class="form-control" name="batchName" value="'
-                . ($name ? $name : 'Batch') . ' '
-                . date('M j')
-                . '" />';
-
-        $ret .= '
-                <label>Start</label>: <input type="text" class="form-control date-field" id="startDate" value="'
-                . date('Y-m-d') . '" name="startDate" />
-                ';
-
-        $ret .= '
-                <label>End</label>: <input type="text" class="form-control date-field" id="endDate" value="'
-                . date('Y-m-d') . '" name="endDate" />
-                </div>';
-
+        $batchName = ($name ? $name : 'Batch') . ' ' . date('M j');
+        $today = date('Y-m-d');
         $owners = $dbc->query('SELECT super_name FROM MasterSuperDepts GROUP BY super_name ORDER BY super_name');
-        $ret .= '<div class="form-group form-inline">
-            <label>Owner</label>: <select name="batchOwner" class="form-control" id="batchOwner"><option value=""></option>';
-        while($row = $dbc->fetch_row($owners)) {
-            $ret .= '<option>' . $row['super_name'] . '</option>';
+        $oOpts = '';
+        while ($row = $dbc->fetchRow($owners)) {
+            $oOpts .= '<option>' . $row['super_name'] . '</option>';
         }
-        $ret .= '<option>IT</option></select>
-                <button type="submit" name="createBatch" value="1"
-                    class="btn btn-default">Create Batch</button>
-                </div>';
 
-        $ret .= '<hr />';
+        $vendors = new VendorsModel($dbc);
+        $vOpts = $vendors->toOptions();
+        $queues = new ShelfTagQueuesModel($dbc);
+        $qOpts = $queues->toOptions();
 
-        $info = $this->arrayToParams($this->upcs);
+        $ret = <<<HTML
+<form action="BatchFromSearch.php" method="post">
+<div class="form-group form-inline">
+    <select name="batchType" id="batchType" class="form-control" onchange="discountTypeFixup()">
+        {$btOpts}
+    </select>
+    {$dtOpts}
+    <label>Name</label>: 
+    <input type="text" class="form-control" name="batchName" value="{$batchName}" />
+    <label>Start</label>: 
+    <input type="text" class="form-control date-field" id="startDate" value="{$today}" name="startDate" />
+    <label>End</label>: 
+    <input type="text" class="form-control date-field" id="endDate" value="{$today}" name="endDate" />
+</div>
+<div class="form-group form-inline">
+    <label>Owner</label>: 
+    <select name="batchOwner" class="form-control" id="batchOwner"><option value=""></option>';
+        {$oOpts}
+        <option>IT</option>
+    </select>
+    <label>Round Prices</label>:
+    <input type="checkbox" name="priceRound" value="1">&nbsp;&nbsp;
+    <button type="submit" name="createBatch" value="1"
+            class="btn btn-default">Create Batch</button>
+</div>
+<hr />
+<div id="saleTools" class="form-group form-inline">
+    <label>Markdown</label>
+    <div class="input-group">
+        <input type="text" id="mdPercent" class="form-control" value="10" onchange="markDown(this.value);" />
+        <span class="input-group-addon">%</span>
+    </div>
+    <button type="submit" class="btn btn-default" onclick="markDown(\$('#mdPercent').val()); return false;">Go</button>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    <label>or</label>
+    <div class="input-group">
+        <span class="input-group-addon">\$</span>
+        <input type="text" id="mdDollar" class="form-control" value="0.00" onchange="discount(this.value);" />
+    </div>
+    <button type="submit" class="btn btn-default" onclick="discount(\$('#mdDollar').val()); return false;">Go</button>
+</div>
+<div id="priceChangeTools" class="form-group form-inline">
+    <button type="submit" class="btn btn-default" onclick="useSRPs(); return false;">Use Vendor SRPs</button>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    <select name="preferredVendor" class="form-control" onchange="reCalcSRPs();">
+        <option value="0">Auto Choose Vendor</option>';
+        {$vOpts}
+    </select>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    <label>Markup</label>
+    <div class="input-group">
+        <input type="text" id="muPercent" class="form-control" value="10" onchange="markUp(this.value);" />
+        <span class="input-group-addon">%</span>
+    </div>
+    <button type="submit" class="btn btn-default" onclick="markUp(\$('#muPercent').val()); return false">Go</button>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+    <label>Tags</label> <select name="tagset" class="form-control" id="tagset"><option value="">No Tags</option>
+    {$qOpts}
+    </select>
+</div>
+<table class="table">
+    <tr><th>UPC</th><th>Description</th><th>Retail</th>
+    <th id="newPriceHeader">Sale Price</th></tr>
+HTML;
+
+        list($in_sql, $args) = $dbc->safeInClause($this->upcs);
         $query = 'SELECT p.upc, p.description, p.normal_price, m.superID,
                 MAX(CASE WHEN v.srp IS NULL THEN 0.00 ELSE v.srp END) as srp
                 FROM products AS p
                     LEFT JOIN vendorItems AS v ON p.upc=v.upc AND p.default_vendor_id=v.vendorID
                     LEFT JOIN MasterSuperDepts AS m ON p.department=m.dept_ID
-                WHERE p.upc IN ( ' . $info['in'] . ')
+                WHERE p.upc IN ( ' . $in_sql . ')
                 GROUP BY p.upc, p.description, p.normal_price, m.superID
                 ORDER BY p.upc';
         $prep = $dbc->prepare($query);
-        $result = $dbc->execute($prep, $info['args']);
+        $result = $dbc->execute($prep, $args);
 
-        $ret .= '<div id="saleTools" class="form-group form-inline">';
-        $ret .= '<label>Markdown</label>
-                <div class="input-group">
-                    <input type="text" id="mdPercent" class="form-control" value="10" onchange="markDown(this.value);" />
-                    <span class="input-group-addon">%</span>
-                </div>
-                <button type="submit" class="btn btn-default" onclick="markDown($(\'#mdPercent\').val()); return false">Go</button>';
-        $ret .= '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;';
-        $ret .= '<label>or</label>
-                <div class="input-group">
-                    <span class="input-group-addon">$</span>
-                    <input type="text" id="mdDollar" class="form-control" value="0.00" onchange="discount(this.value);" />
-                </div>
-                <button type="submit" class="btn btn-default" onclick="discount($(\'#mdDollar\').val()); return false">Go</button>';
-        $ret .= '</div>';
-
-        $ret .= '<div id="priceChangeTools" class="form-group form-inline">';
-        $ret .= '<button type="submit" class="btn btn-default" onclick="useSRPs(); return false;">Use Vendor SRPs</button>';
-        $ret .= '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;';
-        $ret .= '<select name="preferredVendor" class="form-control" onchange="reCalcSRPs();">
-            <option value="0">Auto Choose Vendor</option>';
-        $vendors = new VendorsModel($dbc);
-        foreach ($vendors->find('vendorName') as $vendor) {
-            $ret .= sprintf('<option value="%d">%s</option>',
-                        $vendor->vendorID(), $vendor->vendorName());
-        }
-        $ret .= '</select>';
-        $ret .= '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;';
-        $ret .= '<label>Markup</label>
-                <div class="input-group">
-                    <input type="text" id="muPercent" class="form-control" value="10" onchange="markUp(this.value);" />
-                    <span class="input-group-addon">%</span>
-                </div>
-                <button type="submit" class="btn btn-default" onclick="markUp($(\'#muPercent\').val()); return false">Go</button>';
-        $ret .= '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;';
-        $ret .= '<label>Tags</label> <select name="tagset" class="form-control" id="tagset"><option value="">No Tags</option>';
-        $qm = new ShelfTagQueuesModel($dbc);
-        $ret .= $qm->toOptions();
-        $ret .= '</select>';
-        $ret .= '</div>';
-
-        $ret .= '<table class="table">';
-        $ret .= '<tr><th>UPC</th><th>Description</th><th>Retail</th>
-                <th id="newPriceHeader">Sale Price</th></tr>';
         $superDetect = array();
-        while($row = $dbc->fetch_row($result)) {
+        while ($row = $dbc->fetchRow($result)) {
             $ret .= sprintf('<tr class="batchItem">
                             <td><input type="hidden" name="upc[]" class="itemUPC" value="%s" />%s</td>
                             <td>%s</td>
@@ -334,11 +359,14 @@ class BatchFromSearch extends FannieRESTfulPage
             $superDetect[$row['superID']]++;
         }
         $ret .= '</table>';
-
         $ret .= '</form>';
 
         // auto-detect likely owner & tag set by super department
-        $tagPage = array_search(max($superDetect), $superDetect);
+        if (count($superDetect) > 0) {
+            $tagPage = array_search(max($superDetect), $superDetect);
+        } else {
+            $tagPage = false;
+        }
         if ($tagPage !== false) {
             $this->add_onload_command("\$('#tagset').val($tagPage);\n");
             $this->add_onload_command("\$('#batchOwner').val(\$('#tagset option:selected').text());\n");
@@ -351,107 +379,6 @@ class BatchFromSearch extends FannieRESTfulPage
         $this->add_onload_command("\$('#muPercent').bind('keypress', noEnter);\n");
 
         return $ret;
-    }
-
-    function javascript_content()
-    {
-        ob_start();
-        ?>
-function discountTypeFixup() {
-    var bt_id = $('#batchType').val();
-    var dt_id = $('#discType'+bt_id).val();
-    if (dt_id == 0) {
-        $('#newPriceHeader').html('New Price');
-        $('#saleTools').hide();
-        $('#priceChangeTools').show();
-    } else {
-        $('#newPriceHeader').html('Sale Price');
-        $('#saleTools').show();
-        $('#priceChangeTools').hide();
-    }
-}
-function useSRPs() {
-    $('tr.batchItem').each(function(){
-        var srp = $(this).find('.itemSRP').val();
-        $(this).find('.itemPrice').val(fixupPrice(srp));
-    });
-}
-function reCalcSRPs() {
-    var info = $('form').serialize(); 
-    info += '&redoSRPs=1';
-    $.ajax({
-        type: 'post',
-        dataType: 'json',
-        data: info,
-        success: function(resp) {
-            for (var i=0; i<resp.length; i++) {
-                var item = resp[i];
-                $('tr.batchItem').each(function(){
-                    var upc = $(this).find('.itemUPC').val(); 
-                    if (upc == item.upc) {
-                        $(this).find('.itemSRP').val(item.srp);
-
-                        return false;
-                    }
-                });
-            }
-        }
-    });
-}
-function discount(amt) {
-    $('tr.batchItem').each(function(){
-        var price = $(this).find('.currentPrice').val();
-        price = price - amt;
-        $(this).find('.itemPrice').val(fixupPrice(price));
-    });
-}
-function markDown(amt) {
-    if (Math.abs(amt) >= 1) amt = amt / 100;
-    $('tr.batchItem').each(function(){
-        var price = $(this).find('.currentPrice').val();
-        price = price * (1 - amt);
-        $(this).find('.itemPrice').val(fixupPrice(price));
-    });
-}
-function markUp(amt) {
-    markDown(-1 * amt);
-}
-function fixupPrice(val) {
-    var bt_id = $('#batchType').val();
-    var dt_id = $('#discType'+bt_id).val();
-    val = Math.round(val*100);
-    if (dt_id == 0) {
-        while(lastDigit(val) != 5 && lastDigit(val) != 9)
-            val++;
-    } else {
-        while(lastDigit(val) != 9)
-            val++;
-    }
-    return val / 100;
-}
-function lastDigit(val) {
-    return val - (10 * Math.floor(val/10));
-}
-function noEnter(e) {
-    if (e.keyCode == 13) {
-        $(this).trigger('change');
-        return false;
-    }
-}
-        <?php
-        return ob_get_clean();
-    }
-
-    private function arrayToParams($arr) {
-        $str = '';
-        $args = array();
-        foreach($arr as $entry) {
-            $str .= '?,';
-            $args[] = $entry;
-        }
-        $str = substr($str, 0, strlen($str)-1);
-
-        return array('in'=>$str, 'args'=>$args);
     }
 
     public function helpContent()
@@ -484,6 +411,57 @@ function noEnter(e) {
             New shelftags are allocated and the Tags dropdown
             controls which set they land in.
             </p>';
+    }
+
+    /**
+      Create a one-item sale. Requires sample data
+      for item, batch types
+    */
+    public function unitTest($phpunit)
+    {
+        $this->u = array('0001878777132'); //14.99
+        $this->post_u_handler();
+        $phpunit->assertEquals(1, count($this->upcs));
+        $post = $this->post_u_view();
+        $phpunit->assertNotEquals(0, strlen($post));
+
+        $form = new \COREPOS\common\mvc\ValueContainer();
+        $form->upc = $this->u;
+        $form->preferredVendor = 0;
+        $this->setForm($form);
+        ob_start();
+        $this->post_redoSRPs_handler();
+        $json = ob_get_clean();
+        $arr = json_decode($json, true);
+        $phpunit->assertInternalType('array', $arr);
+        $phpunit->assertEquals(1, count($arr));
+        $phpunit->assertEquals($this->u[0], $arr[0]['upc']);
+        $phpunit->assertEquals(0, $arr[0]['srp']);
+
+        $form->startDate = date('Y-m-d');
+        $form->endDate = date('Y-m-d');
+        $form->batchName = 'Test BatchFromSearch';
+        $form->batchType = 3; // price change batch means tags get created
+        $form->batchOwner = 'IT';
+        $form->price = array(1.99);
+        $form->tagset = 1;
+        $this->setForm($form);
+        $this->post_createBatch_handler();
+
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
+        $batch = new BatchesModel($dbc);
+        $batch->batchName('Test BatchFromSearch');
+        $phpunit->assertEquals(1, count($batch->find()));
+        $sale = new BatchListModel($dbc);
+        $sale->upc($this->u[0]);
+        $sale->salePrice(1.99);
+        $phpunit->assertEquals(1, count($sale->find()));
+
+        $tag = new ShelftagsModel($dbc);
+        $tag->id(1);
+        $tag->upc($this->u[0]);
+        $phpunit->assertEquals(true, $tag->load());
     }
 }
 

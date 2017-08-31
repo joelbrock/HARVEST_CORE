@@ -52,12 +52,13 @@ class CustomerCountReport extends FannieReportPage {
     public $themed = true;
     public $report_set = 'Membership';
 
-    function preprocess(){
-        global $FANNIE_OP_DB;
+    function preprocess()
+    {
         // dynamic column headers
-        $dbc = FannieDB::get($FANNIE_OP_DB);
-        $typeQ = $dbc->prepare_statement("SELECT memtype,memDesc FROM memtype ORDER BY memtype");
-        $typeR = $dbc->exec_statement($typeQ);
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
+        $typeQ = $dbc->prepare("SELECT memtype,memDesc FROM memtype ORDER BY memtype");
+        $typeR = $dbc->execute($typeQ);
         $this->memtypes = array();
         $this->report_headers = array('Date');
         while($typeW = $dbc->fetch_row($typeR)){
@@ -71,10 +72,11 @@ class CustomerCountReport extends FannieReportPage {
 
     function fetch_report_data()
     {
-        global $FANNIE_OP_DB, $FANNIE_ARCHIVE_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
-        $date1 = FormLib::get_form_value('date1',date('Y-m-d'));
-        $date2 = FormLib::get_form_value('date2',date('Y-m-d'));
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
+        $date1 = $this->form->date1;
+        $date2 = $this->form->date2;
+        $store = FormLib::get('store', 0);
 
         $dlog = DTransactionsModel::selectDlog($date1,$date2);
         $date1 .= ' 00:00:00';
@@ -87,17 +89,18 @@ class CustomerCountReport extends FannieReportPage {
             tdate BETWEEN ? AND ?
             and trans_type = 'T'
             AND upc <> 'RRR'
+            AND " . DTrans::isStoreID($store, 't') . "
             group by year(tdate),month(tdate),day(tdate),trans_num
             order by year(tdate),month(tdate),day(tdate),max(memType)";
-        $salesP = $dbc->prepare_statement($sales);
-        $result = $dbc->exec_statement($salesP, array($date1, $date2));
+        $salesP = $dbc->prepare($sales);
+        $result = $dbc->execute($salesP, array($date1, $date2, $store));
 
         /**
           Create result records based on date and increment them
           when the same type is encountered again
         */
         $ret = array();
-        while ($row = $dbc->fetch_array($result)){
+        while ($row = $dbc->fetchRow($result)){
             $stamp = date("M j, Y",mktime(0,0,0,$row['month'],$row['day'],$row['year']));
             if (!isset($ret[$stamp])){ 
                 $ret[$stamp] = array("date"=>$stamp);
@@ -132,18 +135,11 @@ class CustomerCountReport extends FannieReportPage {
         return $ret;
     }
 
-    function form_content(){
-        $lastMonday = "";
-        $lastSunday = "";
-
-        $ts = mktime(0,0,0,date("n"),date("j")-1,date("Y"));
-        while($lastMonday == "" || $lastSunday == ""){
-            if (date("w",$ts) == 1 && $lastSunday != "")
-                $lastMonday = date("Y-m-d",$ts);
-            elseif(date("w",$ts) == 0)
-                $lastSunday = date("Y-m-d",$ts);
-            $ts = mktime(0,0,0,date("n",$ts),date("j",$ts)-1,date("Y",$ts));    
-        }
+    function form_content()
+    {
+        list($lastMonday, $lastSunday) = \COREPOS\Fannie\API\lib\Dates::lastWeek();
+        $store = FormLib::storePicker();
+        ob_start();
 ?>
 <form action=CustomerCountReport.php method=get>
 <div class="col-sm-6">
@@ -158,6 +154,10 @@ class CustomerCountReport extends FannieReportPage {
         class="form-control date-field" required />
 </p>
 <p>
+    <label>Store</label>
+    <?php echo $store['html']; ?>
+</p>
+<p>
     <button type=submit name=submit value="Submit" class="btn btn-default">Submit</button>
     <label><input type=checkbox name=excel id="excel" value=xls /> Excel</label>
 </p>
@@ -167,6 +167,7 @@ class CustomerCountReport extends FannieReportPage {
 </div>
 </form>
 <?php
+        return ob_get_clean();
     }
 
     public function helpContent()
@@ -178,5 +179,5 @@ class CustomerCountReport extends FannieReportPage {
     }
 }
 
-FannieDispatch::conditionalExec(false);
+FannieDispatch::conditionalExec();
 

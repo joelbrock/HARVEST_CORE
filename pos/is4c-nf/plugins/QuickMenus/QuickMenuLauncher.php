@@ -21,6 +21,8 @@
 
 *********************************************************************************/
 
+use COREPOS\pos\parser\Parser;
+
 class QuickMenuLauncher extends Parser {
     
     function check($str){
@@ -45,7 +47,7 @@ class QuickMenuLauncher extends Parser {
         $ret = $this->default_json();
 
         $plugin_info = new QuickMenus();
-        $ret['main_frame'] = $plugin_info->plugin_url().'/QMDisplay.php';
+        $ret['main_frame'] = $plugin_info->pluginUrl().'/QMDisplay.php';
         return $ret;
     }
 
@@ -65,4 +67,3 @@ class QuickMenuLauncher extends Parser {
     }
 }
 
-?>

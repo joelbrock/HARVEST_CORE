@@ -21,44 +21,57 @@
 
 *********************************************************************************/
 
+use COREPOS\pos\lib\gui\NoInputCorePage;
+use COREPOS\pos\lib\Database;
+use COREPOS\pos\lib\DisplayLib;
 include_once(dirname(__FILE__).'/../lib/AutoLoader.php');
 
-class deptlist extends NoInputPage {
+class deptlist extends NoInputCorePage 
+{
+    private function handleInput($entered)
+    {
+        $entered = strtoupper($entered);
+
+        if ($entered == "" || $entered == "CL"){
+            // should be empty string
+            // javascript causes this input if the
+            // user presses CL{enter}
+            // Redirect to main screen
+            $this->change_page($this->page_url."gui-modules/pos2.php");
+            return false;
+        }
+
+        if (is_numeric($entered)){ 
+            // built department input string and set it
+            // to be the next POS entry
+            // Redirect to main screen
+            $input = $this->form->in . "DP" . $entered . "0";
+            $qty = CoreLocal::get("quantity");
+            if ($qty != "" & $qty != 1 & $qty != 0) {
+                $input = $qty."*".$input;
+            }
+            $this->change_page(
+                $this->page_url
+                . "gui-modules/pos2.php"
+                . '?reginput=' . $input
+                . '&repeat=1');
+            return false;
+        }
+
+        return true;
+    }
 
     /**
       Input processing function
     */
     function preprocess()
     {
-        // a selection was made
-        if (isset($_REQUEST['search'])){
-            $entered = strtoupper($_REQUEST['search']);
+        try {
+            // a selection was made
+            return $this->handleInput($this->form->search);
+        } catch (Exception $ex) {}
 
-            if ($entered == "" || $entered == "CL"){
-                // should be empty string
-                // javascript causes this input if the
-                // user presses CL{enter}
-                // Redirect to main screen
-                CoreLocal::set("departmentAmount","0");    
-                $this->change_page($this->page_url."gui-modules/pos2.php");
-                return False;
-            }
-
-            if (is_numeric($entered)){ 
-                // built department input string and set it
-                // to be the next POS entry
-                // Redirect to main screen
-                $input = CoreLocal::get("departmentAmount")."DP".$entered."0";
-                $qty = CoreLocal::get("quantity");
-                if ($qty != "" & $qty != 1 & $qty != 0)
-                    $input = $qty."*".$input;
-                CoreLocal::set("msgrepeat",1);
-                CoreLocal::set("strRemembered",$input);
-                $this->change_page($this->page_url."gui-modules/pos2.php");
-                return False;
-            }
-        }
-        return True;
+        return true;
     } // END preprocess() FUNCTION
 
     /**
@@ -78,56 +91,74 @@ class deptlist extends NoInputPage {
     */
     function body_content()
     {
-        $db = Database::pDataConnect();
-        $q = "SELECT dept_no,dept_name FROM departments ORDER BY dept_name";
-        $r = $db->query($q);
-
-        echo "<div class=\"baseHeight\">"
-            ."<div class=\"listbox\">"
-            ."<form name=\"selectform\" method=\"post\" action=\"{$_SERVER['PHP_SELF']}\""
-            ." id=\"selectform\">"
-            ."<select name=\"search\" id=\"search\" "
-            .' style="min-height: 200px; min-width: 220px;" '
-            ."size=\"15\" onblur=\"\$('#search').focus();\">";
+        $input = $this->form->tryGet('in');
+        $dbc = Database::pDataConnect();
+        $res = $dbc->query("SELECT dept_no,dept_name FROM departments ORDER BY dept_name");
+        $action = filter_input(INPUT_SERVER, 'PHP_SELF');
 
         $selected = "selected";
-        while($row = $db->fetch_row($r)){
-            echo "<option value='".$row["dept_no"]."' ".$selected.">";
+        $options = '';
+        while ($row = $dbc->fetchRow($res)) {
+            $options .= "<option value='".$row["dept_no"]."' ".$selected.">";
             // &shy; prevents the cursor from moving out of
             // step with filter-as-you-type
-            echo '&shy; ' . $row['dept_name'];
-            echo '</option>';
+            $options .= '&shy; ' . $row['dept_name'];
+            $options .= '</option>';
             $selected = "";
         }
-        echo "</select>"
-            . '<div id="filter-div"></div>'
-            ."</div>";
-        if (CoreLocal::get('touchscreen')) {
-            echo '<div class="listbox listboxText">'
-                . DisplayLib::touchScreenScrollButtons()
-                . '</div>';
-        }
-        echo "<div class=\"listboxText coloredText centerOffset\">"
-            . _("use arrow keys to navigate")
-            . '<p><button type="submit" class="pos-button wide-button coloredArea">
-                OK <span class="smaller">[enter]</span>
-                </button></p>'
-            . '<p><button type="submit" class="pos-button wide-button errorColoredArea"
-                onclick="$(\'#search\').append($(\'<option>\').val(\'\'));$(\'#search\').val(\'\');">
-                Cancel <span class="smaller">[clear]</span>
-                </button></p>'
-            ."</div><!-- /.listboxText coloredText .centerOffset -->"
-            ."</form>"
-            ."<div class=\"clear\"></div>";
-        echo "</div>";
+        $touch = CoreLocal::get('touchscreen') ? '<div class="listbox listboxText">' . DisplayLib::touchScreenScrollButtons() . '</div>' : '';
 
-        $this->add_onload_command("selectSubmit('#search', '#selectform', '#filter-div')\n");
-        $this->add_onload_command("\$('#search').focus();\n");
+        $text = array(
+            'arrows' => _("use arrow keys to navigate"),
+            'ok' => _('OK'),
+            'cancel' => _('Cancel'),
+            'enter' => _('[enter]'),
+            'clear' => _('[clear]'),
+        );
+
+        echo <<<HTML
+<div class="baseHeight">
+    <form name="selectform" method="post" action="{$action}" id="selectform">
+    <div class="listbox">
+            <select name="search" id="search"
+              style="min-height: 200px; min-width: 220px;"
+              size="15" onblur="$('#search').focus();">";
+                {$options}
+            </select>
+            <div id="filter-div"></div>
+    </div>
+    {$touch}
+    <div class="listboxText coloredText centerOffset">
+            {$text['arrows']}
+            <p><button type="submit" class="pos-button wide-button coloredArea">
+            {$text['ok']} <span class="smaller">{$text['enter']}</span>
+            </button></p>
+            <p><button type="submit" class="pos-button wide-button errorColoredArea"
+                onclick="$('#search').append($('<option>').val(''));$('#search').val('');">
+            {$text['cancel']} <span class="smaller">{$text['clear']}</span>
+            </button></p>
+    </div><!-- /.listboxText coloredText .centerOffset -->
+    <input type="hidden" name="in" value="{$input}" />
+    </form>
+    <div class="clear"></div>
+</div>
+HTML;
+
+        $this->addOnloadCommand("selectSubmit('#search', '#selectform', '#filter-div')\n");
+        $this->addOnloadCommand("\$('#search').focus();\n");
     } // END body_content() FUNCTION
 
+    public function unitTest($phpunit)
+    {
+        ob_start();
+        $phpunit->assertEquals(false, $this->handleInput(''));
+        $phpunit->assertEquals(false, $this->handleInput('CL'));
+        $this->form->in = '';
+        $phpunit->assertEquals(false, $this->handleInput('7'));
+        $phpunit->assertEquals(true, $this->handleInput('z'));
+        ob_get_clean();
+    }
 }
 
-if (basename(__FILE__) == basename($_SERVER['PHP_SELF']))
-    new deptlist();
+AutoLoader::dispatch();
 
-?>

@@ -21,14 +21,48 @@
 
 *********************************************************************************/
 
+namespace COREPOS\Fannie\API;
+
 /**
-  @class FannieRESTfulPage
+  @class FannieCRUDPage
+  Base class to generate an editor page for a given
+  table supporting Create/Read/Update/Delete.
+
+  Supports tables with a single primary key column
+  with an integer type. Primary key may or may not
+  be identity/increment.
 */
-class FannieCRUDPage extends FannieRESTfulPage
+class FannieCRUDPage extends \FannieRESTfulPage
 {
+    /**
+      @property $model_name
+      The model class for the table this page will
+      be managing
+    */
     protected $model_name = 'BasicModel';
-    protected $model = null;
+
+    /**
+      @property $column_name_map
+      By default, the display will show actual 
+      column names from the underlying table as
+      headers. To put alternate names in the user
+      facing interface (e.g., with spaces, more descriptive,
+      etc) use an associative array with:
+        [database column name] => [displayed name]
+
+      It is not necessary to specify aliases for all
+      (or any) columns.
+    */
     protected $column_name_map = array();
+
+    /**
+      By default, the user facing data is sorted on
+      the primary key column. To use an alternative sorting,
+      specify one or more database column names here.
+    */
+    protected $display_sorting = array();
+
+    protected $model = null;
     public $themed = true;
     protected $flashes = array();
 
@@ -74,8 +108,9 @@ class FannieCRUDPage extends FannieRESTfulPage
             if (substr($this->model->preferredDB(), 0, 7) == 'plugin:') {
                 $settings = $this->config->get('PLUGIN_SETTINGS');
                 $pluginDB = substr($this->model->preferredDB(), 7);
-                $this->connection->setDefaultDB($pluginDB);
-                $this->model->whichDB($pluginDB);
+                $db_name = $settings[$pluginDB]; 
+                $this->connection->setDefaultDB($db_name);
+                $this->model->whichDB($db_name);
             }
         }
 
@@ -95,16 +130,16 @@ class FannieCRUDPage extends FannieRESTfulPage
         for ($i=0; $i<count($this->id); $i++) {
             $obj->reset();
             $obj->$id_col($this->id[$i]); 
-            foreach ($columns as $col_name => $c) {
+            array_map(function ($col_name) use ($id_col, $obj, $i) {
                 if ($col_name == $id_col) {
-                    continue;
+                    return false;
                 }
-                $vals = FormLib::get($col_name);
+                $vals = \FormLib::get($col_name);
                 if (!is_array($vals) || !isset($vals[$i])) {
-                    continue;
+                    return false;
                 }
                 $obj->$col_name($vals[$i]);
-            }
+            }, array_keys($columns));
             if (!$obj->save()) {
                 $errors++;
             }
@@ -137,23 +172,35 @@ class FannieCRUDPage extends FannieRESTfulPage
                 }
             }
         }
-        // find a character column to plug in
-        // a placeholder value
-        foreach ($columns as $col_name => $c) {
-            if ($col_name != $id_col && strstr(strtoupper($c['type']), 'CHAR')) {
-                $obj->$col_name('NEW');
-                break;
-            }
+        list($col_name, $col_val) = $this->findPlaceholder($columns, $id_col);
+        if ($col_name !== false) {
+            $obj->$col_name($col_val);
         }
 
         $saved = $obj->save();
         if ($saved) {
-            header('Location: ' . $_SERVER['PHP_SELF'] . '?flash[]=sAdded+Entry');
+            echo json_encode(array('error'=>0, 'added'=>1, 'id'=>$saved));
         } else {
-            header('Location: ' . $_SERVER['PHP_SELF'] . '?flash[]=dError+Adding+Entry');
+            echo json_encode(array('error'=>1, 'added'=>0));
         }
 
         return false;
+    }
+
+    protected function findPlaceholder($columns, $id_col)
+    {
+        foreach ($columns as $col_name => $c) {
+            if ($col_name != $id_col && strstr(strtoupper($c['type']), 'CHAR')) {
+                return array($col_name, 'NEW');
+            }
+        }
+        foreach ($columns as $col_name => $c) {
+            if ($col_name != $id_col && strstr(strtoupper($c['type']), 'DATE')) {
+                return array($col_name, date('Y-m-d'));
+            }
+        }
+
+        return array(false, false);
     }
 
     public function delete_id_handler()
@@ -162,12 +209,10 @@ class FannieCRUDPage extends FannieRESTfulPage
         $id_col = $this->getIdCol();
         $obj->$id_col($this->id);
         if ($obj->delete()) {
-            header('Location: ' . $_SERVER['PHP_SELF'] . '?flash[]=sDeleted+Entry');
+            return filter_input(INPUT_SERVER, 'PHP_SELF') . '?flash[]=sDeleted+Entry';
         } else {
-            header('Location: ' . $_SERVER['PHP_SELF'] . '?flash[]=dError+Deleting+Entry');
+            return filter_input(INPUT_SERVER, 'PHP_SELF') . '?flash[]=dError+Deleting+Entry';
         }
-
-        return false;
     }
 
     public function get_view()
@@ -175,46 +220,58 @@ class FannieCRUDPage extends FannieRESTfulPage
         $obj = $this->getCRUDModel();
         $id_col = $this->getIdCol();
         $columns = $obj->getColumns();
-        $ret = '<form method="post">';
-        foreach (FormLib::get('flash', array()) as $f) {
-            $css = '';
-            switch (substr($f, 0, 1)) {
-                case 's':
-                    $css = 'alert-success';
-                    break;
-                case 'd':
-                    $css = 'alert-danger';
-                    break;
-            }
-            $ret .= '<div class="alert ' . $css . '" role="alert">' 
-                . substr($f, 1) 
-                . '<button type="button" class="close" data-dismiss="alert">'
-                . '<span>&times;</span></button>'
-                . '</div>';
-        }
+        $ret = '<form class="crud-form" method="post">';
+        $ret .= '<div class="flash-div">';
+        $ret .= array_reduce(\FormLib::get('flash', array()),
+            function ($carry, $item) {
+                $css = '';
+                switch (substr($item, 0, 1)) {
+                    case 's':
+                        $css = 'alert-success';
+                        break;
+                    case 'd':
+                        $css = 'alert-danger';
+                        break;
+                }
+                $carry .= '<div class="alert ' . $css . '" role="alert">' 
+                    . substr($item, 1) 
+                    . '<button type="button" class="close" data-dismiss="alert">'
+                    . '<span>&times;</span></button>'
+                    . '</div>';
+                return $carry;
+            }, '');
+        $ret .= '</div>';
         $ret .= '<table class="table table-bordered">';
         $ret .= '<tr>';
         foreach ($columns as $col_name => $c) {
             if ($col_name != $id_col) {
+                if (isset($this->column_name_map[$col_name])) {
+                    $col_name = $this->column_name_map[$col_name];
+                }
                 $ret .= '<th>' . ucwords($col_name) . '</th>';
             }
         }
         $ret .= '</tr>';
-        foreach ($obj->find($id_col) as $o) {
+        $sort = !empty($this->display_sorting) ? $this->display_sorting : $id_col;
+        foreach ($obj->find($sort) as $o) {
             $ret .= '<tr>';
             foreach ($columns as $col_name => $c) {
                 if ($col_name == $id_col) {
-                    $ret .= '<input type="hidden" name="id[]" value="' . $o->$id_col() . '" />';    
+                    $ret .= '<input type="hidden" class="crudID" name="id[]" value="' . $o->$id_col() . '" />';    
                 } else {
-                    $ret .= sprintf('<td><input type="text" class="form-control" 
+                    $css = 'form-control';
+                    if (strtoupper($c['type'] == 'DATETIME')) {
+                        $css .= ' date-field';
+                    }
+                    $ret .= sprintf('<td><input type="text" class="%s" 
                                             name="%s[]" value="%s" /></td>',
-                                $col_name, $o->$col_name());
+                                $css, $col_name, $o->$col_name());
                 }
             }
             $ret .= sprintf('<td>
                         <a href="?_method=delete&id=%s" class="btn btn-xs btn-default btn-danger"
                             onclick="return confirm(\'Delete entry?\');">
-                        ' . FannieUI::deleteIcon() . '</a>
+                        ' . \COREPOS\Fannie\API\lib\FannieUI::deleteIcon() . '</a>
                         </td>',
                         $o->$id_col());
             $ret .= '</tr>';
@@ -223,11 +280,50 @@ class FannieCRUDPage extends FannieRESTfulPage
         $ret .= '<p>
             <button type="submit" class="btn btn-default">Save Changes</button>
             &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-            <a href="?_method=put" class="btn btn-default">Add Entry</a>
+            <a href="" onclick="addEntry(); return false;" class="btn btn-default">Add Entry</a>
             </p>';
         $ret .= '</form>';
+        $ret .= '<script type="text/javascript">
+            function addEntry()
+            {
+                $.ajax({
+                    method: "PUT",
+                    dataType: "json"
+                }).done(function(resp) {
+                    if (resp.added && $(\'input.crudID\').length > 0) {
+                        $("form.crud-form").submit();
+                    } else if (resp.added) {
+                        window.location.reload();
+                    } else {
+                        showBootstrapAlert(".flash-div", "danger", "Error adding entry");
+                    }
+                });
+            }
+            </script>';
 
         return $ret;
+    }
+
+    public function baseUnitTest($phpunit)
+    {
+        $this->model_name = 'FloorSectionsModel';
+        $phpunit->assertEquals('floorSectionID', $this->getIdCol());
+        $phpunit->assertEquals('FloorSectionsModel', get_class($this->getCRUDModel()));
+        $phpunit->assertEquals(array('name', 'NEW'), $this->findPlaceholder($this->model->getColumns(), $this->getIdCol()));
+        $phpunit->assertNotEquals(0, strlen($this->get_view()));
+        $this->connection->throwOnFailure(true);
+        ob_start();
+        $phpunit->assertEquals(false, $this->put_handler());
+        $json = ob_get_clean();
+        $json = json_decode($json, true);
+        $model = new \FloorSectionsModel($this->connection);
+        $model->floorSectionID($json['id']);
+        $phpunit->assertEquals(true, $model->load());
+        $this->id = $json['id'];
+        $this->delete_id_handler();
+        $model->reset();
+        $model->floorSectionID($json['id']);
+        $phpunit->assertEquals(false, $model->load());
     }
 }
 

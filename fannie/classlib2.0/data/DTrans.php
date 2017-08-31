@@ -31,11 +31,19 @@ class DTrans
 
     /**
       Array of default values for dtransaction-style tables
-      The column 'datetime' is ommitted. Normally an SQL
+      The column 'datetime' is omitted. Normally an SQL
       function like NOW() is used there and cannot be
       a parameter
     */
-    public static $DEFAULTS = array(
+    public static function defaults()
+    {
+        $ret = self::$DEFAULTS;
+        $ret['store_id'] = (int)FannieConfig::config('STORE_ID');
+
+        return $ret;
+    }
+
+    private static $DEFAULTS = array(
         'register_no'=>0,
         'emp_no'=>0,
         'trans_no'=>0,
@@ -62,7 +70,7 @@ class DTrans
         'ItemQtty'=>0,
         'volDiscType'=>0,
         'volume'=>0,
-        'volSpecial'=>0,
+        'VolSpecial'=>0,
         'mixMatch'=>'',
         'matched'=>0,
         'memType'=>'',
@@ -88,9 +96,10 @@ class DTrans
         $columns = !empty($datecol) && !empty($datefunc) ? $datecol.',' : '';
         $values = !empty($datecol) && !empty($datefunc) ? $datefunc.',' : '';
         $args = array();
+        $defaults = self::defaults();
         foreach($arr as $key => $val) {
             // validate column names
-            if (!isset(self::$DEFAULTS[$key])) {
+            if (!isset($defaults[$key])) {
                 continue;
             }
             $columns .= $key.',';
@@ -214,16 +223,15 @@ class DTrans
     public static function joinProducts($dlog_alias='t', $product_alias='p', $join_type='left')
     {
         $conf = FannieConfig::factory();
-        $table = 'products';
-        if ($conf->get('OP_DB') != '') {
-            $table = $conf->get('OP_DB');
-            $table .= ($conf->get('SERVER_DBMS') == 'mssql') ? '.dbo.' : '.';
-            $table .= 'products';
+        $store_id = $conf->get('STORE_ID');
+        $store_condition = '';
+        if ($conf->get('STORE_MODE') == 'HQ') {
+            $store_condition = ' AND ' . $product_alias . '.store_id=' . ((int)$store_id); 
         }
 
-        return ' ' . self::normalizeJoin($join_type) . ' JOIN ' . $table 
+        return ' ' . self::normalizeJoin($join_type) . ' JOIN ' . self::opTable('products')
                 . ' AS ' . $product_alias
-                . ' ON ' . $product_alias . '.upc = ' . $dlog_alias . '.upc ';
+                . ' ON ' . $product_alias . '.upc = ' . $dlog_alias . '.upc ' . $store_condition;
     }
 
     private static function normalizeJoin($join_type)
@@ -239,6 +247,19 @@ class DTrans
         }
     }
 
+    private static function opTable($table)
+    {
+        $conf = FannieConfig::factory();
+        $fq_table = $table;
+        if ($conf->get('OP_DB') != '') {
+            $fq_table = $conf->get('OP_DB');
+            $fq_table .= ($conf->get('SERVER_DBMS') == 'mssql') ? '.dbo.' : '.';
+            $fq_table .= $table;
+        }
+
+        return $fq_table;
+    }
+
     /**
       Get join statement for departments table
       @param $dlog_alias [optional] alias for the transaction table (default 't')
@@ -247,15 +268,7 @@ class DTrans
     */
     public static function joinDepartments($dlog_alias='t', $dept_alias='d')
     {
-        $conf = FannieConfig::factory();
-        $table = 'departments';
-        if ($conf->get('OP_DB') != '') {
-            $table = $conf->get('OP_DB');
-            $table .= ($conf->get('SERVER_DBMS') == 'mssql') ? '.dbo.' : '.';
-            $table .= 'departments';
-        }
-
-        return ' LEFT JOIN ' . $table . ' AS ' . $dept_alias
+        return ' LEFT JOIN ' . self::opTable('departments') . ' AS ' . $dept_alias
                 . ' ON ' . $dept_alias . '.dept_no = ' . $dlog_alias . '.department ';
     }
 
@@ -265,17 +278,9 @@ class DTrans
       @param $cust_alias [optional] alias for the custdata table (default 'c')
       @return string SQL snippet
     */
-    public static function joinCustdata($dlog_alias='t', $cust_alias='c')
+    public static function joinCustomerAccount($dlog_alias='t', $cust_alias='c')
     {
-        $conf = FannieConfig::factory();
-        $table = 'custdata';
-        if ($conf->get('OP_DB') != '') {
-            $table = $conf->get('OP_DB');
-            $table .= ($conf->get('SERVER_DBMS') == 'mssql') ? '.dbo.' : '.';
-            $table .= 'custdata';
-        }
-
-        return ' LEFT JOIN ' . $table . ' AS ' . $cust_alias
+        return ' LEFT JOIN ' . self::opTable('custdata') . ' AS ' . $cust_alias
                 . ' ON ' . $cust_alias . '.CardNo = ' . $dlog_alias . '.card_no '
                 . ' AND ' . $cust_alias . '.personNum = 1 ';
     }
@@ -288,15 +293,7 @@ class DTrans
     */
     public static function joinTenders($dlog_alias='t', $tender_alias='n')
     {
-        $conf = FannieConfig::factory();
-        $table = 'tenders';
-        if ($conf->get('OP_DB') != '') {
-            $table = $conf->get('OP_DB');
-            $table .= ($conf->get('SERVER_DBMS') == 'mssql') ? '.dbo.' : '.';
-            $table .= 'tenders';
-        }
-
-        return ' LEFT JOIN ' . $table . ' AS ' . $tender_alias
+        return ' LEFT JOIN ' . self::opTable('tenders') . ' AS ' . $tender_alias
                 . ' ON ' . $tender_alias . '.TenderCode = ' . $dlog_alias . '.trans_subtype ';
     }
 
@@ -375,18 +372,15 @@ class DTrans
             $model->trans_id($last->trans_id() + 1);
         }
 
-        $custdata = new CustdataModel($connection);
-        $custdata->whichDB($config->get('OP_DB'));
         if (isset($params['card_no'])) {
-            $custdata->CardNo($params['card_no']);
-            $custdata->personNum(1);
-            if ($custdata->load()) {
-                $model->memType($custdata->memType());                
-                $model->staff($custdata->staff());
+            $account = \COREPOS\Fannie\API\member\MemberREST::get($params['card_no']);
+            if ($account) {
+                $model->memType($account['customerTypeID']);
+                $model->staff($account['customers'][0]['staff']);
             }
         }
 
-        $defaults = self::$DEFAULTS;
+        $defaults = self::defaults();
         $skip = array('datetime', 'emp_no', 'register_no', 'trans_no', 'trans_id');
         foreach ($defaults as $name => $value) {
             if (in_array($name, $skip)) {
@@ -457,6 +451,24 @@ class DTrans
         $params['upc'] = abs($amount) . 'DP' . $department;
 
         return self::addItem($connection, $trans_no, $params);
+    }
+
+    public static function departmentClause($deptStart, $deptEnd, $deptMulti, $args, $alias='d')
+    {
+        if (count($deptMulti) > 0) {
+            $where = ' AND ' . $alias . '.department IN (';
+            foreach ($deptMulti as $d) {
+                $where .= '?,';
+                $args[] = $d;
+            }
+            $where = substr($where, 0, strlen($where)-1) . ')';
+        } else {
+            $where = ' AND ' . $alias . '.department BETWEEN ? AND ? ';
+            $args[] = $deptStart;
+            $args[] = $deptEnd;
+        }
+
+        return array($where, $args);
     }
 }
 

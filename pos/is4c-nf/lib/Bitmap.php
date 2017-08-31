@@ -1,4 +1,8 @@
 <?php
+
+namespace COREPOS\pos\lib;
+use \Exception;
+
 /*
 Bitmap.class.php
 version 1 (2009-09-24)
@@ -12,48 +16,46 @@ References
 
 class Bitmap 
 {
+    private $DIB1 = 12;
+    private $DIB2 = 64;
+    private $DIB3 = 40;
+    private $DIB4 = 108;
+    private $DIB5 = 124;
     
-    public $DIB1;
-    public $DIB2;
-    public $DIB3;
-    public $DIB4;
-    public $DIB5;
+    private $error;
     
-    public $error;
-    
-    public $magic;
-    public $dibVersion;
-    public $width;
-    public $height;
-    public $bpp; // bits per pixel
-    public $hppm; // horiz. pixels per meter
-    public $vppm; // vert. pixels per meter
-    public $palSize;
-    public $palSizeImp;
-    public $palette;
-    public $image;
-    public $rowBytes;
-    
+    private $magic;
+    private $dibVersion;
+    private $width;
+    private $height;
+    private $bpp; // bits per pixel
+    private $hppm; // horiz. pixels per meter
+    private $vppm; // vert. pixels per meter
+    private $palSize;
+    private $palSizeImp;
+    private $palette;
+    private $image;
+    private $rowBytes;
     
     /*
     * INTERNAL METHODS
     */
     
-    public function returnError($err=null, $ret=null) 
+    private function returnError($err=null, $ret=null) 
     {
         $this->error = is_string($err) ? $err : "Unknown error";
 
         return $ret;
     } // returnError()
     
-    public function parseInt($data, $left=0, $right=-1, $signed=false, $bigEndian=false) 
+    private function parseInt($data, $left=0, $right=-1, $signed=false, $bigEndian=false) 
     {
         if (is_string($data)) {
             $isarray = false;
             if ($right < 0) {
                 $right = strlen($data) - 1;
             }
-        } else if (is_array($data)) {
+        } elseif (is_array($data)) {
             $isarray = true;
             $data = array_values($data);
             if ($right < 0) {
@@ -70,12 +72,12 @@ class Bitmap
         $end   = $bigEndian ? $left  : $right;
         $delta = $bigEndian ? -1     : 1;
         // process bytes
-        $n = $start;
-        $val = $isarray ? (int)$data[$n] : ord($data[$n]);
+        $num = $start;
+        $val = $isarray ? (int)$data[$num] : ord($data[$num]);
         $factor = 256;
-        while ($n != $end) {
-            $n += $delta;
-            $val += $factor * ($isarray ? (int)$data[$n] : ord($data[$n]));
+        while ($num != $end) {
+            $num += $delta;
+            $val += $factor * ($isarray ? (int)$data[$num] : ord($data[$num]));
             $factor <<= 8; // *= 256
         }
         // check sign bit
@@ -86,7 +88,7 @@ class Bitmap
         return $val;
     } // parseInt()
     
-    public function renderInt($val, $bytes, $signed=false, $bigEndian=false) 
+    private function renderInt($val, $bytes, $signed=false, $bigEndian=false) 
     {
         $val = (int)$val;
         $bytes = (int)$bytes;
@@ -101,8 +103,8 @@ class Bitmap
         $delta = $bigEndian ? -1           : 1;
         // set bytes
         $data = str_repeat("\x00", $bytes);
-        for ($n = $start;  $n != $end;  $n += $delta) {
-            $data[$n] = chr($val & 0xFF);
+        for ($num = $start;  $num != $end;  $num += $delta) {
+            $data[$num] = chr($val & 0xFF);
             $val >>= 8; // /= 256
         }
         // done
@@ -111,7 +113,7 @@ class Bitmap
     } // renderInt()
     
     
-    public function lastError($reset=true) 
+    private function lastError($reset=true) 
     {
         $err = $this->error;
         if ($reset) {
@@ -234,7 +236,7 @@ class Bitmap
         $rowDataSize = (int)((($width * $bpp) + 31) / 32) * 4;
         if ($imgDataSize === null || $imgDataSize === 0) {
             $imgDataSize = abs($height) * $rowDataSize;
-        } else if ($imgDataSize != (abs($height) * $rowDataSize)){
+        } elseif ($imgDataSize != (abs($height) * $rowDataSize)){
             /** modification by Andy 09Aug13
                 I think this makes more sense and it's incorrect
                 to assume all zero bytes at the end of the
@@ -266,6 +268,9 @@ class Bitmap
         if (!$palSize && $bpp < 16) {
             $palSize = pow(2, $bpp);
         }
+        $palColorSize = 0;
+        $palDataSize = 0;
+        $palette = null;
         if ($palSize) {
             $palColorSize = ($headerSize == $this->DIB1) ? 3 : 4;
             $palDataSize = $palSize * $palColorSize;
@@ -277,10 +282,6 @@ class Bitmap
                 // pad each palette color to 4 bytes for simpler lookup (remember "." doesn't match newline, hence "|\\n")
                 $palette = preg_replace('/(.|\\n){'.$palColorSize.'}/', '\\1'.str_repeat("\x00",(4-$palColorSize)), $palette);
             }
-        } else {
-            $palColorSize = 0;
-            $palDataSize = 0;
-            $palette = null;
         }
         
         // read the image
@@ -342,27 +343,21 @@ class Bitmap
     * OBJECT METHODS
     */
     
-    public function Bitmap($width=1, $height=1, $bpp=1, $dpi=72) 
+    public function __construct($width=1, $height=1, $bpp=1, $dpi=72) 
     {
-        $this->DIB1 = 12;
-        $this->DIB2 = 64;
-        $this->DIB3 = 40;
-        $this->DIB4 = 108;
-        $this->DIB5 = 124;
-
         $this->error = null;
         
         if (!is_numeric($width) || (int)$width < 1) {
-            die('Bitmap width must be at least 1');
+            throw('Bitmap width must be at least 1');
         }
         if (!is_numeric($height) || (int)$height < 1) {
-            die('Bitmap height must be at least 1');
+            throw('Bitmap height must be at least 1');
         }
         if (!is_numeric($bpp) || (int)$bpp != 1) {
-            die('Color bitmaps not yet supported');
+            throw('Color bitmaps not yet supported');
         }
         if (!is_numeric($dpi) || (int)$dpi < 1) {
-            die('Bitmap DPI must be at least 1');
+            throw('Bitmap DPI must be at least 1');
         }
         $this->magic = "BM";
         $this->dibVersion = $this->DIB3;
@@ -394,11 +389,10 @@ class Bitmap
         }
         
         // prepare the palette
+        $palette = "";
         if ($this->palSize) {
             $palette = $this->palette;
             // if ($this->dibVersion == self::DIB1)  // strip padding...
-        } else {
-            $palette = "";
         }
         $palDataSize = strlen($palette);
         
@@ -463,26 +457,26 @@ class Bitmap
         return $this->height;
     }
     
-    public function getColorDepth()
+    private function getColorDepth()
     {
         return $this->bpp;
     }
     
-    public function getHorizResolution($asDPI=false){
+    private function getHorizResolution($asDPI=false){
         return $asDPI ? (int)(($this->hppm / 39.37) + 0.5) : $this->hppm;
     }
     
-    public function getVertResolution($asDPI=false)
+    private function getVertResolution($asDPI=false)
     {
         return $asDPI ? (int)(($this->vppm / 39.37) + 0.5) : $this->vppm;
     }
     
-    public function getPaletteSize()
+    private function getPaletteSize()
     {
         return ($this->bpp < 16 && $this->palSize) ? $this->palSize : null;
     }
     
-    public function getPaletteColor($index, $channel=null) 
+    private function getPaletteColor($index, $channel=null) 
     {
         if (!$this->palSize || $this->palette === null || $index < 0 || $index >= $this->palSize) {
             return null;
@@ -498,17 +492,17 @@ class Bitmap
         return $this->parseInt($this->palette, $byte, $byte + 2);
     } // getPaletteColor()
     
-    public function getPixelValue($x, $y) 
+    private function getPixelValue($x, $y) 
     {
         // validate coordinates
         if ($x < 0) {
             $x += $this->width;
-        } else if ($x >= $this->width) {
+        } elseif ($x >= $this->width) {
             return null;
         }
         if ($y < 0) {
             $y += $this->height;
-        } else if ($y >= $this->height) {
+        } elseif ($y >= $this->height) {
             return null;
         }
         // fetch pixel
@@ -538,17 +532,17 @@ class Bitmap
         return null;
     } // getPixelValue()
     
-    public function setPixelValue($x, $y, $val) 
+    private function setPixelValue($x, $y, $val) 
     {
         // validate coordinates
         if ($x < 0) {
             $x += $this->width;
-        } else if ($x >= $this->width) {
+        } elseif ($x >= $this->width) {
             return null;
         }
         if ($y < 0) {
             $y += $this->height;
-        } else if ($y >= $this->height) {
+        } elseif ($y >= $this->height) {
             return null;
         }
         // validate new pixel value
@@ -592,28 +586,27 @@ class Bitmap
 
         return null;
     } // setPixelValue()
+
+    private function validateCoord($val, $max)
+    {
+        if ($val < 0) {
+            return $val + $max;
+        } elseif ($val >= $max) {
+            throw new Exception('Coordinate out of range');
+        }
+        return $val;
+    }
     
-    public function drawLine($x0, $y0, $x1, $y1, $val) 
+    // @hintable
+    public function drawLine($pt1, $pt2, $val) 
     {
         // validate coordinates
-        if ($x0 < 0) {
-            $x0 += $this->width;
-        } else if ($x0 >= $this->width) {
-            return null;
-        }
-        if ($y0 < 0) {
-            $y0 += $this->height;
-        } else if ($y0 >= $this->height) {
-            return null;
-        }
-        if ($x1 < 0) {
-            $x1 += $this->width;
-        } else if ($x1 >= $this->width) {
-            return null;
-        }
-        if ($y1 < 0) {
-            $y1 += $this->height;
-        } else if ($y1 >= $this->height) {
+        try {
+            $pt1[0] = $this->validateCoord($pt1[0], $this->width);
+            $pt2[0] = $this->validateCoord($pt1[0], $this->width);
+            $pt1[1] = $this->validateCoord($pt1[1], $this->height);
+            $pt2[1] = $this->validateCoord($pt2[1], $this->height);
+        } catch (Exception $ex) {
             return null;
         }
         // validate new pixel(s) value
@@ -622,37 +615,36 @@ class Bitmap
         }
         // draw!
         // http://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm#Optimization
-        $steep = (abs($y1 - $y0) > abs($x1 - $x0));
+        $steep = (abs($pt2[1] - $pt1[1]) > abs($pt2[0] - $pt1[0]));
         if ($steep) {
-            $t=$x0; $x0=$y0; $y0=$t; // swap $x0,$y0
-            $t=$x1; $x1=$y1; $y1=$t; // swap $x1,$y1
+            $tmp=$pt1[0]; $pt1[0]=$pt1[1]; $pt1[1]=$tmp; // swap $pt1[0],$pt1[1]
+            $tmp=$pt2[0]; $pt2[0]=$pt2[1]; $pt2[1]=$tmp; // swap $pt2[0],$pt2[1]
         }
-        if ($x0 > $x1) {
-            $t=$x0; $x0=$x1; $x1=$t; // swap $x0,$x1
-            $t=$y0; $y0=$y1; $y1=$t; // swap $y0,$y1
+        if ($pt1[0] > $pt2[0]) {
+            $tmp=$pt1; $pt1=$pt2; $pt2=$tmp; // swap $pt1,$pt2
         }
-        $dx = ($x1 - $x0);
-        $dy = abs($y1 - $y0);
-        $err = $dx >> 1;
-        $sy = ($y0 < $y1) ? 1 : -1;
-        while ($x0 <= $x1) {
+        $divx = ($pt2[0] - $pt1[0]);
+        $divy = abs($pt2[1] - $pt1[1]);
+        $err = $divx >> 1;
+        $s_y = ($pt1[1] < $pt2[1]) ? 1 : -1;
+        while ($pt1[0] <= $pt2[0]) {
             if ($steep) {
-                $this->setPixelValue($y0, $x0, 1);
+                $this->setPixelValue($pt1[1], $pt1[0], 1);
             } else {
-                $this->setPixelValue($x0, $y0, 1);
+                $this->setPixelValue($pt1[0], $pt1[1], 1);
             }
-            $err -= $dy;
+            $err -= $divy;
             if ($err < 0) {
-                $y0 += $sy;
-                $err += $dx;
+                $pt1[1] += $s_y;
+                $err += $divx;
             }
-            $x0++;
+            $pt1[0]++;
         }
 
         return true;
     } // DrawLine()
     
-    public function getPixelColor($x, $y, $channel=null) 
+    private function getPixelColor($x, $y, $channel=null) 
     {
         $val = $this->getPixelValue($x, $y);
         if ($val !== null && $this->palette !== null) {
@@ -673,7 +665,7 @@ class Bitmap
         return $this->image;
     } // GetRawData()
     
-    public function getRawBytesPerRow() 
+    private function getRawBytesPerRow() 
     {
         return $this->rowBytes;
     } // GetRawBytesPerRow()
@@ -685,20 +677,20 @@ class Bitmap
       @param $height default 40
       @return Bitmap object
     */
-    static public function barGraph($percent, $width=200, $height=40)
+    public function barGraph($percent, $width=200, $height=40)
     {
         $graph = new Bitmap($width, $height, 1);
         $black = 1;
         $spacing = 5;
 
         // border top
-        $graph->drawLine(0, 0, $width-1, 0, $black);
+        $graph->drawLine(array(0,0), array($width-1,0), $black);
         // border bottom
-        $graph->drawLine(0, $height-1, $width-1, $height-1, $black);
+        $graph->drawLine(array(0,$height-1), array($width-1,$height-1), $black);
         // border left
-        $graph->drawLine(0, 1, 0, $height-2, $black);
+        $graph->drawLine(array(0,1), array(0,$height-2), $black);
         // border right
-        $graph->drawLine($width-1, 1, $width-1, $height-2, $black);
+        $graph->drawLine(array($width-1,1), array($width-1,$height-2), $black);
 
         $full_bar_size = $width - ($spacing*2);
         if ($percent > 1) $percent = (float)($percent / 100.00);
@@ -706,7 +698,7 @@ class Bitmap
         $bar_size = round($percent * $full_bar_size);
 
         for($line=$spacing;$line<$height-$spacing;$line++){
-            $graph->drawLine($spacing, $line, $spacing+$bar_size, $line, $black);    
+            $graph->drawLine(array($spacing,$line), array($spacing+$bar_size,$line), $black);    
         }
 
         return $graph;
@@ -717,7 +709,7 @@ class Bitmap
       @param $arg string filename OR Bitmap obj
       @return receipt-formatted string
     */
-    static public function renderBitmap($arg)
+    static private function renderBitmap($arg)
     {
         global $PRINT_OBJ;
         $slip = "";
@@ -725,7 +717,7 @@ class Bitmap
         $bmp = null;
         if (is_object($arg) && is_a($arg, 'Bitmap')) {
             $bmp = $arg;
-        } else if (file_exists($arg)) {
+        } elseif (file_exists($arg)) {
             $bmp = new Bitmap();
             $bmp->load($arg);
         }

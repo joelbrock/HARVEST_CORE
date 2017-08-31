@@ -38,6 +38,8 @@ class ProductMovementModular extends FannieReportPage
     public $report_set = 'Movement Reports';
     public $themed = true;
 
+    protected $new_tablesorter = true;
+
     function preprocess()
     {
         $ret = parent::preprocess();
@@ -66,14 +68,15 @@ class ProductMovementModular extends FannieReportPage
 
     function fetch_report_data()
     {
-        global $FANNIE_OP_DB, $FANNIE_ARCHIVE_DB;
-        $dbc = FannieDB::get($FANNIE_OP_DB);
-        $date1 = FormLib::get_form_value('date1',date('Y-m-d'));
-        $date2 = FormLib::get_form_value('date2',date('Y-m-d'));
-        $upc = FormLib::get_form_value('upc','0');
+        $dbc = $this->connection;
+        $dbc->selectDB($this->config->get('OP_DB'));
+        $date1 = $this->form->date1;
+        $date2 = $this->form->date2;
+        $upc = $this->form->upc;
         if (is_numeric($upc)) {
             $upc = BarcodeLib::padUPC($upc);
         }
+        $store = FormLib::get('store', 0);
 
         $dlog = DTransactionsModel::selectDlog($date1,$date2);
 
@@ -87,9 +90,10 @@ class ProductMovementModular extends FannieReportPage
                     " . DTrans::sumQuantity('t') . " AS qty,
                     SUM(t.total) AS total
                   FROM $dlog AS t 
-                    " . DTrans::joinProducts('t', 'p', 'INNER') . "
+                    " . DTrans::joinProducts('t', 'p', 'LEFT') . "
                   WHERE t.upc = ? AND
                     t.tdate BETWEEN ? AND ?
+                    AND " . DTrans::isStoreID($store, 't') . "
                   GROUP BY 
                     YEAR(t.tdate),
                     MONTH(t.tdate),
@@ -97,7 +101,7 @@ class ProductMovementModular extends FannieReportPage
                     t.upc,
                     p.description
                   ORDER BY year(t.tdate),month(t.tdate),day(t.tdate)";
-        $args = array($upc,$date1.' 00:00:00',$date2.' 23:59:59');
+        $args = array($upc,$date1.' 00:00:00',$date2.' 23:59:59', $store);
     
         if (strtolower($upc) == "rrr" || $upc == "0000000000052"){
             if ($dlog == "dlog_90_view" || $dlog=="dlog_15")
@@ -113,6 +117,7 @@ class ProductMovementModular extends FannieReportPage
                 $dlog as t
                 where upc = ?
                 AND datetime BETWEEN ? AND ?
+                AND " . DTrans::isStoreID($store, 't') . "
                 and emp_no <> 9999 and register_no <> 99
                 and trans_status <> 'X'
                 GROUP BY YEAR(datetime),MONTH(datetime),DAY(datetime)
@@ -128,12 +133,13 @@ class ProductMovementModular extends FannieReportPage
                 $dlog as t
                 where upc = ?
                 AND datetime BETWEEN ? AND ?
+                AND " . DTrans::isStoreID($store, 't') . "
                 and emp_no <> 9999 and register_no <> 99
                 and (trans_status <> 'X' || trans_type='L')
                 GROUP BY YEAR(datetime),MONTH(datetime),DAY(datetime)";
         }
-        $prep = $dbc->prepare_statement($query);
-        $result = $dbc->exec_statement($prep,$args);
+        $prep = $dbc->prepare($query);
+        $result = $dbc->execute($prep,$args);
 
         /**
           Simple report
@@ -141,17 +147,23 @@ class ProductMovementModular extends FannieReportPage
           Issue a query, build array of results
         */
         $ret = array();
-        while ($row = $dbc->fetch_array($result)){
-            $record = array();
-            $record[] = $row[0]."/".$row[1]."/".$row[2];
-            $record[] = $row['upc'];
-            $record[] = $row['brand'];
-            $record[] = $row['description'];
-            $record[] = sprintf('%.2f', $row['qty']);
-            $record[] = sprintf('%.2f', $row['total']);
-            $ret[] = $record;
+        while ($row = $dbc->fetchRow($result)){
+            $ret[] = $this->rowToRecord($row);
         }
         return $ret;
+    }
+
+    private function rowToRecord($row)
+    {
+        $record = array();
+        $record[] = $row[0]."/".$row[1]."/".$row[2];
+        $record[] = $row['upc'];
+        $record[] = $row['brand'] === null ? '' : $row['brand'];
+        $record[] = $row['description'] === null ? '' : $row['description'];
+        $record[] = sprintf('%.2f', $row['qty']);
+        $record[] = sprintf('%.2f', $row['total']);
+
+        return $record;
     }
     
     /**
@@ -164,7 +176,11 @@ class ProductMovementModular extends FannieReportPage
             $sumQty += $row[4];
             $sumSales += $row[5];
         }
-        return array('Total',null,null,null,$sumQty,$sumSales);
+        $divisor = count($data) > 0 ? count($data) : 1;
+        return array(
+            array('Daily Avg.',null,null,null,round($sumQty/$divisor,2),round($sumSales/$divisor,2)),
+            array('Total',null,null,null,$sumQty,$sumSales)
+        );
     }
 
     public function javascriptContent()
@@ -219,6 +235,8 @@ function showGraph() {
     function form_content()
     {
         global $FANNIE_URL;
+        $stores = FormLib::storePicker();
+        ob_start();
 ?>
 <form method = "get" action="ProductMovementModular.php" class="form-horizontal">
     <div class="col-sm-5">
@@ -229,13 +247,19 @@ function showGraph() {
             </div>
         </div>
         <div class="form-group"> 
+            <label class="control-label col-sm-4">Store</label>
+            <div class="col-sm-8">
+                <?php echo $stores['html']; ?>
+            </div>
+        </div>
+        <div class="form-group"> 
             <label class="control-label col-sm-4">
                 <input type="checkbox" name="excel" id="excel" value="xls" /> Excel
             </label>
         </div>
         <div class="form-group"> 
-            <button type=submit name=submit value="Submit" class="btn btn-default">Submit</button>
-            <button type=reset name=reset class="btn btn-default">Start Over</button>
+            <button type=submit name=submit value="Submit" class="btn btn-default btn-core">Submit</button>
+            <button type=reset name=reset class="btn btn-default btn-reset">Start Over</button>
         </div>
     </div>
     <div class="col-sm-5">
@@ -261,6 +285,8 @@ function showGraph() {
         $ws = $FANNIE_URL . 'ws/';
         $this->add_onload_command("bindAutoComplete('#upc', '$ws', 'item');\n");
         $this->add_onload_command('$(\'#upc\').focus();');
+
+        return ob_get_clean();
     }
 
     public function helpContent()
@@ -269,8 +295,14 @@ function showGraph() {
             a given item. You can type in item names to find the
             appropriate UPC if needed.</p>';
     }
+
+    public function unitTest($phpunit)
+    {
+        $data = array(0=>1, 1=>1, 2=>2000, 'upc'=>'4011', 'brand'=>'test',
+            'description'=>'test', 'qty'=>1, 'total'=>1);
+        $phpunit->assertInternalType('array', $this->rowToRecord($data));
+    }
 }
 
 FannieDispatch::conditionalExec();
 
-?>

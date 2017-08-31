@@ -58,13 +58,13 @@ if (strpos($FANNIE_SERVER, ':') > 0) {
 }
 $cmd = 'mysqldump'
     . ' -u ' . escapeshellarg($FANNIE_SERVER_USER)
-    . ' -p' . escapeshellarg($FANNIE_SERVER_PW)
+    . (empty($FANNIE_SERVER_PW) ? '' : ' -p' . escapeshellarg($FANNIE_SERVER_PW))
     . ' -h ' . escapeshellarg($host)
     . ' -P ' . escapeshellarg($port)
     . ' ' . escapeshellarg($FANNIE_OP_DB)
     . ' ' . escapeshellarg($table)
     . ' > ' . escapeshellarg($tempfile)
-    . ' 2>&1';
+    . ' 2> ' . escapeshellarg($tempfile.'.err');
 $cmd_obfusc = 'mysqldump'
     . ' -u ' . escapeshellarg($FANNIE_SERVER_USER)
     . ' -p' . str_repeat('*', 8)
@@ -75,7 +75,11 @@ $cmd_obfusc = 'mysqldump'
     . ' > ' . escapeshellarg($tempfile);
 exec($cmd, $output, $ret);
 if ($ret > 0) {
-    $report = implode($lineBreak, $output);
+    $report = '';
+    if (file_exists($tempfile . '.err')) {
+        $report .= file_get_contents($tempfile . '.err');
+        unlink($tempfile . '.err');
+    }
     if (strlen($report) > 0) {
         $report = "{$lineBreak}$report";
     }
@@ -91,7 +95,7 @@ if ($ret > 0) {
         if (strpos($lane['host'], ':') > 0) {
             list($lane_host, $lane_port) = explode(':', $lane['host'], 2);
         }
-        $lane_cmd = 'mysql'
+        $lane_cmd = 'mysql --connect-timeout 15 '
             . ' -u ' . escapeshellarg($lane['user'])
             . ' -p' . escapeshellarg($lane['pw'])
             . ' -h ' . escapeshellarg($lane_host)
@@ -99,7 +103,7 @@ if ($ret > 0) {
             . ' ' . escapeshellarg($lane['op'])
             . ' < ' . escapeshellarg($tempfile)
             . ' 2>&1';
-        $lane_cmd_obfusc = 'mysql'
+        $lane_cmd_obfusc = 'mysql --connect-timeout 15 '
             . ' -u ' . escapeshellarg($lane['user'])
             . ' -p' . str_repeat('*', 8)
             . ' -h ' . escapeshellarg($lane_host)
@@ -124,4 +128,7 @@ if ($ret > 0) {
 }
 
 unlink($tempfile);
+if (file_exists($tempfile . '.err')) {
+    unlink($tempfile . '.err');
+}
 

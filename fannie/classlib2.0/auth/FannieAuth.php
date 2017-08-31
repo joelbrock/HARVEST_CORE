@@ -60,11 +60,14 @@ class FannieAuth
             return false;
         }
 
-        $sql = FannieDB::get(FannieConfig::factory()->get('OP_DB'));
-        $checkQ = $sql->prepare_statement("select * from Users AS u LEFT JOIN
+        $sql = FannieDB::getReadOnly(FannieConfig::factory()->get('OP_DB'));
+        if (!$sql->isConnected()) {
+            return false;
+        }
+        $checkQ = $sql->prepare("select * from Users AS u LEFT JOIN
                 userSessions AS s ON u.uid=s.uid where u.name=? 
                 and s.session_id=?");
-        $checkR = $sql->exec_statement($checkQ,array($name,$session_id));
+        $checkR = $sql->execute($checkQ,array($name,$session_id));
 
         if ($sql->num_rows($checkR) == 0) {
             return false;
@@ -157,7 +160,7 @@ class FannieAuth
         }
 
         $uid = self::getUID($name);
-        $dbc = FannieDB::get(FannieConfig::factory()->get('OP_DB'));
+        $dbc = FannieDB::getReadOnly(FannieConfig::factory()->get('OP_DB'));
         $query = $dbc->prepare("
             SELECT MIN(sub_start) AS lowerBound,
                 MAX(sub_end) AS upperBound
@@ -189,7 +192,7 @@ class FannieAuth
             return false;
         }
 
-        $dbc = FannieDB::get(FannieConfig::factory()->get('OP_DB'));
+        $dbc = FannieDB::getReadOnly(FannieConfig::factory()->get('OP_DB'));
         $query = $dbc->prepare("
             SELECT MIN(sub_start) AS lowerBound,
                 MAX(sub_end) AS upperBound
@@ -233,10 +236,10 @@ class FannieAuth
         if (!$uid) {
             return false;
         }
-        $sql = FannieDB::get(FannieConfig::factory()->get('OP_DB'));
-        $checkQ = $sql->prepare_statement("select * from userPrivs where uid=? and auth_class=? and
+        $sql = FannieDB::getReadOnly(FannieConfig::factory()->get('OP_DB'));
+        $checkQ = $sql->prepare("select * from userPrivs where uid=? and auth_class=? and
                  ((? between sub_start and sub_end) or (sub_start='all' and sub_end='all'))");
-        $checkR = $sql->exec_statement($checkQ,array($uid,$auth_class,$sub));
+        $checkR = $sql->execute($checkQ,array($uid,$auth_class,$sub));
         if ($sql->num_rows($checkR) == 0) {
             return false;
         }
@@ -254,17 +257,17 @@ class FannieAuth
     */
     static private function checkGroupAuth($user, $auth, $sub='all')
     {
-        $sql = FannieDB::get(FannieConfig::factory()->get('OP_DB'));
+        $sql = FannieDB::getReadOnly(FannieConfig::factory()->get('OP_DB'));
         if (!self::isAlphaNumeric($user) || !self::isAlphaNumeric($auth) ||
             !self::isAlphaNumeric($sub)) {
             return false;
         }
-        $checkQ = $sql->prepare_statement("select g.gid  from userGroups as g, userGroupPrivs as p where
+        $checkQ = $sql->prepare("select g.gid  from userGroups as g, userGroupPrivs as p where
                         g.gid = p.gid and g.username=?
                         and p.auth=? and
                         ((? between p.sub_start and p.sub_end) or
                         (p.sub_start='all' and p.sub_end='all'))");
-        $checkR = $sql->exec_statement($checkQ,array($user,$auth,$sub));
+        $checkR = $sql->execute($checkQ,array($user,$auth,$sub));
 
         if ($sql->num_rows($checkR) == 0) {
             return false;
@@ -281,22 +284,41 @@ class FannieAuth
       If authentication is not enabled,
       returns string '0000'.
     */
-    public static function getUID($name) 
+    public static function getUID($name=null) 
     {
         if (!self::enabled()) {
             return '0000';
         }
 
-        $sql = FannieDB::get(FannieConfig::factory()->get('OP_DB'));
-        $fetchQ = $sql->prepare_statement("select uid from Users where name=?");
-        $fetchR = $sql->exec_statement($fetchQ,array($name));
+        if ($name === null) {
+            $name = self::checkLogin();
+            if ($name === false) {
+                return false;
+            }
+        }
+
+        $sql = FannieDB::getReadOnly(FannieConfig::factory()->get('OP_DB'));
+        $fetchQ = $sql->prepare("select uid from Users where name=?");
+        $fetchR = $sql->execute($fetchQ,array($name));
         if ($sql->num_rows($fetchR) == 0) {
             return false;
         }
-        $uid = $sql->fetch_array($fetchR);
+        $uid = $sql->fetchRow($fetchR);
         $uid = $uid[0];
 
         return $uid;
+    }
+
+    public static function getName($uid)
+    {
+        if (!self::enabled()) {
+            return 'n/a';
+        }
+
+        $sql = FannieDB::getReadOnly(FannieConfig::factory()->get('OP_DB'));
+        $uid = str_pad($uid, 4, '0', STR_PAD_LEFT);
+        $fetchQ = $sql->prepare("select name from Users where uid=?");
+        return $sql->getValue($fetchQ, array($uid));
     }
 
     /**
@@ -307,35 +329,16 @@ class FannieAuth
     */
     static public function createClass($auth_class, $description)
     {
-        $sql = FannieDB::get(FannieConfig::factory()->get('OP_DB'));
+        $dbc = FannieDB::get(FannieConfig::factory()->get('OP_DB'));
         if (!$dbc->tableExists('userKnownPrivs')) {
             return false;
         }
         $notes = str_replace("\n","<br />",$description);
-        $chkP = $dbc->prepare('SELECT auth_class
-                               FROM userKnownPrivs
-                               WHERE auth_class = ?');
-        $chkR = $dbc->execute($chkP, array($auth_class));
-        $success = true;
-        if ($dbc->num_rows($chkR) == 0) {
-            $ins = $dbc->prepare('INSERT INTO userKnownPrivs
-                                  (auth_class, notes)
-                                  VALUES (?, ?)');
-            $try = $dbc->execute($ins, array($auth_class, $notes));
-            if ($try === false) {
-                $success = false;
-            }
-        } else {
-            $up = $dbc->prepare('UPDATE userKnownPrivs
-                                 SET notes = ?
-                                 WHERE auth_class = ?');
-            $try = $dbc->execute($up, array($notes, $auth_class));
-            if ($try === false) {
-                $success = false;
-            }
-        }
+        $model = new UserKnownPrivsModel($dbc);
+        $model->auth_class($auth_class);
+        $model->notes($notes);
 
-        return $success;
+        return $model->save() ? true : false;
     }
 
     /**
