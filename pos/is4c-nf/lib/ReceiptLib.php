@@ -140,7 +140,7 @@ static public function printReceiptHeader($dateTimeStamp, $ref)
     $ref = $emp . '-' . $reg . '-' . $trans;
     $spaces = 55 - strlen($time) - strlen($ref);
     $receipt .= $time.str_repeat(' ',$spaces).$ref."\n";
-            
+    $receipt .= "/n"; // Harvest custom rcpt. formatting ~jb 2017-12-22       
     return $receipt;
 }
 

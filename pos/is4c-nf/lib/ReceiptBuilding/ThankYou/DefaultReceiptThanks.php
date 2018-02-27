@@ -43,10 +43,11 @@ class DefaultReceiptThanks
       @return [string] receipt line(s)
     */
     public function message($trans_num)
-    {
-        $thanks = _('thank you');
+    {	
+		// Capitalized strings for Harvest specific custom formatting ~jb 2017-12-22
+        $thanks = _('Thank You');
         if (trim(CoreLocal::get("memberID")) != CoreLocal::get("defaultNonMem")) {
-            $thanks .= _(' - owner ') . trim(CoreLocal::get('memberID'));
+            $thanks .= _(' - Member ') . trim(CoreLocal::get('memberID'));
         }
         $ret  = $this->printHandler->TextStyle(true,false,true);
         $ret .= $this->printHandler->centerString($thanks);
