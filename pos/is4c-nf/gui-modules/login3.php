@@ -84,29 +84,28 @@ class login3 extends BasicCorePage
     function head_content(){
         $this->default_parsewrapper_js('scannerInput');
         $this->add_onload_command("\$('#formlocal').append('<input type=\"hidden\" name=\"scannerInput\" id=\"scannerInput\" />');");
-    }
+	}
 
-    function body_content()
+	function body_content()
     {
-        $this->input_header();
-        echo DisplayLib::printheaderb();
-        ?>
-        <div class="baseHeight">
-            <div class="<?php echo $this->color; ?> centeredDisplay">
-            <img alt="key" src='<?php echo $this->img ?>' />
-            <p>
-            <?php echo $this->msg ?>
-            </p>
-            </div>
-        </div>
-        <?php
-        Database::getsubtotals();
-        echo "<div id=\"footer\">";
-        echo DisplayLib::printfooter();
-        echo "</div>";
-    } // END true_body() FUNCTION
+		$this->input_header();
+		echo DisplayLib::printheaderb();
+		?>
+		<div class="baseHeight">
+			<div class="<?php echo $this->color; ?> centeredDisplay">
+			<img alt="key" src='<?php echo $this->img ?>' />
+			<p>
+			<?php echo $this->msg ?>
+			</p>
+			</div>
+		</div>
+		<?php
+		Database::getsubtotals();
+		echo "<div id=\"footer\">";
+		echo DisplayLib::printfooter();
+		echo "</div>";
+	} // END true_body() FUNCTION
 
 }
 
 AutoLoader::dispatch();
-

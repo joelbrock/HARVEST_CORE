@@ -49,6 +49,8 @@ if (session_id() == '' && !headers_sent()) {
     session_start();
 }
 
+session_start();
+
 $page_title = "Special Order :: Create";
 $header = "Create Special Order";
 include(__DIR__ . '/../src/header.html');

@@ -5,7 +5,14 @@ require(__DIR__ . '/../../../auth/login.php');
 // 04Oct13 - no longer in use?
 return;
 
+<<<<<<< HEAD
 if (!class_exists("SQLManager")) require_once(__DIR__ . "/../../../src/SQLManager.php");
+=======
+// 04Oct13 - no longer in use?
+return;
+
+if (!class_exists("SQLManager")) require_once($FANNIE_ROOT."src/SQLManager.php");
+>>>>>>> 2a2c2170028db8e767d805c6c21931224a9e66ae
 
 include('../../db.php');
 $ms = $sql;

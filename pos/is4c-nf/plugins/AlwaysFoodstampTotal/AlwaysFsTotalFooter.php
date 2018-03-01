@@ -50,7 +50,7 @@ class AlwaysFsTotalFooter extends FooterBox
         if ($this->isAmountDue()) {
             $this->header_css_class = 'errorColoredArea';
             return _("Amount Due");
-        } elseif ($thiw->isChange()) {
+        } elseif ($this->isChange()) {
             $this->header_css_class = 'coloredArea';
             return _("Change");
         } else {
@@ -64,7 +64,7 @@ class AlwaysFsTotalFooter extends FooterBox
         if ($this->isAmountDue()) {
             $this->display_css_class = 'errorColoredText';
             return number_format(CoreLocal::get("runningTotal"),2);
-        } elseif ($thiw->isChange()) {
+        } elseif ($this->isChange()) {
             $this->display_css_class = 'coloredText';
             return number_format(CoreLocal::get("runningTotal"),2);
         } else {

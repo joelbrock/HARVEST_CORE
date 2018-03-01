@@ -51,10 +51,9 @@ static public function centerString($text) {
         return self::center($text, 59);
 }
 // --------------------------------------------------------------
-static public function writeLine($text) 
+static public function writeLine($text)
 {
     if (CoreLocal::get("print") != 0) {
-
         $printerPort = CoreLocal::get('printerPort');
         /* check fails on LTP1: in PHP4
            suppress open errors and check result
@@ -77,7 +76,7 @@ static public function center($text, $linewidth) {
 // -------------------------------------------------------------
 
 // -------------------------------------------------------------
-static public function printReceiptHeader($dateTimeStamp, $ref) 
+static public function printReceiptHeader($dateTimeStamp, $ref)
 {
     $receipt = self::$PRINT->TextStyle(True);
     $imgCache = CoreLocal::get('ImageCache');
@@ -139,19 +138,20 @@ static public function printReceiptHeader($dateTimeStamp, $ref)
     $ref = $emp . '-' . $reg . '-' . $trans;
     $spaces = 55 - strlen($time) - strlen($ref);
     $receipt .= $time.str_repeat(' ',$spaces).$ref."\n";
-            
+    $receipt .= "/n"; // Harvest custom rcpt. formatting ~jb 2017-12-22       
+
     return $receipt;
 }
 
 /**
   Get a signature slip for use with a charge account
   @param $dateTimeStamp [string] representing date and time
-  @param $ref [string] transaction identifer 
+  @param $ref [string] transaction identifer
   @param $program [string, optional] identifier for different
     types of charge accounts that require different text
   @return [string] receipt text
 */
-static public function printChargeFooterStore($dateTimeStamp, $ref, $program="charge") 
+static public function printChargeFooterStore($dateTimeStamp, $ref, $program="charge")
 {
     $chgName = \COREPOS\pos\lib\MemberLib::getChgName();            // added by apbw 2/14/05 SCR
     
@@ -188,7 +188,7 @@ static public function printChargeFooterStore($dateTimeStamp, $ref, $program="ch
 
     $receipt = "\n\n\n\n\n\n\n"
            .chr(27).chr(105)
-           .chr(27).chr(33).chr(5)        // apbw 3/18/05 
+           .chr(27).chr(33).chr(5)        // apbw 3/18/05
            ."\n".self::centerString(CoreLocal::get("chargeSlip2"))."\n"
            .self::centerString("................................................")."\n"
            .self::centerString(CoreLocal::get("chargeSlip1"))."\n\n"
@@ -231,9 +231,9 @@ static public function printCabCoupon($dateTimeStamp, $ref)
     $receipt .= "from WFC toward the destination of\n";
     $receipt .= "your choice TODAY"."\n\n";
 
-        
+
     $receipt .= ""
-        ."This coupon is not transferable.\n" 
+        ."This coupon is not transferable.\n"
         ."One coupon/day/customer.\n"
         ."Any amount of fare UNDER the value of this coupon\n"
         ."is the property of the cab company.\n"
@@ -241,7 +241,7 @@ static public function printCabCoupon($dateTimeStamp, $ref)
                ."is your responsibility.\n"
         ."Tips are NOT covered by this coupon.\n"
         ."Acceptance of this coupon by the cab driver is\n"
-        ."subject to the terms and conditions noted above.\n"; 
+        ."subject to the terms and conditions noted above.\n";
 
     return $receipt;
 }
@@ -310,16 +310,14 @@ static public function chargeBalance($receipt, $program="charge", $transNum='')
     $checkR = $dbc->query($checkQ);
     $numRows = $dbc->numRows($checkR);
 
-    $currActivity = is_numeric(CoreLocal::get("memChargeTotal")) ? CoreLocal::get("memChargeTotal") : 0;
-    $currBalance = is_numeric(CoreLocal::get("balance")) ? CoreLocal::get("balance") : 0;
-    $currBalance -= $currActivity;
-    
+    $currActivity = CoreLocal::get("memChargeTotal");
+    $currBalance = CoreLocal::get("balance") - $currActivity;
     if (($numRows > 0 || $currBalance != 0) && CoreLocal::get("memberID") != CoreLocal::get('defaultNonMem')) {
         $chargeString = $labels["$program"][0] .
             " $".sprintf("%.2f",($labels["$program"][1] * $currBalance));
         $receipt = $receipt."\n\n".self::biggerFont(self::centerBig($chargeString))."\n";
     }
-    
+
     return $receipt;
 }
 
@@ -503,7 +501,7 @@ static public function receiptDetail($reprint=false, $transNum='')
     list($empNo, $laneNo, $transNo) = self::parseRef($transNum);
         
     if (CoreLocal::get("newReceipt") == 0 ) {
-        // if old style has been specifically requested 
+        // if old style has been specifically requested
         // for a partial or reprint, use old format
         $query = "select linetoprint from rp_receipt
             where emp_no=$empNo and register_no=$laneNo
@@ -833,13 +831,13 @@ static private function messageMods()
 
 /**
   generates a receipt string
-  @param $arg1 string receipt type 
+  @param $arg1 string receipt type
   @param $ref string transaction identifier
   @param $second boolean indicating it's a second receipt
   @param $email generate email-style receipt
   @return string receipt content
 */
-static public function printReceipt($arg1, $ref, $second=False, $email=False) 
+static public function printReceipt($arg1, $ref, $second=False, $email=False)
 {
     if($second) $email = False; // store copy always prints
     if($arg1 != "full") $email = False;
@@ -940,7 +938,7 @@ static public function printReceipt($arg1, $ref, $second=False, $email=False)
     }
 
     /* --------------------------------------------------------------
-      print store copy of charge slip regardless of receipt print setting - apbw 2/14/05 
+      print store copy of charge slip regardless of receipt print setting - apbw 2/14/05
       ---------------------------------------------------------------- */
     $tmap = CoreLocal::get('TenderMap');
     // skip signature slips if using electronic signature capture (unless it's a reprint)
@@ -1030,11 +1028,11 @@ static private function simpleReceipt($receipt, $arg1, $where)
     return $receipt;
 }
 
-/** 
+/**
   Get per-member receipt messages
   @param $cardNo [int] member number
   @return [array] receipt text
-  Array keys are "any" and "print". 
+  Array keys are "any" and "print".
  */
 static public function memReceiptMessages($cardNo)
 {
@@ -1102,7 +1100,7 @@ static public function mostRecentReceipt()
 {
     $dbc = Database::tDataConnect();
     $query = "SELECT emp_no, register_no, trans_no
-              FROM localtranstoday 
+              FROM localtranstoday
               ORDER BY datetime DESC";
     $query = $dbc->addSelectLimit($query, 1);
     $result = $dbc->query($query);
@@ -1137,4 +1135,3 @@ static public function emailReceiptMod()
 }
 
 }
-

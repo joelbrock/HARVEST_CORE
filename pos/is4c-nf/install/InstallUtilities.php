@@ -126,7 +126,7 @@ class InstallUtilities
 
         return array($checked, $wrong);
     }
-    
+
     public static function validateConfiguration()
     {
         global $CORE_LOCAL;
@@ -173,6 +173,4 @@ class InstallUtilities
             self::paramSave($key, $value);
         }
     }
-
 }
-

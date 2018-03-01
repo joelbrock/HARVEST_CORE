@@ -38,6 +38,7 @@ class MiscLib
   @param $checkFile file to search for
   @return A relative URL with trailing slash
 */
+
 static public function baseURL($checkFile="css/pos.css")
 {
     $ret = "";
@@ -68,6 +69,7 @@ static public function base_url($checkFile="css/pos.css")
   In practice any argument that evaluates to False
   get translated to integer zero.
 */
+
 static public function nullwrap($num, $char=false) 
 {
 
@@ -87,6 +89,7 @@ static public function nullwrap($num, $char=false)
   @param $num a number
   @return formatted string
 */
+
 static public function truncate2($num) 
 {
     if ($num === '') {
@@ -344,3 +347,4 @@ public static function jqueryFile()
 
 } // end class MiscLib
 
+?>

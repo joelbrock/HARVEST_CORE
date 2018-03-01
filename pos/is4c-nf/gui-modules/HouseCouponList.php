@@ -57,7 +57,7 @@ class HouseCouponList extends NoInputCorePage
     {
         $prefix = $this->session->get('houseCouponPrefix');
         if ($prefix == '') {
-            $prefix = '00499999';
+            $prefix = '00499990';
         }
 
         $dbc = Database::pDataConnect();
