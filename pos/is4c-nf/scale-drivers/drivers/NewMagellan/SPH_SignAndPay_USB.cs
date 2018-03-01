@@ -92,7 +92,7 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
     protected AutoResetEvent ack_event;
 
     public SPH_SignAndPay_USB(string p) : base(p)
-    { 
+    {
         read_continues = false;
         long_length = 0;
         long_pos = 0;
@@ -100,7 +100,7 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
         usb_fs = null;
         usb_lock = new System.Object();
         ack_event = new AutoResetEvent(false);
-        
+
         int vid = 0xacd;
         int pid = 0x2310;
         usb_devicefile = string.Format("{0}&{1}",vid,pid);
@@ -119,7 +119,7 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
                     System.Console.WriteLine("No device");
                 }
                 System.Threading.Thread.Sleep(5000);
-            } else { 
+            } else {
                 if (this.verbose_mode > 0) {
                     System.Console.WriteLine("USB device found");
                 }
@@ -128,7 +128,7 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
     }
 
     public override void Read()
-    { 
+    {
         System.Console.WriteLine("Loading Sign and Pay module");
         System.Console.WriteLine("  Screen Control: POS");
         System.Console.WriteLine("  Paycards Communication: Messages");
@@ -311,7 +311,7 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
 
         // if logo load NACKs the output is the same as if
         // the users presses red X button. Change state early
-        // so logo load problem is not misinterpreted by 
+        // so logo load problem is not misinterpreted by
         // previous state handler
         current_state = STATE_WAIT_FOR_CASHIER;
 
@@ -427,7 +427,7 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
             int data_length = input[3] + (input[4] << 8);
 
             int d_start = 5;
-            if (input[d_start] == 0x6 && data_length > 1){ 
+            if (input[d_start] == 0x6 && data_length > 1){
                 d_start++; // ACK byte
                 data_length--;
             }
@@ -517,7 +517,7 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
         byte[] input = (byte[])iar.AsyncState;
         try {
             usb_fs.EndRead(iar);
-            HandleReadData(input);        
+            HandleReadData(input);
         } catch (TimeoutException){
         } catch (Exception ex){
             if (this.verbose_mode > 0) {
@@ -532,7 +532,7 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
     /**
       Synchronous version. Do not automatically start
       another read. The calling method will handle that.
-    
+
       The wait on excpetion is important. Exceptions
       are generally the result of a write that occurs
       during a blocking read. Waiting a second lets any
@@ -543,7 +543,7 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
         */
         try {
         byte[] input = (byte[])iar.AsyncState;
-            HandleReadData(input);        
+            HandleReadData(input);
         }
         catch (Exception ex){
             if (this.verbose_mode > 0)
@@ -615,7 +615,7 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
                     // 0x6 might be a serial protocol ACK
                     // timing issue means we got here too soon
                     // and should wait for next input
-    
+
                     // Pressed green or yellow button
                     // Proceed to PIN entry but don't
                     // request 0xFF as cash back
@@ -776,7 +776,7 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
         }
     }
 
-    public override void HandleMsg(string msg){ 
+    public override void HandleMsg(string msg){
 
         // optional predicate for "termSig" message
         // predicate string is displayed on sig capture screen
@@ -1042,7 +1042,7 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
         ret[0] = 0x8a;
         ret[1] = 0x46;
         ret[2] = 0x43;
-        
+
         ret[3] = (is_transparent) ? (byte)1 : (byte)0;
 
         return ret;
@@ -1153,7 +1153,7 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
     }
 
     /**
-     * @param interval is five second periods. 
+     * @param interval is five second periods.
      *    1=> 5 seconds, 2=> 10 seconds, etc
      *    0=> always on
      */
@@ -1506,7 +1506,7 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
         // text length
         ret[pos++] = 0x19;
         ret[pos++] = 0x0;
-        
+
         msg = "Press Enter Key When Done";
 
         foreach(byte b in System.Text.Encoding.ASCII.GetBytes(msg)){
@@ -1539,7 +1539,7 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
         ret[pos++] = 0xff;
         ret[pos++] = 0xff;
         ret[pos++] = 0xff;
-        
+
         // font setting
         ret[pos++] = 0x16;
         ret[pos++] = 0x18;
@@ -1574,9 +1574,9 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
 
         ret[pos++] = 0xf; // show 4 lines
         ret[pos++] = 1; // 1 messages follow
-        ret[pos++] = 0; 
+        ret[pos++] = 0;
         ret[pos++] = 33;
-        ret[pos++] = 0; 
+        ret[pos++] = 0;
 
         // another font
         ret[pos++] = 0x10;
@@ -1634,7 +1634,7 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
         ret[pos++] = 0xff;
         ret[pos++] = 0xff;
         ret[pos++] = 0xff;
-        
+
         // font setting
         ret[pos++] = 0x16;
         ret[pos++] = 0x18;
@@ -1669,9 +1669,9 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
 
         ret[pos++] = 0xf; // show 4 lines
         ret[pos++] = 1; // 1 messages follow
-        ret[pos++] = 0; 
+        ret[pos++] = 0;
         ret[pos++] = 35;
-        ret[pos++] = 0; 
+        ret[pos++] = 0;
 
         // another font
         ret[pos++] = 0x10;
@@ -1729,7 +1729,7 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
         ret[pos++] = 0xff;
         ret[pos++] = 0xff;
         ret[pos++] = 0xff;
-        
+
         // font setting
         ret[pos++] = 0x16;
         ret[pos++] = 0x18;
@@ -1764,9 +1764,9 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
 
         ret[pos++] = 0xf; // show 4 lines
         ret[pos++] = 1; // 1 messages follow
-        ret[pos++] = 0; 
+        ret[pos++] = 0;
         ret[pos++] = 40;
-        ret[pos++] = 0; 
+        ret[pos++] = 0;
 
         // another font
         ret[pos++] = 0x10;
@@ -1813,7 +1813,7 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
     protected byte[] EnableAudio(){
         return new byte[4]{0x7b, 0x46, 0x1, 0x1};
     }
-    
+
     protected byte[] DoBeep(){
         return new byte[7]{0x7b, 0x46, 0x02, 0xff, 0x0, 0xff, 0};
     }
@@ -1821,7 +1821,7 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
     protected byte[] GetSerialNumber(){
         return new byte[3]{0x78, 0x46, 0x2};
     }
-    
+
     protected byte[] LcdStoreImage(int image_id, string file_name) {
         string ext;
         int type = 0;
@@ -1851,7 +1851,7 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
         } else {
             type = 0x2;
         }
-        
+
         byte[] file_data = File.ReadAllBytes(file_name);
         byte[] ret = new byte[7 + file_data.Length];
 
@@ -1906,7 +1906,7 @@ public class SPH_SignAndPay_USB : SerialPortHandler {
         ret[pos++] = 0x75;
         ret[pos++] = 0x46;
         ret[pos++] = 0x23;
-        
+
         // min length
         ret[pos++] = 1;
         // max length

@@ -117,7 +117,7 @@ class mgrlogin extends NoInputCorePage
         return $ret;
     }
 
-    function cancelorder() 
+    function cancelorder()
     {
         $this->session->set("plainmsg",_("transaction cancelled"));
         UdpComm::udpSend("rePoll");
