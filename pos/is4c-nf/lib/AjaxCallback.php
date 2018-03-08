@@ -73,7 +73,7 @@ class AjaxCallback
               timing calls is off by default. uncomment start
               and end calls to collect data
             */
-            //self::perfStart();
+            self::perfStart();
             self::executeCallback($callback_class);
             self::perfEnd($callback_class);
         }
@@ -107,7 +107,7 @@ class AjaxCallback
         self::$elapsed = microtime(true); 
     }
 
-    protected static function perfEnd()
+    protected static function perfEnd($callback_class)
     {
         /**
          * Some AJAX handlers might close the current session in

@@ -24,6 +24,7 @@
 namespace COREPOS\pos\parser\parse;
 use COREPOS\pos\parser\Parser;
 use COREPOS\pos\lib\TransRecord;
+use COREPOS\pos\lib\DisplayLib;
 
 class Wakeup extends Parser 
 {
