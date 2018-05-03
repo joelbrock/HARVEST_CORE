@@ -26,6 +26,7 @@
   Tender module for Instacart grocery service
   Requires Mgr. password
 */
+namespace COREPOS\pos\lib\Tenders;
 class InstacartTender extends TenderModule 
 {
 
